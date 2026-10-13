@@ -15,9 +15,9 @@ FROM alpine:3.24
 RUN apk add --no-cache ca-certificates \
     && addgroup -S -g 10001 tinyfaka \
     && adduser -S -D -u 10001 -G tinyfaka tinyfaka \
-    && mkdir -p /etc/tinyfaka /var/lib/tinyfaka \
-    && chown tinyfaka:tinyfaka /etc/tinyfaka /var/lib/tinyfaka
-COPY --from=builder /tinyfaka /usr/local/bin/tinyfaka
+    && mkdir -p /data \
+    && chown tinyfaka:tinyfaka /data
+COPY --from=builder /tinyfaka /app/tinyfaka
 USER tinyfaka
-WORKDIR /var/lib/tinyfaka
-CMD ["/usr/local/bin/tinyfaka", "-config", "/etc/tinyfaka/config.json", "-data-dir", "/var/lib/tinyfaka", "-listen", "0.0.0.0:8080"]
+WORKDIR /app
+CMD ["/app/tinyfaka", "-config", "/data/config.json", "-data-dir", "/data", "-listen", "0.0.0.0:8080"]

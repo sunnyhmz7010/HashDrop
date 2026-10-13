@@ -6,9 +6,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - tinyfaka_config:/etc/tinyfaka
-      - tinyfaka_data:/var/lib/tinyfaka
+      - tinyfaka_data:/data
 
 volumes:
-  tinyfaka_config:
   tinyfaka_data:

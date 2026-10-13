@@ -6,9 +6,9 @@
 
 构建方式参考 [SeekMeow](https://github.com/sunnyhmz7010/SeekMeow/blob/main/.github/workflows/docker.yml)。`.github/workflows/docker.yml` 仅在推送 `v*` 版本标签时发布，推送 `main` 不发布。首次部署需等待另行确认发版、镜像构建成功且镜像公开；当前提交代码不会生成镜像。
 
-镜像地址根据仓库名自动转为小写：`ghcr.io/sunnyhmz7010/tinyfaka`。稳定版本提供完整版本、主次版本、主版本、提交 SHA 和 `latest`；预发布不覆盖 `latest`。Fork 时修改 Compose 中的镜像地址。
+镜像地址为 `ghcr.io/sunnyhmz7010/tinyfaka`，提供完整版本、主次版本、主版本及 `latest` 标签。Fork 时修改 Compose 中的镜像地址。
 
-构建先运行 Go 测试、`go vet` 和前端类型检查，再用 amd64 镜像验证网页初始化、健康检查、在线备份及重启，最后发布多架构镜像。工作流使用 GitHub 自带 Token 登录 GHCR。首次发布后，仓库所有者须在包的 Package settings 中设为 Public，才可匿名拉取。[GitHub Container Registry 说明](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)
+工作流沿用 SeekMeow 的检出、QEMU、Buildx、GHCR 登录、标签生成和构建发布步骤。Dockerfile 构建 Vue 前端、编译 Go，再打包运行镜像。工作流使用 GitHub 自带 Token 登录 GHCR。首次发布后，仓库所有者须在包的 Package settings 中设为 Public，才可匿名拉取。[GitHub Container Registry 说明](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)
 
 ## Docker Compose 部署
 
@@ -31,9 +31,7 @@ docker compose logs tinyfaka
 
 默认映射 `8080:8080`；修改 YAML 左侧端口后，在初始化页面填写对应的实际访问地址。站点地址用于登录 Origin 校验与支付返回链接，必须与浏览器访问地址一致。Go 在容器内部监听 `0.0.0.0:8080`，Windows 本地开发仍只监听回环地址。
 
-Docker 自动创建 `tinyfaka_config` 与 `tinyfaka_data` 命名卷，实际名称带 Compose 项目前缀。配置卷保存生成的密码哈希、加密密钥和受限商户私钥文件；数据卷保存 SQLite 与在线备份。容器使用 UID/GID `10001:10001`，根文件系统只读，卷可写，临时文件写入 `/tmp`。不要执行 `docker compose down -v`，它会删除持久化卷。
-
-健康检查每 30 秒使用同一二进制查询 `/api/site`，无需第二个数据库连接或调度器。初始化完成前服务也能通过健康检查；`/api/setup/status` 可判断是否完成初始化。默认日志最多保留三个 10 MB 文件。
+Docker 自动创建 `tinyfaka_config` 与 `tinyfaka_data` 命名卷，实际名称带 Compose 项目前缀。配置卷保存生成的密码哈希、加密密钥和受限商户私钥文件；数据卷保存 SQLite 与在线备份。容器使用 UID/GID `10001:10001`。不要执行 `docker compose down -v`，它会删除持久化卷。
 
 ## HashPay 接入
 

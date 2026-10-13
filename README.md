@@ -80,7 +80,7 @@ TinyFaka/
 │   ├── src/components/   # 管理页面组件
 │   └── tests/            # 核心购买与管理流程浏览器验证
 ├── migrations/001_init.sql
-├── .github/workflows/docker.yml # GitHub 构建、验证并发布 GHCR 镜像
+├── .github/workflows/docker.yml # GitHub 构建并发布 GHCR 镜像
 ├── Dockerfile            # 前端和 Go 多阶段构建，运行镜像无 Node.js
 ├── compose.yaml          # VPS 直接拉取镜像部署
 ├── deploy/               # systemd 服务示例

@@ -47,7 +47,6 @@ func main() {
 	dev := flag.Bool("dev", false, "初始化回环开发环境")
 	dataDir := flag.String("data-dir", "data", "初始化数据库和备份目录")
 	backup := flag.String("backup", "", "在线备份到指定的新文件并退出")
-	healthcheck := flag.Bool("healthcheck", false, "检查已运行的回环 HTTP 服务并退出")
 	listen := flag.String("listen", "", "覆盖监听地址；默认 127.0.0.1:8080")
 	flag.Parse()
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
@@ -73,13 +72,6 @@ func main() {
 			slog.Error("监听地址无效", "error", err)
 			os.Exit(1)
 		}
-	}
-	if *healthcheck {
-		if err = checkHealth(context.Background(), c); err != nil {
-			slog.Error("健康检查失败", "error", err)
-			os.Exit(1)
-		}
-		return
 	}
 	if *backup != "" {
 		if uninitialized {

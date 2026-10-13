@@ -1,0 +1,24 @@
+# 只把构建必需文件发给 Docker，配置、私钥、数据库和本地测试产物均不进入上下文。
+**
+!Dockerfile
+!go.mod
+!go.sum
+!assets.go
+!backend/
+!backend/*.go
+!migrations/
+!migrations/*.sql
+!frontend/
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/index.html
+!frontend/tsconfig.json
+!frontend/vite.config.ts
+!frontend/src/
+!frontend/src/**
+!frontend/public/
+!frontend/public/**
+**/*.pem
+**/.env*
+**/config.json
+**/secrets/**

@@ -1,0 +1,16 @@
+/frontend/node_modules/
+/frontend/test-results/
+/frontend/playwright-report/
+/backend/web/*
+!/backend/web/placeholder.txt
+/bin/
+/data/
+/config.json
+/config/
+/secrets/
+*.db
+*.db-wal
+*.db-shm
+*.pem
+*.log
+/.local/

@@ -1,0 +1,108 @@
+name: Docker
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  packages: write
+
+# 同一镜像串行发布，避免并发改写 latest。
+concurrency:
+  group: docker-publish
+  cancel-in-progress: false
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: 设置 QEMU
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+
+      - name: 设置 Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: 确定镜像地址
+        id: image
+        shell: bash
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: 生成镜像标签
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ steps.image.outputs.name }}
+          flavor: latest=auto
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
+
+      - name: 构建待验证镜像
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: tinyfaka:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: 验证初始化、健康检查、备份与重启
+        shell: bash
+        run: |
+          set -euo pipefail
+          smoke_dir="$RUNNER_TEMP/tinyfaka-smoke"
+          container="tinyfaka-smoke-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          mkdir -p "$smoke_dir/config" "$smoke_dir/data" "$smoke_dir/secrets"
+          chmod 700 "$smoke_dir/config" "$smoke_dir/data" "$smoke_dir/secrets"
+          sudo chown 10001:10001 "$smoke_dir/config" "$smoke_dir/data" "$smoke_dir/secrets"
+          trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+          printf '%s\n' 'docker-smoke-password-only' | docker run --rm -i \
+            --read-only --tmpfs /tmp:size=16m,mode=1777 \
+            -v "$smoke_dir/config:/etc/tinyfaka" \
+            -v "$smoke_dir/data:/var/lib/tinyfaka" \
+            tinyfaka:ci -init -config /etc/tinyfaka/config.json \
+            -data-dir /var/lib/tinyfaka -site-url https://shop.example.com
+          docker run -d --name "$container" --network host \
+            --read-only --tmpfs /tmp:size=16m,mode=1777 \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            -v "$smoke_dir/config:/etc/tinyfaka" \
+            -v "$smoke_dir/data:/var/lib/tinyfaka" \
+            -v "$smoke_dir/secrets:/run/secrets:ro" tinyfaka:ci
+          curl --fail --silent --show-error --retry 15 --retry-delay 1 \
+            --retry-connrefused http://127.0.0.1:8080/api/site
+          curl --fail --silent --show-error http://127.0.0.1:8080/ | grep -q '/assets/'
+          docker exec "$container" tinyfaka -healthcheck -config /etc/tinyfaka/config.json
+          docker exec "$container" tinyfaka -config /etc/tinyfaka/config.json \
+            -backup /var/lib/tinyfaka/ci-backup.db
+          sudo test -s "$smoke_dir/data/ci-backup.db"
+          docker restart "$container"
+          curl --fail --silent --show-error --retry 15 --retry-delay 1 \
+            --retry-connrefused http://127.0.0.1:8080/api/site
+          docker exec "$container" tinyfaka -healthcheck -config /etc/tinyfaka/config.json
+
+      - name: 登录 GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 发布 amd64 与 arm64 镜像
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

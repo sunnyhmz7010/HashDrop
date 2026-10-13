@@ -44,7 +44,7 @@ docker compose logs tinyfaka
 
 浏览器访问 `http://服务器地址:8080`，自动进入初始化页面。复制当前启动日志的 `setup_token`，在网页填写站点地址、管理员密码、可选 TOTP 和 HashPay 商户信息。配置与密钥由服务端生成并保存到 Docker 持久化卷；无需填写环境变量或手工编辑配置文件。HTTP 会明文传输密码与私钥，应在可信网络中完成初始化。
 
-默认镜像为 `ghcr.io/sunnyhmz7010/tinyfaka:latest`，可换成具体版本标签或摘要。只有推送 `v*` 版本标签才会发布镜像，推送 `main` 不触发发布。更新执行 `docker compose pull` 和 `docker compose up -d`，已有初始化信息保留。完整部署、备份及恢复步骤见 [VPS 部署文档](./docs/deployment.md)。
+默认镜像为 `ghcr.io/sunnyhmz7010/tinyfaka:latest`，可换成具体版本标签或摘要。只有推送 `v*` 版本标签才会发布镜像，推送 `main` 不触发发布。更新执行 `docker compose pull` 和 `docker compose up -d`，已有初始化信息保留。
 
 ## 📖 使用说明
 
@@ -60,7 +60,7 @@ docker compose logs tinyfaka
 
 库存、固定内容和交付结果使用 AES-256-GCM 加密，并通过记录 ID 的附加认证数据防跨记录替换。去重密钥独立保留；领取 Token 和管理员会话只保存 SHA-256 哈希。配置文件与商户私钥不由静态服务提供，不在 API 返回。
 
-HashPay 创建超时重试复用 `merchantNo`。回调解密成功不能证明来源，首次付款确认必须签名查询并匹配商户、订单号、金额、币种、`paid` 和付款证据。默认保留人工确认付款，店主可明确选择接受 HashPay 管理员确认。API 请求结果不明时禁止盲目重试，详见 [适配器约定](./docs/api-adapters.md)。
+HashPay 创建超时重试复用 `merchantNo`。回调解密成功不能证明来源，首次付款确认必须签名查询并匹配商户、订单号、金额、币种、`paid` 和付款证据。默认保留人工确认付款，店主可明确选择接受 HashPay 管理员确认。API 请求结果不明时禁止盲目重试。
 
 ## 🧱 技术栈
 
@@ -84,7 +84,6 @@ TinyFaka/
 ├── Dockerfile            # 前端和 Go 多阶段构建，运行镜像无 Node.js
 ├── compose.yaml          # VPS 直接拉取镜像部署
 ├── deploy/               # systemd 服务示例
-├── docs/                 # 部署、恢复、API 适配器约定
 ├── assets.go
 └── go.mod
 ```

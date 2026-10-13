@@ -86,8 +86,7 @@ TinyFaka/
 ├── deploy/               # systemd 服务示例
 ├── docs/                 # 部署、恢复、API 适配器约定
 ├── assets.go
-├── go.mod
-└── Makefile
+└── go.mod
 ```
 
 ## 👨‍💻 本地开发

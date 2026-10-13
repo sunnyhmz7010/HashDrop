@@ -14,6 +14,7 @@ import {
 } from "naive-ui";
 import {
   api,
+  copyText,
   deliveryNames,
   errorText,
   money,
@@ -128,7 +129,7 @@ function release() {
 }
 async function copy(value: string) {
   try {
-    await navigator.clipboard.writeText(value);
+    await copyText(value);
     message.success("已复制");
   } catch {
     message.warning("请手动复制内容");

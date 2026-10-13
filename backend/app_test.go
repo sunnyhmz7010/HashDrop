@@ -63,7 +63,9 @@ func newTestApp(t *testing.T) (*App, *fakeGateway) {
 	g.server = httptest.NewServer(http.HandlerFunc(g.handler))
 	t.Cleanup(g.server.Close)
 	c := Config{Listen: "127.0.0.1:8080", PublicURL: "http://127.0.0.1:8080", Title: "TinyFaka", Development: true, Database: filepath.Join(dir, "test.db"), BackupDir: filepath.Join(dir, "backups"), AdminPassword: passwordHash("test-password-only"), HashPay: HashPayConfig{BaseURL: g.server.URL, MerchantID: "merchant-test", PrivateKeyFile: keyPath, ManualPolicy: "hold"}}
-	return &App{db: db, vault: v, config: c, limits: newLimiter(), adapters: map[string]APIAdapter{}, wake: make(chan struct{}, 1)}, g
+	app := &App{db: db, vault: v, config: c, limits: newLimiter(), adapters: map[string]APIAdapter{}, wake: make(chan struct{}, 1)}
+	app.initialized.Store(true)
+	return app, g
 }
 func (g *fakeGateway) handler(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
@@ -534,7 +536,19 @@ func TestBrowserFixture(t *testing.T) {
 	// 测试网关使用临时 TLS 证书，信任仅注入测试进程。
 	insertProduct(t, a, "card", 3)
 	insertProduct(t, a, "static", 0)
+	fresh, setupToken := newSetupApp(t)
+	freshServer := httptest.NewServer(fresh.routes())
+	t.Cleanup(freshServer.Close)
+	fresh.config.Listen = strings.TrimPrefix(freshServer.URL, "http://")
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /__test/setup-fixture", func(w http.ResponseWriter, r *http.Request) {
+		key, err := os.ReadFile(a.config.HashPay.PrivateKeyFile)
+		if err != nil {
+			http.Error(w, "fixture", 500)
+			return
+		}
+		reply(w, 200, map[string]string{"url": freshServer.URL, "token": setupToken, "hashpay_url": g.server.URL, "private_key": string(key)})
+	})
 	mux.HandleFunc("POST /__test/pay/{id}", func(w http.ResponseWriter, r *http.Request) {
 		g.set(r.PathValue("id"), "paid", "system")
 		if err := a.syncOrder(r.Context(), r.PathValue("id")); err != nil {

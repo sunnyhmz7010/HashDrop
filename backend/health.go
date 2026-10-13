@@ -6,13 +6,21 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"time"
 )
 
 // Docker 直接执行同一二进制检查回环 HTTP，不启动数据库或调度器。
 func checkHealth(ctx context.Context, c Config) error {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+c.Listen+"/api/site", nil)
+	host, port, err := net.SplitHostPort(c.Listen)
+	if err != nil {
+		return err
+	}
+	if host == "0.0.0.0" {
+		host = "127.0.0.1"
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+net.JoinHostPort(host, port)+"/api/site", nil)
 	if err != nil {
 		return err
 	}

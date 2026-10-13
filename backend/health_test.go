@@ -17,6 +17,10 @@ func TestContainerHealthCheck(t *testing.T) {
 	if err := checkHealth(context.Background(), c); err != nil {
 		t.Fatal(err)
 	}
+	c.Listen = strings.Replace(c.Listen, "127.0.0.1", "0.0.0.0", 1)
+	if err := checkHealth(context.Background(), c); err != nil {
+		t.Fatalf("容器监听通配地址时未通过回环检查: %v", err)
+	}
 	for _, status := range []int{http.StatusServiceUnavailable, http.StatusFound} {
 		broken := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Location", server.URL+"/api/site")

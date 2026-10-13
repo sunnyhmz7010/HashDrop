@@ -59,34 +59,33 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          smoke_dir="$RUNNER_TEMP/tinyfaka-smoke"
           container="tinyfaka-smoke-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-          mkdir -p "$smoke_dir/config" "$smoke_dir/data" "$smoke_dir/secrets"
-          chmod 700 "$smoke_dir/config" "$smoke_dir/data" "$smoke_dir/secrets"
-          sudo chown 10001:10001 "$smoke_dir/config" "$smoke_dir/data" "$smoke_dir/secrets"
-          trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
-          printf '%s\n' 'docker-smoke-password-only' | docker run --rm -i \
-            --read-only --tmpfs /tmp:size=16m,mode=1777 \
-            -v "$smoke_dir/config:/etc/tinyfaka" \
-            -v "$smoke_dir/data:/var/lib/tinyfaka" \
-            tinyfaka:ci -init -config /etc/tinyfaka/config.json \
-            -data-dir /var/lib/tinyfaka -site-url https://shop.example.com
-          docker run -d --name "$container" --network host \
+          config_volume="$container-config"
+          data_volume="$container-data"
+          trap 'docker rm -f "$container" >/dev/null 2>&1 || true; docker volume rm "$config_volume" "$data_volume" >/dev/null 2>&1 || true' EXIT
+          docker run -d --name "$container" -p 127.0.0.1:8080:8080 \
             --read-only --tmpfs /tmp:size=16m,mode=1777 \
             --cap-drop ALL --security-opt no-new-privileges:true \
-            -v "$smoke_dir/config:/etc/tinyfaka" \
-            -v "$smoke_dir/data:/var/lib/tinyfaka" \
-            -v "$smoke_dir/secrets:/run/secrets:ro" tinyfaka:ci
+            -v "$config_volume:/etc/tinyfaka" \
+            -v "$data_volume:/var/lib/tinyfaka" tinyfaka:ci
           curl --fail --silent --show-error --retry 15 --retry-delay 1 \
-            --retry-connrefused http://127.0.0.1:8080/api/site
+            --retry-connrefused http://127.0.0.1:8080/api/setup/status | grep -q '"initialized":false'
+          docker exec "$container" tinyfaka -healthcheck -config /etc/tinyfaka/config.json
+          setup_token=$(docker logs "$container" | python3 -c 'import json,sys; print(next(row["setup_token"] for row in map(json.loads,sys.stdin) if "setup_token" in row))')
+          curl --fail --silent --show-error http://127.0.0.1:8080/api/setup \
+            -H 'Origin: http://127.0.0.1:8080' -H 'Content-Type: application/json' \
+            -H "Authorization: Bearer $setup_token" \
+            --data '{"title":"Docker smoke","public_url":"http://127.0.0.1:8080","password":"docker-smoke-password-only","password_confirm":"docker-smoke-password-only","manual_policy":"hold"}' \
+            | grep -q '"initialized":true'
+          unset setup_token
           curl --fail --silent --show-error http://127.0.0.1:8080/ | grep -q '/assets/'
           docker exec "$container" tinyfaka -healthcheck -config /etc/tinyfaka/config.json
           docker exec "$container" tinyfaka -config /etc/tinyfaka/config.json \
             -backup /var/lib/tinyfaka/ci-backup.db
-          sudo test -s "$smoke_dir/data/ci-backup.db"
+          docker exec "$container" test -s /var/lib/tinyfaka/ci-backup.db
           docker restart "$container"
           curl --fail --silent --show-error --retry 15 --retry-delay 1 \
-            --retry-connrefused http://127.0.0.1:8080/api/site
+            --retry-connrefused http://127.0.0.1:8080/api/setup/status | grep -q '"initialized":true'
           docker exec "$container" tinyfaka -healthcheck -config /etc/tinyfaka/config.json
 
       - name: 登录 GHCR

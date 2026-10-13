@@ -17,22 +17,26 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"tinyfaka"
 )
 
 type App struct {
-	db         *sql.DB
-	vault      *vault
-	config     Config
-	configPath string
-	configMu   sync.RWMutex
-	workerMu   sync.Mutex
-	authMu     sync.Mutex
-	limits     *limiter
-	adapters   map[string]APIAdapter
-	wake       chan struct{}
+	db          *sql.DB
+	vault       *vault
+	config      Config
+	configPath  string
+	configMu    sync.RWMutex
+	workerMu    sync.Mutex
+	authMu      sync.Mutex
+	limits      *limiter
+	adapters    map[string]APIAdapter
+	wake        chan struct{}
+	initialized atomic.Bool
+	setupMu     sync.Mutex
+	setupHash   string
 }
 
 func (a *App) settings() Config { a.configMu.RLock(); defer a.configMu.RUnlock(); return a.config }
@@ -44,6 +48,7 @@ func main() {
 	dataDir := flag.String("data-dir", "data", "初始化数据库和备份目录")
 	backup := flag.String("backup", "", "在线备份到指定的新文件并退出")
 	healthcheck := flag.Bool("healthcheck", false, "检查已运行的回环 HTTP 服务并退出")
+	listen := flag.String("listen", "", "覆盖监听地址；默认 127.0.0.1:8080")
 	flag.Parse()
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	if *initMode {
@@ -54,9 +59,20 @@ func main() {
 		return
 	}
 	c, v, err := readConfig(*configPath)
+	uninitialized := os.IsNotExist(err)
+	if uninitialized {
+		c, err = bootstrapConfig(*dataDir, *listen)
+	}
 	if err != nil {
 		slog.Error("配置读取失败", "error", err)
 		os.Exit(1)
+	}
+	if *listen != "" {
+		c.Listen = *listen
+		if err = validateListen(c.Listen); err != nil {
+			slog.Error("监听地址无效", "error", err)
+			os.Exit(1)
+		}
 	}
 	if *healthcheck {
 		if err = checkHealth(context.Background(), c); err != nil {
@@ -66,18 +82,25 @@ func main() {
 		return
 	}
 	if *backup != "" {
+		if uninitialized {
+			slog.Error("尚未初始化，不能备份")
+			os.Exit(1)
+		}
 		if _, err = os.Stat(c.Database); err != nil {
 			slog.Error("备份源数据库不存在")
 			os.Exit(1)
 		}
 	}
-	db, err := openDatabase(c.Database)
-	if err != nil {
-		slog.Error("数据库打开失败", "error", err)
-		os.Exit(1)
+	var db *sql.DB
+	if !uninitialized {
+		db, err = openDatabase(c.Database)
+		if err != nil {
+			slog.Error("数据库打开失败", "error", err)
+			os.Exit(1)
+		}
 	}
-	defer db.Close()
 	if *backup != "" {
+		defer db.Close()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
 		if err = backupDatabase(ctx, db, *backup); err != nil {
@@ -88,12 +111,29 @@ func main() {
 		return
 	}
 	app := &App{db: db, vault: v, config: c, configPath: *configPath, limits: newLimiter(), adapters: map[string]APIAdapter{}, wake: make(chan struct{}, 1)}
+	app.initialized.Store(!uninitialized)
+	defer func() {
+		if app.db != nil {
+			_ = app.db.Close()
+		}
+	}()
+	if uninitialized {
+		if _, err = os.Stat(c.Database); !os.IsNotExist(err) {
+			slog.Error("已有数据库但配置缺失，请恢复原配置，不能重新初始化")
+			os.Exit(1)
+		}
+		token := randomToken()
+		app.setupHash = tokenHash(token)
+		slog.Info("请打开初始化页面并填写一次性初始化凭证", "path", "/setup", "setup_token", token)
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	// 重启后 API 请求可能已产生副作用，恢复必须遵循适配器的幂等契约。
-	if err = app.recoverDeliveries(ctx); err != nil {
-		slog.Error("交付恢复失败", "error", err)
-		os.Exit(1)
+	if !uninitialized {
+		if err = app.recoverDeliveries(ctx); err != nil {
+			slog.Error("交付恢复失败", "error", err)
+			os.Exit(1)
+		}
 	}
 	server := &http.Server{Handler: app.routes(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 45 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 * 1024}
 	ln, err := net.Listen("tcp", c.Listen)

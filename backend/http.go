@@ -61,6 +61,8 @@ func readJSON(w http.ResponseWriter, r *http.Request, dst any) error {
 func (a *App) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/site", wrap(a.siteInfo))
+	mux.HandleFunc("GET /api/setup/status", wrap(a.setupStatus))
+	mux.HandleFunc("POST /api/setup", wrap(a.setup))
 	mux.HandleFunc("GET /api/products", wrap(a.listProducts))
 	mux.HandleFunc("GET /api/products/{id}", wrap(a.productDetail))
 	mux.HandleFunc("POST /api/orders", wrap(a.createOrder))
@@ -94,6 +96,10 @@ func (a *App) routes() http.Handler {
 			w.Header().Set("Cache-Control", "no-store")
 			if !a.limits.allow("api:"+clientIP(r), 240, time.Minute) {
 				reply(w, 429, map[string]string{"error": "请求过于频繁"})
+				return
+			}
+			if !a.initialized.Load() && r.URL.Path != "/api/setup/status" && r.URL.Path != "/api/setup" && r.URL.Path != "/api/site" {
+				reply(w, 503, map[string]string{"error": "请先完成系统初始化"})
 				return
 			}
 		}

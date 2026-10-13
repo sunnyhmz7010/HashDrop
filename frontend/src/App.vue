@@ -7,7 +7,7 @@ import {
   zhCN,
   dateZhCN,
 } from "naive-ui";
-import { api, site } from "./api";
+import { api, initialized, site } from "./api";
 watch(
   () => site.value.title,
   (title) => {
@@ -42,7 +42,7 @@ onMounted(async () => {
             <router-link class="brand" to="/"
               ><span class="brand-mark">T</span>{{ site.title }}</router-link
             >
-            <nav>
+            <nav v-if="initialized">
               <router-link to="/">商城</router-link
               ><router-link to="/claim">领取订单</router-link
               ><router-link to="/admin">管理</router-link>

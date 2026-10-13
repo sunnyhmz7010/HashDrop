@@ -4,6 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import { NAlert, NButton, NCheckbox, NInput, NTag, useMessage } from "naive-ui";
 import {
   api,
+  copyText,
   deliveryNames,
   errorText,
   money,
@@ -102,7 +103,7 @@ async function claim() {
 }
 async function copy(value: string) {
   try {
-    await navigator.clipboard.writeText(value);
+    await copyText(value);
     if (value === receipt.value) receiptSaved.value = true;
     message.success("已复制");
   } catch {

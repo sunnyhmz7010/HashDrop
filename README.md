@@ -13,14 +13,14 @@
 
 ## ✨ 为什么做这个项目
 
-为单台 VPS 提供维护负担较小的数字商品商城。生产环境只有 Go 单体服务与 SQLite；HTTPS 由反向代理提供，收款和到账识别独立交给 HashPay。匿名买家无需账号，凭订单专属链接领取商品。
+为单台 VPS 提供维护负担较小的数字商品商城。生产环境只有 Go 单体服务与 SQLite，收款和到账识别独立交给 HashPay。匿名买家无需账号，凭订单专属链接领取商品。
 
 ## 🚀 核心能力
 
 - 商品列表、详情、数量选择、支付状态和凭证领取，适配移动端。
 - 卡密与账号共用加密库存，原子预留、防重复导入与重复交付。
 - 固定文本使用购买时的加密快照；API 商品通过预置适配器扩展，未部署适配器不能上架。
-- 一个管理员，管理商品、库存、订单补偿及非敏感站点和支付设置。
+- 网页完成首次初始化；一位管理员管理商品、库存、订单补偿及站点和支付设置。
 - HashPay RSA 签名请求、加密回调和签名二次查询，付款与交付状态分别保存。
 - 内置补查、交付恢复、在线备份校验，管理员 Argon2id 密码和可选 TOTP。
 
@@ -29,31 +29,26 @@
 ### 📋 前置要求
 
 - 构建机：Go 1.27+、Node.js 24+、npm。
-- 生产 VPS：Linux、Docker Engine、Docker Compose V2、Caddy 或 OpenResty；无需 Go、Node.js、Redis 或 MySQL。
+- 生产 VPS：Linux、Docker Engine、Docker Compose V2；无需 Go、Node.js、Redis 或 MySQL。
 - 支付：可用的 HashPay 原生 REST API 商户与商户 RSA 私钥。
 
 ### 📦 安装与运行
 
-推荐使用 GitHub Actions 构建并发布的 GHCR 镜像，VPS 只保存 `compose.yaml`、配置和持久化数据。无需下载源码或本地构建镜像。首次镜像发布及公开后，新建部署目录，将仓库根目录的 `compose.yaml` 保存到该目录，以 root 执行：
+推荐使用 GitHub Actions 构建并发布的 GHCR 镜像。首次镜像发布及公开后，将仓库根目录的 `compose.yaml` 保存到部署目录，然后执行：
 
 ```sh
-install -d -m 700 -o 10001 -g 10001 config data secrets
 docker compose pull
-docker compose run --rm --no-deps tinyfaka -init -config /etc/tinyfaka/config.json -data-dir /var/lib/tinyfaka -site-url https://shop.example.com
-```
-
-初始化时交互输入管理员密码。将商户私钥放入 `secrets/hashpay.pem`，属主设为 `10001:10001`，权限 `0600`；在 `config/config.json` 设置 HashPay 地址、商户 ID 与私钥路径 `/run/secrets/hashpay.pem`，然后启动：
-
-```sh
 docker compose up -d
-docker compose logs -f tinyfaka
+docker compose logs tinyfaka
 ```
 
-默认镜像为 `ghcr.io/sunnyhmz7010/tinyfaka:latest`，可以换成具体版本标签或摘要。只有推送 `v*` 版本标签才会发布镜像，推送 `main` 不会触发发布。更新只需 `docker compose pull && docker compose up -d`，配置与数据保留在挂载目录。Linux host 网络让 Go 继续只监听宿主 `127.0.0.1:8080`，HTTPS 反向代理运行在宿主机；不填写 `ports`。完整初始化、镜像发布、备份及恢复步骤见 [VPS 部署文档](./docs/deployment.md)。`config.example.json` 仅说明字段，不能直接运行。
+浏览器访问 `http://服务器地址:8080`，自动进入初始化页面。复制当前启动日志的 `setup_token`，在网页填写站点地址、管理员密码、可选 TOTP 和 HashPay 商户信息。配置与密钥由服务端生成并保存到 Docker 持久化卷；无需填写环境变量或手工编辑配置文件。HTTP 会明文传输密码与私钥，应在可信网络中完成初始化。
+
+默认镜像为 `ghcr.io/sunnyhmz7010/tinyfaka:latest`，可换成具体版本标签或摘要。只有推送 `v*` 版本标签才会发布镜像，推送 `main` 不触发发布。更新执行 `docker compose pull` 和 `docker compose up -d`，已有初始化信息保留。完整部署、备份及恢复步骤见 [VPS 部署文档](./docs/deployment.md)。
 
 ## 📖 使用说明
 
-管理员入口 `/admin`。先在服务器配置商户私钥，再从系统设置填写 HashPay 地址和商户 ID；在 HashPay 设置商户回调地址 `/api/webhooks/hashpay`。新建商品后导入库存并上架，固定文本商品直接填写交付内容。
+管理员入口 `/admin`。HashPay 可以在初始化时填写，也可以在后台系统设置补充或替换商户私钥，保存后不会回显。新建商品后导入库存并上架，固定文本商品直接填写交付内容。HTTP 站点通过签名查询补查付款，无需配置回调；HashPay 回调只接受 HTTPS 地址。使用 HTTPS 站点时，可在 HashPay 设置 `站点地址/api/webhooks/hashpay`。
 
 购买者创建订单后先保存领取链接，再跳转 HashPay。链接中的 `#token=` 是私密凭证，前端仅通过 Bearer 请求本地 API；不会传给 HashPay。丢失链接且当前浏览器会话没有保存凭证时，原则上无法自动找回。
 
@@ -71,7 +66,7 @@ HashPay 创建超时重试复用 `merchantNo`。回调解密成功不能证明�
 
 - 后端：Go、`net/http`、modernc SQLite、`x/crypto` Argon2id。
 - 前端：Vue 3、TypeScript、Vue Router、Naive UI、Vite、SCSS。
-- 运行：Go `embed` 静态资源、SQLite、Docker Compose、HTTPS 反向代理；也可使用 systemd 部署二进制。
+- 运行：Go `embed` 静态资源、SQLite、Docker Compose；也可使用 systemd 部署二进制。
 - 验证：Go 集成测试、Playwright 真实浏览器与测试 HashPay 边界。
 
 ## 🗂️ 项目结构
@@ -88,10 +83,9 @@ TinyFaka/
 ├── .github/workflows/docker.yml # GitHub 构建、验证并发布 GHCR 镜像
 ├── Dockerfile            # 前端和 Go 多阶段构建，运行镜像无 Node.js
 ├── compose.yaml          # VPS 直接拉取镜像部署
-├── deploy/               # systemd、Caddy、OpenResty 示例
+├── deploy/               # systemd 服务示例
 ├── docs/                 # 部署、恢复、API 适配器约定
 ├── assets.go
-├── config.example.json
 ├── go.mod
 └── Makefile
 ```
@@ -102,15 +96,14 @@ TinyFaka/
 
 Go 1.27+ 和 Node.js 24+。Windows 本地服务只监听回环地址。Windows 使用 ACL 限制配置及私钥访问；POSIX 系统强制配置和私钥 `0600`。
 
-先安装前端依赖，再初始化开发配置。使用 Vite 时 Origin 必须与 `public_url` 一致：
+安装前端依赖后启动后端，配置尚不存在时自动进入网页初始化：
 
 ```sh
 npm --prefix frontend ci
-go run ./backend -init -dev -config config.json -data-dir data -site-url http://127.0.0.1:5173
-go run ./backend -config config.json
+go run ./backend
 ```
 
-在另一终端运行 `npm --prefix frontend run dev`，访问 `http://127.0.0.1:5173`。开发模式允许回环 HTTP Cookie。测试网关仅存在于 Go 测试代码中，生产程序没有模拟付款接口。
+在另一终端运行 `npm --prefix frontend run dev`，访问 `http://127.0.0.1:5173`，填写后端日志的初始化凭证。站点地址保留为 Vite 的实际访问地址；它用于登录和 CSRF 的 Origin 校验。HTTP 使用 HttpOnly、SameSite Cookie，HTTPS 地址额外启用 Secure。测试网关仅存在于 Go 测试代码中，生产程序没有模拟付款接口。
 
 ### ⚙️ 命令
 

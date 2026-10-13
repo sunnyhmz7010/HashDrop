@@ -265,6 +265,9 @@ func (a *App) runScheduler(ctx context.Context) {
 		case <-a.wake:
 			a.runPending(ctx)
 		case <-backupTicker.C:
+			if !a.initialized.Load() {
+				continue
+			}
 			c := a.settings()
 			backupCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 			err := backupDatabase(backupCtx, a.db, filepath.Join(c.BackupDir, fmt.Sprintf("tinyfaka-%d.db", unixNow())))
@@ -278,6 +281,9 @@ func (a *App) runScheduler(ctx context.Context) {
 	}
 }
 func (a *App) runPending(ctx context.Context) {
+	if !a.initialized.Load() {
+		return
+	}
 	rows, err := a.db.QueryContext(ctx, "SELECT id FROM orders WHERE next_check<=? AND (payment_status IN ('creating','pending','review') OR (payment_status='paid' AND delivery_status IN ('pending','processing'))) ORDER BY next_check,created_at LIMIT 20", unixNow())
 	if err != nil {
 		slog.Error("调度读取失败", "error", err)

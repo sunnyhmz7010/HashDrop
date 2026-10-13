@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
@@ -51,47 +52,48 @@ func readConfig(path string) (Config, *vault, error) {
 	if err = json.Unmarshal(data, &c); err != nil {
 		return c, nil, err
 	}
+	c.PublicURL, err = normalizePublicURL(c.PublicURL)
+	if err != nil {
+		return c, nil, err
+	}
 	if err = validateConfig(c); err != nil {
 		return c, nil, err
 	}
+	v, err := vaultFromConfig(c)
+	return c, v, err
+}
+
+func vaultFromConfig(c Config) (*vault, error) {
 	v := &vault{current: c.CurrentKey, keys: map[string][]byte{}}
 	for version, value := range c.EncryptionKeys {
 		if version == "" || strings.Contains(version, ":") {
-			return c, nil, errors.New("密钥版本无效")
+			return nil, errors.New("密钥版本无效")
 		}
 		b, e := base64.StdEncoding.DecodeString(value)
 		if e != nil || len(b) != 32 {
-			return c, nil, errors.New("加密密钥必须为 32 字节 Base64")
+			return nil, errors.New("加密密钥必须为 32 字节 Base64")
 		}
 		v.keys[version] = b
 	}
 	if len(v.keys[v.current]) != 32 {
-		return c, nil, errors.New("当前加密密钥不存在")
+		return nil, errors.New("当前加密密钥不存在")
 	}
+	var err error
 	v.dedup, err = base64.StdEncoding.DecodeString(c.DedupKey)
 	if err != nil || len(v.dedup) != 32 {
-		return c, nil, errors.New("去重密钥无效")
+		return nil, errors.New("去重密钥无效")
 	}
-	return c, v, nil
+	return v, nil
 }
 func validateConfig(c Config) error {
 	if c.Database == "" || c.BackupDir == "" {
 		return errors.New("数据库与备份目录不能为空")
 	}
-	host, _, err := net.SplitHostPort(c.Listen)
-	if err != nil || host != "127.0.0.1" {
-		return errors.New("服务只允许监听 127.0.0.1")
+	if err := validateListen(c.Listen); err != nil {
+		return err
 	}
-	u, err := url.Parse(c.PublicURL)
-	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || strings.Trim(u.Path, "/") != "" {
-		return errors.New("站点地址必须是无路径的完整地址")
-	}
-	if c.Development {
-		if u.Scheme != "http" || u.Hostname() != "127.0.0.1" {
-			return errors.New("开发模式只允许 HTTP 回环站点")
-		}
-	} else if u.Scheme != "https" {
-		return errors.New("生产站点必须使用 HTTPS")
+	if err := validatePublicURL(c.PublicURL); err != nil {
+		return err
 	}
 	if c.Title == "" || len(c.Title) > 120 || len(c.Notice) > 2000 {
 		return errors.New("站点名称或公告长度无效")
@@ -115,7 +117,7 @@ func validateConfig(c Config) error {
 		return errors.New("人工付款策略必须为 hold 或 accept")
 	}
 	if c.HashPay.BaseURL != "" {
-		if err = validGatewayURL(c.HashPay.BaseURL); err != nil {
+		if err := validGatewayURL(c.HashPay.BaseURL); err != nil {
 			return err
 		}
 	}
@@ -128,6 +130,58 @@ func validGatewayURL(value string) error {
 	}
 	return nil
 }
+
+func validateListen(value string) error {
+	host, port, err := net.SplitHostPort(value)
+	if err != nil || (host != "127.0.0.1" && host != "0.0.0.0") {
+		return errors.New("监听地址须为 127.0.0.1 或 0.0.0.0 的有效端口")
+	}
+	n, err := strconv.Atoi(port)
+	if err != nil || n < 1 || n > 65535 {
+		return errors.New("监听端口须为 1–65535 的整数")
+	}
+	if runtime.GOOS == "windows" && host != "127.0.0.1" {
+		return errors.New("Windows 本地服务只允许监听 127.0.0.1")
+	}
+	return nil
+}
+func validatePublicURL(value string) error {
+	_, err := normalizePublicURL(value)
+	return err
+}
+func normalizePublicURL(value string) (string, error) {
+	u, err := url.Parse(value)
+	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || strings.Trim(u.Path, "/") != "" || (u.Scheme != "http" && u.Scheme != "https") {
+		return "", errors.New("站点地址必须为无路径的完整 HTTP 或 HTTPS 地址")
+	}
+	host, port := strings.ToLower(u.Hostname()), u.Port()
+	for _, ch := range host {
+		if ch > 127 {
+			return "", errors.New("站点地址无效，请复制浏览器中的完整地址")
+		}
+	}
+	if host == "" {
+		return "", errors.New("站点地址缺少主机名")
+	}
+	if port != "" {
+		n, e := strconv.Atoi(port)
+		if e != nil || n < 1 || n > 65535 {
+			return "", errors.New("站点端口无效")
+		}
+		port = strconv.Itoa(n)
+	}
+	if (u.Scheme == "http" && port == "80") || (u.Scheme == "https" && port == "443") {
+		port = ""
+	}
+	if port != "" {
+		host = net.JoinHostPort(host, port)
+	} else if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	u.Host, u.Path, u.RawPath, u.ForceQuery = host, "", "", false
+	return u.String(), nil
+}
+func secureCookie(c Config) bool { return strings.HasPrefix(c.PublicURL, "https://") }
 func writeConfig(path string, c Config) error {
 	data, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {

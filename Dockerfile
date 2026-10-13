@@ -3,7 +3,6 @@
 # 前端与 Go 构建在构建机架构运行，避免在 QEMU 中执行编译器。
 FROM --platform=$BUILDPLATFORM node:24-alpine AS frontend
 WORKDIR /src/frontend
-ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 COPY frontend/package.json frontend/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci
 COPY frontend/ ./
@@ -29,7 +28,7 @@ FROM alpine:3.24
 RUN apk add --no-cache ca-certificates \
     && addgroup -S -g 10001 tinyfaka \
     && adduser -S -D -u 10001 -G tinyfaka tinyfaka \
-    && mkdir -p /etc/tinyfaka /var/lib/tinyfaka /run/secrets \
+    && mkdir -p /etc/tinyfaka /var/lib/tinyfaka \
     && chown tinyfaka:tinyfaka /etc/tinyfaka /var/lib/tinyfaka
 COPY --from=backend /out/tinyfaka /usr/local/bin/tinyfaka
 USER 10001:10001
@@ -37,4 +36,4 @@ WORKDIR /var/lib/tinyfaka
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD ["/usr/local/bin/tinyfaka", "-healthcheck", "-config", "/etc/tinyfaka/config.json"]
 ENTRYPOINT ["/usr/local/bin/tinyfaka"]
-CMD ["-config", "/etc/tinyfaka/config.json"]
+CMD ["-config", "/etc/tinyfaka/config.json", "-data-dir", "/var/lib/tinyfaka", "-listen", "0.0.0.0:8080"]

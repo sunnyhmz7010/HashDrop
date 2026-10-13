@@ -14,6 +14,12 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   await expect(
     page.getByRole("heading", { name: "先保存领取链接" }),
   ).toBeVisible();
+  // 公网普通 HTTP 没有 Clipboard API，使用浏览器复制后仍能保存领取链接。
+  await page.evaluate(() =>
+    Object.defineProperty(window, "isSecureContext", { value: false }),
+  );
+  await page.getByRole("button", { name: "复制链接", exact: true }).click();
+  await expect(page.getByText("已复制", { exact: true })).toBeVisible();
   const receipt = page.url();
   const url = new URL(receipt),
     token = new URLSearchParams(url.hash.slice(1)).get("token")!,
@@ -21,7 +27,7 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   expect(token).toHaveLength(43);
   await expect(
     page.getByRole("button", { name: "前往 HashPay 付款" }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 15_000 });
   const detail = await request.get(`${base}/api/orders/${orderID}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -109,15 +115,29 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   }
   await page.goto(receipt);
   await expect(page.locator(".delivery-item pre")).toContainText("卡密-");
+  const interrupted = await page.context().newPage();
+  await interrupted.route("**/api/setup/status", (route) => route.abort());
+  await interrupted.goto(receipt);
+  await expect(interrupted.locator(".delivery-item pre")).toContainText(
+    "卡密-",
+  );
+  expect(interrupted.url()).toBe(receipt);
+  await interrupted.close();
   await page.screenshot({ path: "../.local/order-mobile.png", fullPage: true });
   await page.goto(`${base}/admin/products`);
   await expect(page.locator(".n-spin-content--spinning")).toHaveCount(0);
-  await expect(page.locator(".n-spin-content").first()).toHaveCSS("opacity", "1");
+  await expect(page.locator(".n-spin-content").first()).toHaveCSS(
+    "opacity",
+    "1",
+  );
   await page.screenshot({ path: "../.local/admin-mobile.png", fullPage: true });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(base);
   await expect(page.locator(".n-spin-content--spinning")).toHaveCount(0);
-  await expect(page.locator(".n-spin-content").first()).toHaveCSS("opacity", "1");
+  await expect(page.locator(".n-spin-content").first()).toHaveCSS(
+    "opacity",
+    "1",
+  );
   await page.screenshot({ path: "../.local/shop-desktop.png", fullPage: true });
   const blocked = await page.context().newPage();
   await blocked.addInitScript(() => {

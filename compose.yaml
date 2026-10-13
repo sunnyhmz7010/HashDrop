@@ -3,26 +3,11 @@ services:
     image: ghcr.io/sunnyhmz7010/tinyfaka:latest
     container_name: tinyfaka
     restart: unless-stopped
-    # Linux VPS：共享宿主网络，Go 仍只监听 127.0.0.1:8080。
-    # HTTPS 反向代理运行在宿主机；host 模式不配置 ports。
-    network_mode: host
+    ports:
+      - "8080:8080"
     volumes:
-      - type: bind
-        source: ./config
-        target: /etc/tinyfaka
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ./data
-        target: /var/lib/tinyfaka
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ./secrets
-        target: /run/secrets
-        read_only: true
-        bind:
-          create_host_path: false
+      - tinyfaka_config:/etc/tinyfaka
+      - tinyfaka_data:/var/lib/tinyfaka
     read_only: true
     tmpfs:
       - /tmp:size=16m,mode=1777
@@ -36,3 +21,7 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+volumes:
+  tinyfaka_config:
+  tinyfaka_data:

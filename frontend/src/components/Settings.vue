@@ -24,6 +24,7 @@ const form = reactive({
   hashpay_url: "",
   merchant_id: "",
   manual_policy: "hold",
+  private_key: "",
 });
 async function load() {
   loading.value = true;
@@ -37,6 +38,7 @@ async function load() {
       hashpay_url: data.value.hashpay_url,
       merchant_id: data.value.merchant_id,
       manual_policy: data.value.manual_policy,
+      private_key: "",
     });
     loaded.value = true;
   } catch (e) {
@@ -89,7 +91,18 @@ async function save() {
         /><label class="field-label" for="merchant-id">商户 ID</label
         ><n-input id="merchant-id" v-model:value="form.merchant_id" /><label
           class="field-label"
-          for="manual-policy"
+          for="merchant-key"
+          >商户 RSA 私钥</label
+        ><n-input
+          v-model:value="form.private_key"
+          type="textarea"
+          placeholder="留空保留现有私钥；填写 PEM 私钥以配置或替换"
+          :input-props="{
+            id: 'merchant-key',
+            autocomplete: 'off',
+            spellcheck: false,
+          }"
+        /><label class="field-label" for="manual-policy"
           >HashPay 人工确认付款</label
         ><n-select
           id="manual-policy"
@@ -99,24 +112,25 @@ async function save() {
             { label: '接受 HashPay 管理员确认的已付款订单', value: 'accept' },
           ]"
         />
-        <p class="helper">
+        <p v-if="data.public_url.startsWith('https://')" class="helper">
           回调地址：{{ data.public_url }}/api/webhooks/hashpay
+        </p>
+        <p v-else class="helper">
+          HTTP 站点使用签名查询补查付款，无需设置回调地址。
         </p>
         <n-alert
           :type="data.key_configured ? 'success' : 'warning'"
           class="space-top"
           >{{
             data.key_configured
-              ? "商户私钥路径已配置；请通过小额订单验证接入。"
-              : "商户私钥尚未配置。请在服务器受限配置中设置 hashpay.private_key_file，然后重启服务。"
+              ? "商户私钥已保存；请通过小额订单验证接入。"
+              : "商户私钥尚未配置。请在上方填写并保存。"
           }}</n-alert
         >
         <p class="helper">
           TOTP：{{
-            data.totp_enabled
-              ? "已启用"
-              : "未启用，可在服务器配置中设置 totp_secret"
-          }}。密钥和密码不通过后台返回。
+            data.totp_enabled ? "已启用" : "未启用"
+          }}。私钥、密钥和密码保存后不会回显。
         </p>
         <p class="helper">
           可用业务适配器：{{

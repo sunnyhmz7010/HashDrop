@@ -85,7 +85,7 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) error {
 	if err = tx.Commit(); err != nil {
 		return err
 	}
-	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: token, Path: "/", HttpOnly: true, Secure: !c.Development, SameSite: http.SameSiteStrictMode, MaxAge: 12 * 3600})
+	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: token, Path: "/", HttpOnly: true, Secure: secureCookie(c), SameSite: http.SameSiteStrictMode, MaxAge: 12 * 3600})
 	audit("admin_login", "")
 	reply(w, 200, map[string]string{"csrf": a.csrf(token)})
 	return nil
@@ -100,7 +100,7 @@ func (a *App) logout(w http.ResponseWriter, r *http.Request) error {
 	if _, err := a.db.Exec("DELETE FROM admin_sessions WHERE token_hash=?", tokenHash(cookie.Value)); err != nil {
 		return err
 	}
-	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Path: "/", HttpOnly: true, Secure: !a.settings().Development, SameSite: http.SameSiteStrictMode, MaxAge: -1})
+	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Path: "/", HttpOnly: true, Secure: secureCookie(a.settings()), SameSite: http.SameSiteStrictMode, MaxAge: -1})
 	reply(w, 200, map[string]bool{"ok": true})
 	return nil
 }
@@ -332,6 +332,7 @@ func (a *App) updateSettings(w http.ResponseWriter, r *http.Request) error {
 		HashPayURL   string `json:"hashpay_url"`
 		MerchantID   string `json:"merchant_id"`
 		ManualPolicy string `json:"manual_policy"`
+		PrivateKey   string `json:"private_key"`
 	}
 	if err := readJSON(w, r, &input); err != nil {
 		return err
@@ -356,8 +357,20 @@ func (a *App) updateSettings(w http.ResponseWriter, r *http.Request) error {
 	c.HashPay.BaseURL = strings.TrimRight(input.HashPayURL, "/")
 	c.HashPay.MerchantID = strings.TrimSpace(input.MerchantID)
 	c.HashPay.ManualPolicy = input.ManualPolicy
+	if c.HashPay.BaseURL != "" || c.HashPay.MerchantID != "" || input.PrivateKey != "" {
+		if c.HashPay.BaseURL == "" || c.HashPay.MerchantID == "" || (c.HashPay.PrivateKeyFile == "" && input.PrivateKey == "") {
+			return bad("HashPay 地址、商户 ID 和私钥须完整填写")
+		}
+	}
 	if err := validateConfig(c); err != nil {
 		return bad(err.Error())
+	}
+	if input.PrivateKey != "" {
+		path, err := savePrivateKey(a.configPath, input.PrivateKey)
+		if err != nil {
+			return err
+		}
+		c.HashPay.PrivateKeyFile = path
 	}
 	if err := writeConfig(a.configPath, c); err != nil {
 		return err

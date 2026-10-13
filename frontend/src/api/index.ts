@@ -1,6 +1,7 @@
 import { ref } from "vue";
 
 export const csrf = ref("");
+export const initialized = ref<boolean>();
 export const site = ref({ title: "TinyFaka", notice: "" });
 export class APIError extends Error {
   constructor(
@@ -143,6 +144,24 @@ export const deliveryNames: Record<string, string> = {
 };
 export function errorText(error: unknown): string {
   return error instanceof Error ? error.message : "操作失败，请重试";
+}
+export async function copyText(value: string): Promise<void> {
+  if (window.isSecureContext && navigator.clipboard) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+  // 普通 HTTP 页面没有 Clipboard API，保留浏览器的用户操作复制能力。
+  const input = document.createElement("textarea");
+  input.value = value;
+  input.style.position = "fixed";
+  input.style.opacity = "0";
+  document.body.appendChild(input);
+  try {
+    input.select();
+    if (!document.execCommand("copy")) throw new Error("复制失败");
+  } finally {
+    input.remove();
+  }
 }
 export async function loadSession(): Promise<boolean> {
   try {

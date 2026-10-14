@@ -2,6 +2,8 @@
      Copyright 2026 TGDash Team. Apache-2.0，见 frontend/public/HashPay-LICENSE.txt。
      支付状态直接展示网关核验结果，付款渠道和链上信息由 HashPay 页面提供。 -->
 <script setup lang="ts">
+import { formatTime, t } from "../i18n";
+
 import { computed, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
@@ -100,8 +102,14 @@ watch(
 );
 onUnmounted(stop);
 async function claim() {
+  let url: URL;
   try {
-    const url = new URL(claimLink.value.trim());
+    url = new URL(claimLink.value.trim());
+  } catch {
+    message.error(t("errors.claim_link"));
+    return;
+  }
+  try {
     const value = new URLSearchParams(url.hash.slice(1)).get("token");
     if (
       url.origin !== location.origin ||
@@ -109,7 +117,7 @@ async function claim() {
       !value ||
       value.length !== 43
     )
-      throw new Error("请填写本站完整领取链接");
+      throw new Error(t("errors.claim_link"));
     await router.push(url.pathname + url.hash);
   } catch (e) {
     message.error(errorText(e));
@@ -119,9 +127,9 @@ async function copy(value: string) {
   try {
     await copyText(value);
     if (value === receipt.value) receiptSaved.value = true;
-    message.success("已复制");
+    message.success(t("common.copied"));
   } catch {
-    message.warning("复制失败，请长按或选中文字复制");
+    message.warning(t("common.copy_fallback"));
   }
 }
 function pay() {
@@ -131,9 +139,7 @@ function pay() {
 }
 const expires = computed(() =>
   detail.value?.order.expires_at
-    ? new Date(detail.value.order.expires_at * 1000).toLocaleString("zh-CN", {
-        hour12: false,
-      })
+    ? formatTime(detail.value.order.expires_at)
     : null,
 );
 const statusType = computed(() => {
@@ -148,25 +154,29 @@ const statusType = computed(() => {
     <main v-if="!orderID || !token" class="page">
       <section class="panel grid claim-panel">
         <div class="section-title">
-          <h1>{{ orderID ? "订单与领取" : "领取你的订单" }}</h1>
+          <h1>{{ orderID ? t("claim.order_title") : t("claim.title") }}</h1>
         </div>
-        <p class="muted">领取链接包含私密凭证，请勿分享给他人。</p>
-        <n-alert v-if="orderID" type="warning"
-          >当前浏览器没有该订单的领取凭证，请粘贴已保存的完整链接。</n-alert
-        >
+        <p class="muted">{{ t("claim.private_help") }}</p>
+        <n-alert v-if="orderID" type="warning">{{
+          t("claim.missing")
+        }}</n-alert>
         <div class="field-stack">
-          <label class="field-label" for="claim-link">完整领取链接</label
+          <label class="field-label" for="claim-link">{{
+            t("claim.full_link")
+          }}</label
           ><n-input
             id="claim-link"
             v-model:value="claimLink"
-            placeholder="https://本站/orders/订单号#token=凭证"
+            :placeholder="t('claim.placeholder')"
             @keydown.enter="claim"
           />
         </div>
         <div class="form-actions">
-          <n-button type="primary" @click="claim">查看订单</n-button>
+          <n-button type="primary" @click="claim">{{
+            t("claim.view")
+          }}</n-button>
         </div>
-        <small class="field-help">凭证丢失后无法自动找回。</small>
+        <small class="field-help">{{ t("claim.lost_help") }}</small>
       </section>
     </main>
     <main v-else class="checkout-page">
@@ -174,7 +184,7 @@ const statusType = computed(() => {
         <template v-if="detail">
           <div class="checkout-receipt-head">
             <div>
-              <span>订单凭证</span
+              <span>{{ t("claim.receipt") }}</span
               ><strong>{{ detail.order.product_name }}</strong>
             </div>
             <n-tag :type="statusType">{{
@@ -182,14 +192,14 @@ const statusType = computed(() => {
             }}</n-tag>
           </div>
           <div class="checkout-amount-block">
-            <span>订单金额</span
+            <span>{{ t("orders.amount") }}</span
             ><strong>{{
               money(detail.order.total, detail.order.currency)
             }}</strong>
           </div>
           <dl class="checkout-receipt-meta">
             <div>
-              <dt>订单号</dt>
+              <dt>{{ t("orders.id") }}</dt>
               <dd>
                 <code :title="detail.order.id">{{ detail.order.id }}</code>
                 <n-button
@@ -197,29 +207,24 @@ const statusType = computed(() => {
                   text
                   type="primary"
                   @click="copy(detail.order.id)"
-                  >复制</n-button
+                  >{{ t("common.copy") }}</n-button
                 >
               </dd>
             </div>
             <div>
-              <dt>订单信息</dt>
+              <dt>{{ t("orders.info") }}</dt>
               <dd>
                 {{ detail.order.product_name }} × {{ detail.order.quantity }}
               </dd>
             </div>
             <div>
-              <dt>创建时间</dt>
+              <dt>{{ t("common.created_at") }}</dt>
               <dd>
-                {{
-                  new Date(detail.order.created_at * 1000).toLocaleString(
-                    "zh-CN",
-                    { hour12: false },
-                  )
-                }}
+                {{ formatTime(detail.order.created_at) }}
               </dd>
             </div>
             <div v-if="expires">
-              <dt>支付有效期</dt>
+              <dt>{{ t("orders.deadline") }}</dt>
               <dd>{{ expires }}</dd>
             </div>
           </dl>
@@ -237,7 +242,7 @@ const statusType = computed(() => {
           </div>
           <div class="form-grid"><n-skeleton text :repeat="3" /></div>
         </template>
-        <p v-else class="muted">订单信息暂未加载</p>
+        <p v-else class="muted">{{ t("claim.not_loaded") }}</p>
       </section>
       <section
         class="checkout-flow"
@@ -249,12 +254,13 @@ const statusType = computed(() => {
           <div class="checkout-paid-state">
             <div class="checkout-paid-mark" aria-hidden="true">✓</div>
             <div>
-              <strong>付款已确认</strong><span>HashPay 已确认付款。</span>
+              <strong>{{ t("claim.paid") }}</strong
+              ><span>{{ t("claim.gateway_confirmed") }}</span>
             </div>
           </div>
           <dl class="checkout-paid-meta">
             <div>
-              <dt>交付状态</dt>
+              <dt>{{ t("delivery.status") }}</dt>
               <dd>{{ deliveryNames[detail.order.delivery_status] }}</dd>
             </div>
           </dl>
@@ -271,43 +277,41 @@ const statusType = computed(() => {
           <strong>{{ paymentNames[detail.order.payment_status] }}</strong>
           <span>{{
             detail.order.payment_status === "expired"
-              ? "支付单已过期。若已经付款，请刷新状态等待 HashPay 核验。"
-              : "该支付单已终止，请返回商城重新下单。"
+              ? t("claim.expired_help")
+              : t("claim.closed_help")
           }}</span>
         </div>
         <div v-else class="checkout-flow-head">
-          <span>订单与领取</span>
-          <h1>先保存领取链接</h1>
-          <small class="field-help"
-            >付款后通过此链接领取；关闭浏览器后，请使用你保存的链接。</small
-          >
+          <span>{{ t("claim.order_title") }}</span>
+          <h1>{{ t("claim.save_title") }}</h1>
+          <small class="field-help">{{ t("claim.save_help") }}</small>
         </div>
         <div class="checkout-copy-field">
-          <span>领取链接</span>
+          <span>{{ t("claim.link") }}</span>
           <code :title="receipt">{{ receipt }}</code>
-          <n-button size="small" secondary @click="copy(receipt)"
-            >复制链接</n-button
-          >
+          <n-button size="small" secondary @click="copy(receipt)">{{
+            t("claim.copy_link")
+          }}</n-button>
         </div>
-        <n-alert v-if="storageError" type="warning"
-          >浏览器无法保存凭证，请复制领取链接，并在付款后通过该链接返回。</n-alert
-        >
+        <n-alert v-if="storageError" type="warning">{{
+          t("claim.storage_help")
+        }}</n-alert>
         <n-alert v-if="error" type="error"
-          >{{ error }}
-          <n-button text :loading="busy" @click="load"
-            >重新查询</n-button
-          ></n-alert
+          >{{ errorText(error) }}
+          <n-button text :loading="busy" @click="load">{{
+            t("common.recheck")
+          }}</n-button></n-alert
         >
         <template v-if="detail">
           <n-alert
             v-if="detail.order.payment_status === 'review'"
             type="warning"
-            >网关订单暂未通过核验，库存仍为你保留。请勿重复付款。</n-alert
+            >{{ t("claim.review_help") }}</n-alert
           >
           <n-alert
             v-else-if="detail.order.payment_status === 'creating'"
             type="info"
-            >正在创建支付单，系统会自动重试。请保存领取链接并稍候。</n-alert
+            >{{ t("claim.creating_help") }}</n-alert
           >
           <n-alert
             v-else-if="
@@ -315,11 +319,11 @@ const statusType = computed(() => {
               detail.order.delivery_status === 'manual'
             "
             type="warning"
-            >付款已确认，交付需要人工处理，请联系店主并提供订单号。</n-alert
+            >{{ t("claim.manual_help") }}</n-alert
           >
-          <n-checkbox v-if="storageError" v-model:checked="receiptSaved"
-            >我已手动保存领取链接</n-checkbox
-          >
+          <n-checkbox v-if="storageError" v-model:checked="receiptSaved">{{
+            t("claim.saved_manually")
+          }}</n-checkbox>
           <n-button
             v-if="
               detail.order.checkout_url &&
@@ -330,18 +334,20 @@ const statusType = computed(() => {
             block
             :disabled="storageError && !receiptSaved"
             @click="pay"
-            >前往 HashPay 付款</n-button
+            >{{ t("claim.pay") }}</n-button
           >
           <div class="form-actions">
-            <n-button :loading="busy" secondary size="small" @click="load"
-              >刷新状态</n-button
-            >
+            <n-button :loading="busy" secondary size="small" @click="load">{{
+              t("orders.refresh_status")
+            }}</n-button>
           </div>
           <div
             v-if="detail.deliveries.some((item) => item.status === 'done')"
             class="deliveries grid"
           >
-            <div class="section-title"><h2>交付内容</h2></div>
+            <div class="section-title">
+              <h2>{{ t("delivery.content") }}</h2>
+            </div>
             <article
               v-for="item in detail.deliveries.filter(
                 (item) => item.status === 'done',
@@ -350,10 +356,10 @@ const statusType = computed(() => {
               class="delivery-item checkout-result"
             >
               <div class="section-title">
-                <span>第 {{ item.ordinal }} 份</span
-                ><n-button size="small" @click="copy(item.content ?? '')"
-                  >复制内容</n-button
-                >
+                <span>{{ t("delivery.item", { ordinal: item.ordinal }) }}</span
+                ><n-button size="small" @click="copy(item.content ?? '')">{{
+                  t("delivery.copy_content")
+                }}</n-button>
               </div>
               <pre>{{ item.content }}</pre>
             </article>

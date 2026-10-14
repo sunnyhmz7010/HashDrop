@@ -2,7 +2,9 @@
      Copyright 2026 TGDash Team. Apache-2.0，见 frontend/public/HashPay-LICENSE.txt。
      保留原分区、信息网格和操作栏，字段替换为 TinyFaka 订单与交付数据。 -->
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from "vue";
+import { formatTime, t } from "../i18n";
+
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import {
   NAlert,
   NButton,
@@ -42,10 +44,13 @@ const message = useMessage(),
   detailError = ref(""),
   manualContent = ref(""),
   manualDelivery = ref<string | null>(null);
-const statusOptions = [
-  { label: "全部付款状态", value: "" },
-  ...Object.entries(paymentNames).map(([value, label]) => ({ value, label })),
-];
+const statusOptions = computed(() => [
+  { label: t("orders.all_statuses"), value: "" },
+  ...Object.entries(paymentNames.value).map(([value, label]) => ({
+    value,
+    label,
+  })),
+]);
 async function load(next = page.value) {
   if (loading.value) return;
   loading.value = true;
@@ -113,7 +118,7 @@ async function action(name: string, body: unknown = {}) {
     });
     if (current !== generation) return;
     selected.value = result;
-    message.success("订单状态已更新");
+    message.success(t("orders.updated"));
     manualContent.value = "";
     await load();
   } catch (e) {
@@ -127,11 +132,10 @@ function remove() {
   const id = selected.value.order.id,
     current = generation;
   const confirmation = dialog.warning({
-    title: "删除订单？",
-    content:
-      "该订单将从后台列表移除。HashPay 订单、库存预留和购买者领取链接继续保留，付款状态仍由网关决定。",
-    positiveText: "删除订单",
-    negativeText: "取消",
+    title: t("orders.delete_title"),
+    content: t("orders.delete_warning"),
+    positiveText: t("orders.delete"),
+    negativeText: t("common.cancel"),
     onPositiveClick: async () => {
       if (busy.value || current !== generation || selectedID.value !== id)
         return false;
@@ -156,7 +160,7 @@ function remove() {
         items.value = items.value.filter((item) => item.id !== id);
         show.value = false;
         selected.value = undefined;
-        message.success("订单已删除");
+        message.success(t("orders.deleted"));
         await load(next);
         return true;
       } catch (e) {
@@ -179,20 +183,23 @@ function remove() {
 async function copy(value: string) {
   try {
     await copyText(value);
-    message.success("已复制");
+    message.success(t("common.copied"));
   } catch {
-    message.warning("请手动复制内容");
+    message.warning(t("common.copy_manual"));
   }
 }
 </script>
 <template>
   <div class="orders-view grid">
     <div class="section-title">
-      <h2>订单管理</h2>
-      <n-button :loading="loading" @click="load()">刷新列表</n-button>
+      <h2>{{ t("orders.title") }}</h2>
+      <n-button :loading="loading" @click="load()">{{
+        t("orders.refresh_list")
+      }}</n-button>
     </div>
     <n-alert v-if="error" type="error"
-      >{{ error }} <n-button text @click="load()">重试</n-button></n-alert
+      >{{ errorText(error) }}
+      <n-button text @click="load()">{{ t("common.retry") }}</n-button></n-alert
     >
     <div class="orders-workbench">
       <div class="orders-filter">
@@ -202,14 +209,17 @@ async function copy(value: string) {
           :options="statusOptions"
           :disabled="loading"
           @update:value="() => load(1)"
-          aria-label="付款状态筛选"
+          :aria-label="t('orders.status_filter')"
         />
       </div>
       <n-spin :show="loading"
         ><div class="orders-table">
           <div class="orders-table-head order-row--plain">
-            <span>订单 / 商品</span><span>付款状态</span><span>金额</span
-            ><span>交付 / 数量</span><span>创建时间</span>
+            <span>{{ t("orders.product_column") }}</span
+            ><span>{{ t("orders.payment_status") }}</span
+            ><span>{{ t("common.amount") }}</span
+            ><span>{{ t("orders.delivery_column") }}</span
+            ><span>{{ t("common.created_at") }}</span>
           </div>
           <OrderRow
             v-for="order in items"
@@ -222,26 +232,29 @@ async function copy(value: string) {
             class="orders-table-empty"
           >
             <n-empty
-              :description="status ? '没有符合条件的订单' : '暂无订单'"
+              :description="
+                status ? t('orders.filtered_empty') : t('orders.empty')
+              "
             />
           </div></div
       ></n-spin>
       <div class="orders-pagination">
-        <span>第 {{ page }} 页</span>
+        <span>{{ t("pagination.page", { page }) }}</span>
         <div class="topbar-actions">
-          <n-button :disabled="page === 1 || loading" @click="load(page - 1)"
-            >上一页</n-button
-          ><n-button :disabled="!more || loading" @click="load(page + 1)"
-            >下一页</n-button
-          >
+          <n-button :disabled="page === 1 || loading" @click="load(page - 1)">{{
+            t("pagination.previous")
+          }}</n-button
+          ><n-button :disabled="!more || loading" @click="load(page + 1)">{{
+            t("pagination.next")
+          }}</n-button>
         </div>
       </div>
     </div>
   </div>
-  <FormDialog v-model:show="show" title="订单详情" :busy="busy">
+  <FormDialog v-model:show="show" :title="t('orders.detail')" :busy="busy">
     <template #header>
       <div class="order-modal-title">
-        <span>订单详情</span>
+        <span>{{ t("orders.detail") }}</span>
         <n-tag v-if="selected" size="small">
           {{ paymentNames[selected.order.payment_status] }}
         </n-tag>
@@ -258,7 +271,7 @@ async function copy(value: string) {
           >
             <span class="tool-button-content">
               <span class="tool-icon tool-icon-check" aria-hidden="true"></span>
-              <span>刷新状态</span>
+              <span>{{ t("orders.refresh_status") }}</span>
             </span>
           </n-button>
           <n-button
@@ -276,7 +289,7 @@ async function copy(value: string) {
                 class="tool-icon tool-icon-notify"
                 aria-hidden="true"
               ></span>
-              <span>重试交付</span>
+              <span>{{ t("orders.retry_delivery") }}</span>
             </span>
           </n-button>
           <n-button
@@ -291,31 +304,31 @@ async function copy(value: string) {
                 class="tool-icon tool-icon-delete"
                 aria-hidden="true"
               ></span>
-              <span>删除订单</span>
+              <span>{{ t("orders.delete") }}</span>
             </span>
           </n-button>
         </div>
 
         <n-alert v-if="selected.order.last_error" type="warning">
-          {{ selected.order.last_error }}
+          {{ errorText(selected.order.last_error) }}
         </n-alert>
 
         <section class="order-modal-section">
           <div class="detail-grid">
             <div class="detail-item">
-              <span>订单号</span>
+              <span>{{ t("orders.id") }}</span>
               <div class="detail-copy-row">
                 <strong>{{ selected.order.id }}</strong>
                 <n-button
                   size="small"
                   secondary
                   @click="copy(selected.order.id)"
-                  >复制</n-button
+                  >{{ t("common.copy") }}</n-button
                 >
               </div>
             </div>
             <div class="detail-item">
-              <span>HashPay 订单号</span>
+              <span>{{ t("orders.gateway_id") }}</span>
               <div class="detail-copy-row">
                 <strong>{{ selected.order.gateway_id || "--" }}</strong>
                 <n-button
@@ -323,56 +336,48 @@ async function copy(value: string) {
                   size="small"
                   secondary
                   @click="copy(selected.order.gateway_id)"
-                  >复制</n-button
+                  >{{ t("common.copy") }}</n-button
                 >
               </div>
             </div>
             <div class="detail-item detail-item-wide">
-              <span>订单信息</span>
+              <span>{{ t("orders.info") }}</span>
               <strong
                 >{{ selected.order.product_name }} ×
                 {{ selected.order.quantity }}</strong
               >
             </div>
             <div class="detail-item">
-              <span>创建时间</span>
-              <strong>{{
-                new Date(selected.order.created_at * 1000).toLocaleString(
-                  "zh-CN",
-                  { hour12: false },
-                )
-              }}</strong>
+              <span>{{ t("common.created_at") }}</span>
+              <strong>{{ formatTime(selected.order.created_at) }}</strong>
             </div>
             <div class="detail-item">
-              <span>商品类型</span>
+              <span>{{ t("product.kind") }}</span>
               <strong>{{ kindNames[selected.order.kind] }}</strong>
             </div>
           </div>
         </section>
 
         <section class="order-modal-section">
-          <h3>支付信息</h3>
+          <h3>{{ t("orders.payment_info") }}</h3>
           <div class="detail-grid">
             <div class="detail-item">
-              <span>订单金额</span>
+              <span>{{ t("orders.amount") }}</span>
               <strong>{{
                 money(selected.order.total, selected.order.currency)
               }}</strong>
             </div>
             <div class="detail-item">
-              <span>商品单价</span>
+              <span>{{ t("product.unit_price") }}</span>
               <strong>{{
                 money(selected.order.unit_price, selected.order.currency)
               }}</strong>
             </div>
             <div class="detail-item detail-item-wide">
-              <span>支付有效期</span>
+              <span>{{ t("orders.deadline") }}</span>
               <strong>{{
                 selected.order.expires_at
-                  ? new Date(selected.order.expires_at * 1000).toLocaleString(
-                      "zh-CN",
-                      { hour12: false },
-                    )
+                  ? formatTime(selected.order.expires_at)
                   : "--"
               }}</strong>
             </div>
@@ -381,7 +386,7 @@ async function copy(value: string) {
 
         <section class="order-modal-section">
           <div class="order-delivery-title">
-            <h3>交付内容</h3>
+            <h3>{{ t("delivery.content") }}</h3>
             <n-tag size="small">{{
               deliveryNames[selected.order.delivery_status]
             }}</n-tag>
@@ -393,7 +398,7 @@ async function copy(value: string) {
           >
             <div class="section-title">
               <span
-                >第 {{ delivery.ordinal }} 份 ·
+                >{{ t("delivery.item", { ordinal: delivery.ordinal }) }} ·
                 {{ deliveryNames[delivery.status] }}</span
               >
               <n-button
@@ -401,14 +406,14 @@ async function copy(value: string) {
                 size="small"
                 secondary
                 @click="copy(delivery.content)"
-                >复制</n-button
+                >{{ t("common.copy") }}</n-button
               >
             </div>
             <pre v-if="delivery.content">{{ delivery.content }}</pre>
           </article>
           <n-empty
             v-if="!selected.deliveries.length"
-            description="暂无交付内容"
+            :description="t('delivery.empty')"
           />
         </section>
 
@@ -420,20 +425,23 @@ async function copy(value: string) {
           "
           class="order-modal-section"
         >
-          <h3>核实外部开通结果后人工交付</h3>
+          <h3>{{ t("delivery.manual_title") }}</h3>
           <n-select
             v-model:value="manualDelivery"
             :options="
               selected.deliveries
                 .filter((d) => d.status === 'manual')
-                .map((d) => ({ value: d.id, label: `第 ${d.ordinal} 份` }))
+                .map((d) => ({
+                  value: d.id,
+                  label: t('delivery.item', { ordinal: d.ordinal }),
+                }))
             "
-            placeholder="选择待处理份数"
+            :placeholder="t('delivery.select_item')"
           />
           <n-input
             v-model:value="manualContent"
             type="textarea"
-            placeholder="填写已核实的交付结果"
+            :placeholder="t('delivery.result_placeholder')"
           />
           <div class="row-actions">
             <n-button
@@ -445,14 +453,14 @@ async function copy(value: string) {
                   content: manualContent,
                 })
               "
-              >提交人工交付</n-button
+              >{{ t("delivery.submit_manual") }}</n-button
             >
           </div>
         </section>
       </div>
     </n-spin>
     <n-alert v-if="detailError" type="error" class="space-top">{{
-      detailError
+      errorText(detailError)
     }}</n-alert>
   </FormDialog>
 </template>

@@ -1,6 +1,8 @@
 <!-- 登录面板基于 HashPay LoginPanel.vue 修改，认证内容替换为单管理员密码和 TOTP。
      Copyright 2026 TGDash Team. Apache-2.0，见 frontend/public/HashPay-LICENSE.txt。 -->
 <script setup lang="ts">
+import { t } from "../i18n";
+
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { NAlert, NButton, NInput } from "naive-ui";
@@ -34,11 +36,15 @@ async function login() {
   <StoreLayout
     ><main class="page">
       <section class="panel grid login-panel">
-        <div class="section-title"><h1>登录后台</h1></div>
-        <p class="muted">管理商品、库存与订单。</p>
+        <div class="section-title">
+          <h1>{{ t("login.title") }}</h1>
+        </div>
+        <p class="muted">{{ t("login.description") }}</p>
         <form class="form-grid" @submit.prevent="login">
           <div class="field-stack">
-            <label class="field-label" for="password">管理员密码</label
+            <label class="field-label" for="password">{{
+              t("login.password")
+            }}</label
             ><n-input
               id="password"
               v-model:value="password"
@@ -48,8 +54,7 @@ async function login() {
             />
           </div>
           <div class="field-stack">
-            <label class="field-label" for="totp"
-              >动态验证码（已启用时填写）</label
+            <label class="field-label" for="totp">{{ t("login.totp") }}</label
             ><n-input
               id="totp"
               v-model:value="totp"
@@ -60,10 +65,10 @@ async function login() {
               }"
             />
           </div>
-          <n-alert v-if="error" type="error">{{ error }}</n-alert
-          ><n-button attr-type="submit" type="primary" block :loading="busy"
-            >登录</n-button
-          >
+          <n-alert v-if="error" type="error">{{ errorText(error) }}</n-alert
+          ><n-button attr-type="submit" type="primary" block :loading="busy">{{
+            t("login.submit")
+          }}</n-button>
         </form>
       </section>
     </main></StoreLayout

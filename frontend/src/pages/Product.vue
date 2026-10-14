@@ -1,6 +1,8 @@
 <!-- 购买页基于 HashPay Pay.vue 与 PaymentSelector.vue 修改，保留凭单和操作区结构。
      Copyright 2026 TGDash Team. Apache-2.0，见 frontend/public/HashPay-LICENSE.txt。 -->
 <script setup lang="ts">
+import { t } from "../i18n";
+
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
@@ -86,47 +88,49 @@ async function buy() {
       <section class="checkout-receipt">
         <div class="checkout-receipt-head">
           <div>
-            <span>商品</span
+            <span>{{ t("common.product") }}</span
             ><strong :title="product.name">{{ product.name }}</strong>
           </div>
           <n-tag :bordered="false">{{
-            product.active ? "在售" : "已下架"
+            product.active ? t("product.on_sale") : t("product.inactive")
           }}</n-tag>
         </div>
         <div class="checkout-amount-block">
-          <span>单价</span
+          <span>{{ t("product.price_label") }}</span
           ><strong>{{ money(product.price, product.currency) }}</strong>
         </div>
         <dl class="checkout-receipt-meta">
           <div>
-            <dt>商品说明</dt>
+            <dt>{{ t("product.description") }}</dt>
             <dd class="pre-wrap">
-              {{
-                product.description || "支付后可通过专属领取链接查看商品内容。"
-              }}
+              {{ product.description || t("product.default_description") }}
             </dd>
           </div>
           <div>
-            <dt>商品类型</dt>
+            <dt>{{ t("product.kind") }}</dt>
             <dd>{{ kindNames[product.kind] }}</dd>
           </div>
           <div v-if="['card', 'account'].includes(product.kind)">
-            <dt>可用库存</dt>
+            <dt>{{ t("overview.stock") }}</dt>
             <dd>{{ product.available }}</dd>
           </div>
         </dl>
       </section>
       <section class="checkout-flow">
         <div class="checkout-flow-head">
-          <span>购买商品</span>
-          <h1>确认购买</h1>
+          <span>{{ t("product.purchase") }}</span>
+          <h1>{{ t("product.confirm") }}</h1>
         </div>
         <div class="checkout-step-back">
           <span>{{ product.name }}</span
-          ><router-link class="text-link" to="/">返回商城</router-link>
+          ><router-link class="text-link" to="/">{{
+            t("product.back")
+          }}</router-link>
         </div>
         <div class="field-stack">
-          <label class="field-label" for="quantity">购买数量</label
+          <label class="field-label" for="quantity">{{
+            t("product.quantity")
+          }}</label
           ><n-input-number
             id="quantity"
             :value="quantity"
@@ -138,7 +142,7 @@ async function buy() {
         </div>
         <div class="checkout-due-amount">
           <div>
-            <span>合计</span
+            <span>{{ t("product.total") }}</span
             ><strong class="checkout-currency-title">{{ total }}</strong>
           </div>
         </div>
@@ -149,11 +153,11 @@ async function buy() {
           :loading="busy"
           :disabled="max === 0 || busy"
           @click="buy"
-          >{{ max === 0 ? "暂时售罄" : "创建订单" }}</n-button
+          >{{
+            max === 0 ? t("product.sold_out") : t("product.create_order")
+          }}</n-button
         >
-        <small class="field-help"
-          >创建订单后先保存领取链接，再前往 HashPay 付款。</small
-        >
+        <small class="field-help">{{ t("product.payment_help") }}</small>
       </section>
     </main>
     <main v-else class="checkout-page">
@@ -161,7 +165,7 @@ async function buy() {
         <section
           class="checkout-receipt"
           aria-busy="true"
-          aria-label="正在加载商品"
+          :aria-label="t('product.loading')"
         >
           <div class="checkout-receipt-head">
             <n-skeleton text width="34%" />
@@ -178,7 +182,7 @@ async function buy() {
         <section
           class="checkout-flow"
           aria-busy="true"
-          aria-label="正在加载购买信息"
+          :aria-label="t('product.loading_purchase')"
         >
           <div class="checkout-flow-head">
             <n-skeleton text width="34%" /><n-skeleton
@@ -193,8 +197,10 @@ async function buy() {
         </section>
       </template>
       <n-alert v-else-if="error" type="error"
-        >{{ error }}
-        <n-button text @click="router.go(0)">重新加载</n-button></n-alert
+        >{{ errorText(error) }}
+        <n-button text @click="router.go(0)">{{
+          t("common.reload")
+        }}</n-button></n-alert
       >
     </main>
   </StoreLayout>

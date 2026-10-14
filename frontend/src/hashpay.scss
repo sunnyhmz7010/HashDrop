@@ -59,13 +59,6 @@ a {
   gap: 8px;
 }
 
-.topbar-brand {
-  align-items: center;
-  display: flex;
-  gap: 8px;
-  min-width: 0;
-}
-
 .brand {
   font-size: 18px;
   font-weight: 700;
@@ -104,6 +97,12 @@ a {
   max-width: 460px;
   padding: 22px;
   width: 100%;
+}
+
+.setup-locale {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 18px;
 }
 
 .panel {
@@ -269,43 +268,6 @@ a {
 
 .checkout-content {
   background: transparent;
-}
-
-.checkout-topbar {
-  background: #ffffff;
-  border-bottom: 1px solid #e5e7eb;
-  min-height: 4rem;
-}
-
-.checkout-topbar-inner {
-  align-items: center;
-  box-sizing: border-box;
-  display: flex;
-  justify-content: space-between;
-  margin: 0 auto;
-  min-height: 4rem;
-  width: min(72rem, calc(100vw - 2rem));
-}
-
-.checkout-brand {
-  align-items: baseline;
-  display: flex;
-  gap: 0.75rem;
-  min-width: 0;
-}
-
-.checkout-topbar strong {
-  font-size: 1.1rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.checkout-topbar span {
-  color: #6b7280;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .checkout-page {
@@ -782,22 +744,6 @@ a {
   .form-grid.two,
   .metric-row {
     grid-template-columns: 1fr;
-  }
-
-  .checkout-brand {
-    align-items: baseline;
-    flex-direction: row;
-    gap: 0.65rem;
-  }
-
-  .checkout-topbar {
-    min-height: 3.5rem;
-  }
-
-  .checkout-topbar-inner {
-    min-height: 3.5rem;
-    width: 100%;
-    padding: 0 1rem;
   }
 
   .checkout-page {

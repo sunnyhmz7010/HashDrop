@@ -1,4 +1,5 @@
-import { ref } from "vue";
+import { t, translateError } from "../i18n";
+import { computed, ref } from "vue";
 
 export const csrf = ref("");
 export const initialized = ref<boolean>();
@@ -31,11 +32,19 @@ export async function api<T>(
     cache: "no-store",
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
     signal: options.signal,
+  }).catch((error: unknown) => {
+    if (options.signal?.aborted) throw error;
+    throw new APIError(0, t("errors.network"));
   });
-  const value = await response.json();
+  const value = await response.json().catch(() => {
+    throw new APIError(response.status, t("errors.response_json"));
+  });
   if (!response.ok) {
     if (response.status === 401 && path.startsWith("/admin/")) csrf.value = "";
-    throw new APIError(response.status, value.error ?? "请求失败");
+    throw new APIError(
+      response.status,
+      value.error ?? t("errors.request_failed"),
+    );
   }
   return value as T;
 }
@@ -113,39 +122,46 @@ export function toMinor(value: string, currency: string): number {
     !/^[0-9]*$/.test(parts[1] ?? "") ||
     (parts[1]?.length ?? 0) > scale
   )
-    throw new Error("价格格式或小数位数不正确");
+    throw new Error(t("errors.price_format"));
   const n = Number(parts[0] + (parts[1] ?? "").padEnd(scale, "0"));
   if (!Number.isSafeInteger(n) || n <= 0 || n > 9_000_000_000_000)
-    throw new Error("价格超出范围");
+    throw new Error(t("errors.price_range"));
   return n;
 }
 export function priceText(minor: number, currency: string): string {
   return money(minor, currency).split(" ")[0]!;
 }
-export const kindNames: Record<string, string> = {
-  card: "卡密",
-  account: "账号",
-  static: "固定文本",
-  api: "业务开通",
-};
-export const paymentNames: Record<string, string> = {
-  creating: "正在创建支付单",
-  pending: "等待付款",
-  paid: "已付款",
-  expired: "已过期",
-  invalid: "已失效",
-  review: "核验异常",
-  closed: "已关闭",
-};
-export const deliveryNames: Record<string, string> = {
-  pending: "等待交付",
-  processing: "交付处理中",
-  done: "交付完成",
-  cancelled: "已停止交付",
-  manual: "人工处理",
-};
+export const kindNames = computed<Record<string, string>>(() => ({
+  card: t("kind.card"),
+  account: t("kind.account"),
+  static: t("kind.static"),
+  api: t("kind.api"),
+}));
+export const paymentNames = computed<Record<string, string>>(() => ({
+  creating: t("payment.creating"),
+  pending: t("payment.pending"),
+  paid: t("payment.paid"),
+  expired: t("payment.expired"),
+  invalid: t("payment.invalid"),
+  review: t("payment.review"),
+  closed: t("payment.closed"),
+}));
+export const deliveryNames = computed<Record<string, string>>(() => ({
+  pending: t("delivery.pending"),
+  processing: t("delivery.processing"),
+  done: t("delivery.done"),
+  cancelled: t("delivery.cancelled"),
+  manual: t("delivery.manual"),
+}));
 export function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : "操作失败，请重试";
+  if (error instanceof SyntaxError) return t("errors.invalid_json");
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : t("errors.retry");
+  return translateError(message);
 }
 export async function copyText(value: string): Promise<void> {
   if (window.isSecureContext && navigator.clipboard) {
@@ -160,7 +176,7 @@ export async function copyText(value: string): Promise<void> {
   document.body.appendChild(input);
   try {
     input.select();
-    if (!document.execCommand("copy")) throw new Error("复制失败");
+    if (!document.execCommand("copy")) throw new Error(t("errors.copy_failed"));
   } finally {
     input.remove();
   }

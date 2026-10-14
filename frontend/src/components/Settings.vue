@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { t } from "../i18n";
+
 import { onMounted, reactive, ref } from "vue";
 import { NAlert, NButton, NInput, NSpin, useMessage } from "naive-ui";
 import { api, errorText, site, type Settings } from "../api";
@@ -51,7 +53,7 @@ async function save() {
   error.value = "";
   try {
     await api("/admin/settings", { method: "PUT", body: form });
-    message.success("设置已保存");
+    message.success(t("settings.saved"));
     await load();
   } catch (e) {
     error.value = errorText(e);
@@ -64,19 +66,21 @@ async function save() {
   <!-- 卡片与字段排列裁剪自 HashPay pages/Settings.vue，沿用 TinyFaka 设置接口。 -->
   <div class="grid">
     <div class="section-title">
-      <h2>系统设置</h2>
+      <h2>{{ t("nav.settings") }}</h2>
       <n-button
         type="primary"
         attr-type="submit"
         form="settings-form"
         :loading="saving"
         :disabled="!loaded || loading"
-        >保存设置</n-button
+        >{{ t("settings.save") }}</n-button
       >
     </div>
     <n-alert v-if="error" type="error"
-      >{{ error }}
-      <n-button v-if="!loaded" text @click="load">重试</n-button></n-alert
+      >{{ errorText(error) }}
+      <n-button v-if="!loaded" text @click="load">{{
+        t("common.retry")
+      }}</n-button></n-alert
     >
     <n-spin :show="loading">
       <form
@@ -86,10 +90,14 @@ async function save() {
         @submit.prevent="save"
       >
         <section class="panel grid">
-          <div class="section-title"><h2>站点</h2></div>
+          <div class="section-title">
+            <h2>{{ t("settings.site") }}</h2>
+          </div>
           <div class="form-grid two">
             <div class="field-stack">
-              <label class="field-label" for="site-title-input">站点名称</label>
+              <label class="field-label" for="site-title-input">{{
+                t("settings.site_name")
+              }}</label>
               <n-input
                 id="site-title"
                 v-model:value="form.title"
@@ -98,7 +106,9 @@ async function save() {
               />
             </div>
             <div class="field-stack">
-              <label class="field-label" for="site-url">站点地址</label>
+              <label class="field-label" for="site-url">{{
+                t("settings.site_url")
+              }}</label>
               <n-input
                 :value="data.public_url"
                 readonly
@@ -106,7 +116,9 @@ async function save() {
               />
             </div>
             <div class="field-stack settings-wide">
-              <label class="field-label" for="notice-input">商城公告</label>
+              <label class="field-label" for="notice-input">{{
+                t("settings.notice")
+              }}</label>
               <n-input
                 id="notice"
                 v-model:value="form.notice"
@@ -121,9 +133,9 @@ async function save() {
           <div class="section-title"><h2>HashPay</h2></div>
           <div class="form-grid two">
             <div class="field-stack">
-              <label class="field-label" for="hashpay-url-input"
-                >HashPay 地址</label
-              >
+              <label class="field-label" for="hashpay-url-input">{{
+                t("settings.gateway_url")
+              }}</label>
               <n-input
                 id="hashpay-url"
                 v-model:value="form.hashpay_url"
@@ -132,7 +144,9 @@ async function save() {
               />
             </div>
             <div class="field-stack">
-              <label class="field-label" for="merchant-id-input">商户 ID</label>
+              <label class="field-label" for="merchant-id-input">{{
+                t("settings.merchant_id")
+              }}</label>
               <n-input
                 id="merchant-id"
                 v-model:value="form.merchant_id"
@@ -140,13 +154,13 @@ async function save() {
               />
             </div>
             <div class="field-stack settings-wide">
-              <label class="field-label" for="merchant-key"
-                >商户 RSA 私钥</label
-              >
+              <label class="field-label" for="merchant-key">{{
+                t("settings.private_key")
+              }}</label>
               <n-input
                 v-model:value="form.private_key"
                 type="textarea"
-                placeholder="留空保留现有私钥；填写 PEM 私钥以配置或替换"
+                :placeholder="t('settings.key_placeholder')"
                 :input-props="{
                   id: 'merchant-key',
                   autocomplete: 'off',
@@ -156,26 +170,27 @@ async function save() {
             </div>
           </div>
           <p v-if="data.public_url.startsWith('https://')" class="helper">
-            回调地址：{{ data.public_url }}/api/webhooks/hashpay
+            {{ t("settings.callback") }}
+            {{ data.public_url }}/api/webhooks/hashpay
           </p>
-          <p v-else class="helper">
-            HTTP 站点使用签名查询补查付款，无需设置回调地址。
-          </p>
+          <p v-else class="helper">{{ t("settings.http_help") }}</p>
           <n-alert :type="data.key_configured ? 'success' : 'warning'">{{
             data.key_configured
-              ? "商户私钥已保存；请通过小额订单验证接入。"
-              : "商户私钥尚未配置。请在上方填写并保存。"
+              ? t("settings.key_saved")
+              : t("settings.key_missing")
           }}</n-alert>
           <p class="helper">
-            TOTP：{{
-              data.totp_enabled ? "已启用" : "未启用"
-            }}。私钥、密钥和密码保存后不会回显。
+            TOTP:
+            {{
+              data.totp_enabled ? t("common.enabled") : t("common.disabled")
+            }}. {{ t("settings.secret_hint") }}
           </p>
           <p class="helper">
-            可用业务适配器：{{
+            {{ t("settings.adapters") }}
+            {{
               data.adapters.length
-                ? data.adapters.join("、")
-                : "暂无；API 商品只能保存为草稿"
+                ? data.adapters.join(", ")
+                : t("settings.no_adapters")
             }}
           </p>
         </section>

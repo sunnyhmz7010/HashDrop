@@ -8,6 +8,7 @@ export default defineConfig({
   timeout: 45_000,
   use: {
     headless: true,
+    locale: "zh-CN",
     launchOptions: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
       ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE }
       : undefined,

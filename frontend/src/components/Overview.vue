@@ -1,17 +1,19 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { t } from "../i18n";
+
+import { computed, onMounted, ref } from "vue";
 import { NAlert, NButton, NSpin } from "naive-ui";
 import { api, errorText } from "../api";
 const data = ref<Record<string, number>>(),
   error = ref(""),
   busy = ref(false);
-const labels = [
-  ["products", "商品数量"],
-  ["stock", "可用库存"],
-  ["orders", "订单总数"],
-  ["paid", "已付款订单"],
-  ["manual", "需要处理"],
-];
+const labels = computed(() => [
+  ["products", t("overview.products")],
+  ["stock", t("overview.stock")],
+  ["orders", t("overview.orders")],
+  ["paid", t("overview.paid")],
+  ["manual", t("overview.manual")],
+]);
 async function load() {
   busy.value = true;
   error.value = "";
@@ -28,11 +30,14 @@ onMounted(load);
 <template>
   <div class="grid overview-page">
     <div class="section-title">
-      <h2>概览</h2>
-      <n-button :loading="busy" @click="load">刷新</n-button>
+      <h2>{{ t("nav.overview") }}</h2>
+      <n-button :loading="busy" @click="load">{{
+        t("common.refresh")
+      }}</n-button>
     </div>
     <n-alert v-if="error" type="error" class="space-bottom"
-      >{{ error }} <n-button text @click="load">重试</n-button></n-alert
+      >{{ errorText(error) }}
+      <n-button text @click="load">{{ t("common.retry") }}</n-button></n-alert
     ><n-spin :show="busy"
       ><div class="metric-row">
         <article v-for="[key, label] in labels" :key="key" class="metric">

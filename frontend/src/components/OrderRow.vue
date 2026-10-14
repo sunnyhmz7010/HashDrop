@@ -1,6 +1,8 @@
 <!-- 基于 HashPay src/app/components/OrderRow.vue 修改：去掉批量选择，展示商品与交付状态。
      Copyright 2026 TGDash Team. Apache-2.0，见 frontend/public/HashPay-LICENSE.txt。 -->
 <script setup lang="ts">
+import { formatTime, t } from "../i18n";
+
 import { computed } from "vue";
 import { deliveryNames, money, paymentNames, type Order } from "../api";
 const props = defineProps<{ order: Order }>();
@@ -42,14 +44,10 @@ const statusClass = computed(
     </div>
     <div class="order-cell order-payment-cell">
       <strong>{{ deliveryNames[order.delivery_status] }}</strong
-      ><span>数量 {{ order.quantity }}</span>
+      ><span>{{ t("orders.quantity", { quantity: order.quantity }) }}</span>
     </div>
     <div class="order-cell order-time-cell">
-      <span>{{
-        new Date(order.created_at * 1000).toLocaleString("zh-CN", {
-          hour12: false,
-        })
-      }}</span>
+      <span>{{ formatTime(order.created_at) }}</span>
     </div>
   </div>
 </template>

@@ -1,6 +1,8 @@
 <!-- 商品列表基于 HashPay Merchants.vue 的 panel/list-card 结构修改。
      Copyright 2026 TGDash Team. Apache-2.0，见 frontend/public/HashPay-LICENSE.txt。 -->
 <script setup lang="ts">
+import { t } from "../i18n";
+
 import { onMounted, ref } from "vue";
 import { NAlert, NButton, NEmpty, NSkeleton, NSpin, NTag } from "naive-ui";
 import StoreLayout from "../components/StoreLayout.vue";
@@ -34,14 +36,17 @@ onMounted(load);
         notice
       }}</n-alert>
       <n-alert v-if="error" type="error"
-        >{{ error }} <n-button text @click="load">重新加载</n-button></n-alert
+        >{{ errorText(error) }}
+        <n-button text @click="load">{{
+          t("common.reload")
+        }}</n-button></n-alert
       >
       <n-spin :show="loading && products.length > 0"
         ><section
           v-if="loading && !products.length"
           class="panel grid"
           aria-busy="true"
-          aria-label="正在加载商品列表"
+          :aria-label="t('shop.loading')"
         >
           <div v-for="row in 3" :key="row" class="list-card loading-row">
             <n-skeleton text width="34%" /><n-skeleton
@@ -62,28 +67,28 @@ onMounted(load);
                 <n-tag size="small">{{ kindNames[product.kind] }}</n-tag>
               </div>
               <p class="product-description" :title="product.description">
-                {{ product.description || "购买后凭专属链接领取商品。" }}
+                {{ product.description || t("shop.default_description") }}
               </p>
               <p>
                 {{
                   ["card", "account"].includes(product.kind)
-                    ? `库存 ${product.available}`
-                    : "支付后交付"
+                    ? t("stock.count", { quantity: product.available })
+                    : t("shop.after_payment")
                 }}
               </p>
             </div>
             <div class="merchant-card-actions">
               <strong>{{ money(product.price, product.currency) }}</strong
               ><router-link :to="`/products/${product.id}`"
-                ><n-button size="small" quaternary
-                  >查看商品</n-button
-                ></router-link
+                ><n-button size="small" quaternary>{{
+                  t("shop.view")
+                }}</n-button></router-link
               >
             </div>
           </article>
         </section>
         <div v-else-if="!loading && !error" class="panel empty-panel">
-          <n-empty description="暂无上架商品" /></div
+          <n-empty :description="t('shop.empty')" /></div
       ></n-spin></main
   ></StoreLayout>
 </template>

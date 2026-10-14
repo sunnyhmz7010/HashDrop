@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import { t } from "../i18n";
+
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import {
   NAlert,
   NButton,
@@ -50,15 +52,17 @@ const currencies = [
   "USDT",
   "USDC",
 ].map((value) => ({ label: value, value }));
-const kinds = Object.entries(kindNames).map(([value, label]) => ({
-  value,
-  label,
+const kinds = computed(() =>
+  Object.entries(kindNames.value).map(([value, label]) => ({
+    value,
+    label,
+  })),
+);
+const stockNames = computed<Record<string, string>>(() => ({
+  available: t("stock.available"),
+  reserved: t("stock.reserved"),
+  sold: t("stock.sold"),
 }));
-const stockNames: Record<string, string> = {
-  available: "可用",
-  reserved: "已预留",
-  sold: "已售出",
-};
 async function load() {
   loading.value = true;
   error.value = "";
@@ -115,7 +119,7 @@ async function save() {
       },
     });
     editor.value = false;
-    message.success("商品已保存");
+    message.success(t("product.saved"));
     await load();
   } catch (e) {
     formError.value = errorText(e);
@@ -150,7 +154,10 @@ async function importItems() {
     importing.value = false;
     stockText.value = "";
     message.success(
-      `新增 ${result.added} 份，跳过重复 ${result.duplicates} 份`,
+      t("stock.imported", {
+        added: result.added,
+        duplicates: result.duplicates,
+      }),
     );
     await load();
   } catch (e) {
@@ -195,10 +202,10 @@ function removeStock(id: string) {
   const p = stockProduct.value;
   if (!p) return;
   dialog.warning({
-    title: "删除这份库存？",
-    content: "删除后无法恢复，仅允许删除尚未预留的库存。",
-    positiveText: "删除",
-    negativeText: "取消",
+    title: t("stock.delete_title"),
+    content: t("stock.delete_warning"),
+    positiveText: t("common.delete"),
+    negativeText: t("common.cancel"),
     onPositiveClick: async () => {
       try {
         await api(`/admin/products/${p.id}/stock/${id}`, { method: "DELETE" });
@@ -214,11 +221,12 @@ function removeStock(id: string) {
 </script>
 <template>
   <div class="section-title space-bottom">
-    <h2>商品与库存</h2>
-    <n-button type="primary" @click="edit()">新增商品</n-button>
+    <h2>{{ t("nav.products") }}</h2>
+    <n-button type="primary" @click="edit()">{{ t("product.add") }}</n-button>
   </div>
   <n-alert v-if="error" type="error" class="space-bottom"
-    >{{ error }} <n-button text @click="load">重试</n-button></n-alert
+    >{{ errorText(error) }}
+    <n-button text @click="load">{{ t("common.retry") }}</n-button></n-alert
   >
   <n-spin :show="loading"
     ><div v-if="products.length" class="panel table-panel">
@@ -226,12 +234,12 @@ function removeStock(id: string) {
         <table>
           <thead>
             <tr>
-              <th>商品</th>
-              <th>类型</th>
-              <th>价格</th>
-              <th>库存：可用 / 预留 / 已售</th>
-              <th>状态</th>
-              <th>操作</th>
+              <th>{{ t("common.product") }}</th>
+              <th>{{ t("common.type") }}</th>
+              <th>{{ t("common.price") }}</th>
+              <th>{{ t("stock.summary") }}</th>
+              <th>{{ t("common.status") }}</th>
+              <th>{{ t("common.actions") }}</th>
             </tr>
           </thead>
           <tbody>
@@ -243,18 +251,24 @@ function removeStock(id: string) {
                 {{
                   ["card", "account"].includes(p.kind)
                     ? `${p.available} / ${p.reserved} / ${p.sold}`
-                    : "不消耗库存"
+                    : t("stock.not_consumed")
                 }}
               </td>
-              <td>{{ p.active ? "已上架" : "已下架" }}</td>
+              <td>
+                {{ p.active ? t("product.active") : t("product.inactive") }}
+              </td>
               <td>
                 <div class="row-actions">
-                  <n-button size="small" @click="edit(p)">编辑</n-button
+                  <n-button size="small" @click="edit(p)">{{
+                    t("common.edit")
+                  }}</n-button
                   ><template v-if="['card', 'account'].includes(p.kind)"
-                    ><n-button size="small" @click="importFor(p)">导入</n-button
-                    ><n-button size="small" @click="viewStock(p)"
-                      >库存</n-button
-                    ></template
+                    ><n-button size="small" @click="importFor(p)">{{
+                      t("common.import")
+                    }}</n-button
+                    ><n-button size="small" @click="viewStock(p)">{{
+                      t("stock.label")
+                    }}</n-button></template
                   >
                 </div>
               </td>
@@ -264,21 +278,23 @@ function removeStock(id: string) {
       </div>
     </div>
     <div v-else-if="!loading && !error" class="panel empty-panel">
-      <n-empty description="还没有商品"
+      <n-empty :description="t('product.empty')"
         ><template #extra
-          ><n-button @click="edit()">新增商品</n-button></template
+          ><n-button @click="edit()">{{ t("product.add") }}</n-button></template
         ></n-empty
       >
     </div></n-spin
   >
   <FormDialog
     v-model:show="editor"
-    :title="model.id ? '编辑商品' : '新增商品'"
+    :title="model.id ? t('product.edit') : t('product.add')"
     :busy="saving"
     ><form id="product-form" @submit.prevent="save">
       <div class="form-grid two">
         <div class="wide">
-          <label class="field-label" for="product-name">商品名称</label
+          <label class="field-label" for="product-name">{{
+            t("product.name")
+          }}</label
           ><n-input
             id="product-name"
             v-model:value="model.name"
@@ -286,7 +302,9 @@ function removeStock(id: string) {
           />
         </div>
         <div>
-          <label class="field-label" for="product-kind">交付类型</label
+          <label class="field-label" for="product-kind">{{
+            t("product.delivery_type")
+          }}</label
           ><n-select
             id="product-kind"
             v-model:value="model.kind"
@@ -295,7 +313,9 @@ function removeStock(id: string) {
           />
         </div>
         <div>
-          <label class="field-label" for="currency">币种</label
+          <label class="field-label" for="currency">{{
+            t("common.currency")
+          }}</label
           ><n-select
             id="currency"
             v-model:value="model.currency"
@@ -303,21 +323,27 @@ function removeStock(id: string) {
           />
         </div>
         <div>
-          <label class="field-label" for="price">售价</label
+          <label class="field-label" for="price">{{ t("product.price") }}</label
           ><n-input
             id="price"
             v-model:value="model.price"
-            placeholder="例如 10.00"
+            :placeholder="t('product.price_placeholder')"
             :input-props="{ inputmode: 'decimal' }"
           />
         </div>
         <div>
-          <label class="field-label" for="active">上架状态</label
+          <label class="field-label" for="active">{{
+            t("product.publication")
+          }}</label
           ><n-switch id="active" v-model:value="model.active" />
-          <span class="muted">{{ model.active ? "上架" : "下架" }}</span>
+          <span class="muted">{{
+            model.active ? t("product.publish") : t("product.unpublish")
+          }}</span>
         </div>
         <div class="wide">
-          <label class="field-label" for="description">商品说明</label
+          <label class="field-label" for="description">{{
+            t("product.description")
+          }}</label
           ><n-input
             id="description"
             v-model:value="model.description"
@@ -326,87 +352,92 @@ function removeStock(id: string) {
           />
         </div>
         <div v-if="model.kind === 'static'" class="wide">
-          <label class="field-label" for="static-content">固定交付内容</label
+          <label class="field-label" for="static-content">{{
+            t("product.static_content")
+          }}</label
           ><n-input
             id="static-content"
             v-model:value="model.static_content"
             type="textarea"
             :placeholder="
               model.id
-                ? '留空保留现有内容；新内容只影响后续订单'
-                : '填写付款后展示的内容'
+                ? t('product.static_keep')
+                : t('product.static_placeholder')
             "
           />
         </div>
         <div v-if="model.kind === 'api'" class="wide">
-          <n-alert type="info"
-            >只支持服务端已部署的适配器。未部署时可保存草稿，不能上架。</n-alert
-          ><label class="field-label" for="api-config">非敏感适配器配置</label
+          <n-alert type="info">{{ t("product.adapter_help") }}</n-alert
+          ><label class="field-label" for="api-config">{{
+            t("product.adapter_config")
+          }}</label
           ><n-input
             id="api-config"
             v-model:value="model.config"
             type="textarea"
-            placeholder='{"adapter":"名称","parameters":{}}'
+            :placeholder="t('product.config_placeholder')"
           />
         </div>
       </div>
       <n-alert v-if="formError" type="error" class="space-top">{{
-        formError
+        errorText(formError)
       }}</n-alert>
     </form>
     <template #footer>
-      <n-button :disabled="saving" @click="editor = false">取消</n-button
+      <n-button :disabled="saving" @click="editor = false">{{
+        t("common.cancel")
+      }}</n-button
       ><n-button
         attr-type="submit"
         form="product-form"
         type="primary"
         :loading="saving"
-        >保存商品</n-button
+        >{{ t("product.save") }}</n-button
       >
     </template>
   </FormDialog>
   <FormDialog
     v-model:show="importing"
-    :title="`导入库存 · ${stockProduct?.name ?? ''}`"
+    :title="t('stock.import_title', { name: stockProduct?.name ?? '' })"
     :busy="saving"
-    ><p class="muted">
-      每行一份卡密或账号。重复内容会自动跳过；账号与密码请放在同一行。
-    </p>
+    ><p class="muted">{{ t("stock.import_help") }}</p>
     <n-input
       v-model:value="stockText"
       type="textarea"
       :autosize="{ minRows: 8, maxRows: 18 }"
-      placeholder="每行一份库存"
-      aria-label="库存内容"
+      :placeholder="t('stock.placeholder')"
+      :aria-label="t('stock.content')"
     /><n-alert v-if="stockError" type="error" class="space-top">{{
-      stockError
+      errorText(stockError)
     }}</n-alert>
     <template #footer>
-      <n-button :disabled="saving" @click="importing = false">取消</n-button
-      ><n-button type="primary" :loading="saving" @click="importItems"
-        >导入库存</n-button
-      >
+      <n-button :disabled="saving" @click="importing = false">{{
+        t("common.cancel")
+      }}</n-button
+      ><n-button type="primary" :loading="saving" @click="importItems">{{
+        t("stock.import")
+      }}</n-button>
     </template></FormDialog
   >
   <FormDialog
     v-model:show="stockDialog"
-    :title="`库存 · ${stockProduct?.name ?? ''}`"
+    :title="t('stock.title', { name: stockProduct?.name ?? '' })"
     ><n-alert v-if="stockError" type="error"
-      >{{ stockError }}
+      >{{ errorText(stockError) }}
       <n-button
         text
         :loading="stockLoading"
         @click="stockProduct && viewStock(stockProduct)"
-        >重新查询</n-button
+        >{{ t("common.recheck") }}</n-button
       ></n-alert
     ><n-spin :show="stockLoading"
       ><div class="table-scroll">
         <table>
           <thead>
             <tr>
-              <th>库存编号</th>
-              <th>状态</th>
-              <th>操作</th>
+              <th>{{ t("stock.id") }}</th>
+              <th>{{ t("common.status") }}</th>
+              <th>{{ t("common.actions") }}</th>
             </tr>
           </thead>
           <tbody>
@@ -420,7 +451,7 @@ function removeStock(id: string) {
                   type="error"
                   secondary
                   @click="removeStock(item.id)"
-                  >删除</n-button
+                  >{{ t("common.delete") }}</n-button
                 >
               </td>
             </tr>
@@ -429,11 +460,9 @@ function removeStock(id: string) {
       </div>
       <n-empty
         v-if="!stockItems.length && !stockLoading && !stockError"
-        description="暂无库存"
+        :description="t('stock.empty')"
     /></n-spin>
-    <p class="helper">
-      显示最新 200 条记录，敏感内容不在列表中回显。
-    </p></FormDialog
+    <p class="helper">{{ t("stock.list_help") }}</p></FormDialog
   >
 </template>
 

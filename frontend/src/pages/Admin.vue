@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { t } from "../i18n";
+
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
@@ -7,38 +9,35 @@ import {
   NDrawerContent,
   NLayout,
   NLayoutContent,
-  NLayoutHeader,
   NLayoutSider,
   NMenu,
   useMessage,
 } from "naive-ui";
-import { api, csrf, errorText, site } from "../api";
+import { api, csrf, errorText } from "../api";
 import { version } from "../../package.json";
 import Overview from "../components/Overview.vue";
 import Products from "../components/Products.vue";
 import Orders from "../components/Orders.vue";
 import Settings from "../components/Settings.vue";
+import AppHeader from "../components/AppHeader.vue";
 const route = useRoute(),
   router = useRouter(),
   message = useMessage(),
   busy = ref(false),
   navOpen = ref(false);
 const section = computed(() => String(route.params.section ?? "overview"));
-const sections = [
-  { id: "overview", name: "概览" },
-  { id: "products", name: "商品与库存" },
-  { id: "orders", name: "订单" },
-  { id: "settings", name: "系统设置" },
-];
-const menuOptions = sections.map((item) => ({
-  key: item.id,
-  label: item.name,
-}));
+const menuOptions = computed(() => [
+  { key: "overview", label: t("nav.overview") },
+  { key: "products", label: t("nav.products") },
+  { key: "orders", label: t("nav.orders") },
+  { key: "settings", label: t("nav.settings") },
+]);
 function openPage(key: string) {
   navOpen.value = false;
   void router.push(`/admin/${key}`);
 }
 async function logout() {
+  if (busy.value) return;
   busy.value = true;
   try {
     await api("/admin/logout", { method: "POST" });
@@ -55,32 +54,23 @@ async function logout() {
   <!-- 基于 HashPay src/app/pages/Admin.vue 修改，接入 TinyFaka 路由和密码会话。
        Copyright 2026 TGDash Team. Apache-2.0，见 frontend/public/HashPay-LICENSE.txt。 -->
   <n-layout class="shell">
-    <n-layout-header class="topbar">
-      <div class="topbar-brand">
+    <AppHeader>
+      <template #actions>
         <n-button
           class="mobile-menu-button"
           circle
           quaternary
           size="small"
-          aria-label="打开管理菜单"
+          :aria-label="t('nav.open_menu')"
           @click="navOpen = true"
         >
           <span class="hamburger-icon" aria-hidden="true"></span>
         </n-button>
-        <span class="brand">{{ site.title }}</span>
-      </div>
-      <div class="topbar-actions">
-        <router-link to="/"
-          ><n-button quaternary size="small">商城</n-button></router-link
-        >
-        <n-button quaternary size="small" :loading="busy" @click="logout"
-          >退出登录</n-button
-        >
-      </div>
-    </n-layout-header>
+      </template>
+    </AppHeader>
     <n-layout-content class="workspace-layout" content-class="workspace-page">
       <n-drawer v-model:show="navOpen" placement="left" :width="260">
-        <n-drawer-content closable title="管理菜单">
+        <n-drawer-content closable :title="t('nav.menu')">
           <div class="workspace-nav workspace-nav--drawer">
             <n-menu
               :value="section"
@@ -89,6 +79,9 @@ async function logout() {
             />
             <div class="workspace-release">
               <span>TinyFaka v{{ version }}</span>
+              <n-button block quaternary :loading="busy" @click="logout">{{
+                t("nav.logout")
+              }}</n-button>
             </div>
           </div>
         </n-drawer-content>
@@ -103,6 +96,9 @@ async function logout() {
             />
             <div class="workspace-release">
               <span>TinyFaka v{{ version }}</span>
+              <n-button block quaternary :loading="busy" @click="logout">{{
+                t("nav.logout")
+              }}</n-button>
             </div>
           </div>
         </n-layout-sider>

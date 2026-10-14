@@ -1,7 +1,18 @@
+<!-- 订单与领取页基于 HashPay Pay.vue 的凭单、付款结果和复制字段结构修改。
+     Copyright 2026 TGDash Team. Apache-2.0，见 frontend/public/HashPay-LICENSE.txt。
+     支付状态直接展示网关核验结果，付款渠道和链上信息由 HashPay 页面提供。 -->
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { NAlert, NButton, NCheckbox, NInput, NTag, useMessage } from "naive-ui";
+import {
+  NAlert,
+  NButton,
+  NCheckbox,
+  NInput,
+  NSkeleton,
+  NTag,
+  useMessage,
+} from "naive-ui";
 import StoreLayout from "../components/StoreLayout.vue";
 import {
   api,
@@ -35,10 +46,12 @@ function stop() {
   clearTimeout(timer);
   controller?.abort();
   generation++;
+  busy.value = false;
 }
 async function load() {
   const current = generation;
-  if (!token.value || !orderID.value) return;
+  if (busy.value || !token.value || !orderID.value) return;
+  clearTimeout(timer);
   controller = new AbortController();
   busy.value = true;
   try {
@@ -123,6 +136,12 @@ const expires = computed(() =>
       })
     : null,
 );
+const statusType = computed(() => {
+  const status = detail.value?.order.payment_status;
+  if (status === "paid") return "success";
+  if (status === "expired" || status === "review") return "warning";
+  return status === "invalid" ? "error" : "default";
+});
 </script>
 <template>
   <StoreLayout>
@@ -158,12 +177,9 @@ const expires = computed(() =>
               <span>订单凭证</span
               ><strong>{{ detail.order.product_name }}</strong>
             </div>
-            <n-tag
-              :type="
-                detail.order.payment_status === 'paid' ? 'success' : 'default'
-              "
-              >{{ paymentNames[detail.order.payment_status] }}</n-tag
-            >
+            <n-tag :type="statusType">{{
+              paymentNames[detail.order.payment_status]
+            }}</n-tag>
           </div>
           <div class="checkout-amount-block">
             <span>订单金额</span
@@ -176,19 +192,31 @@ const expires = computed(() =>
               <dt>订单号</dt>
               <dd>
                 <code :title="detail.order.id">{{ detail.order.id }}</code>
+                <n-button
+                  size="tiny"
+                  text
+                  type="primary"
+                  @click="copy(detail.order.id)"
+                  >复制</n-button
+                >
               </dd>
             </div>
             <div>
-              <dt>商品</dt>
-              <dd>{{ detail.order.product_name }}</dd>
+              <dt>订单信息</dt>
+              <dd>
+                {{ detail.order.product_name }} × {{ detail.order.quantity }}
+              </dd>
             </div>
             <div>
-              <dt>购买数量</dt>
-              <dd>{{ detail.order.quantity }}</dd>
-            </div>
-            <div>
-              <dt>交付状态</dt>
-              <dd>{{ deliveryNames[detail.order.delivery_status] }}</dd>
+              <dt>创建时间</dt>
+              <dd>
+                {{
+                  new Date(detail.order.created_at * 1000).toLocaleString(
+                    "zh-CN",
+                    { hour12: false },
+                  )
+                }}
+              </dd>
             </div>
             <div v-if="expires">
               <dt>支付有效期</dt>
@@ -196,21 +224,68 @@ const expires = computed(() =>
             </div>
           </dl>
         </template>
-        <p v-else class="muted">
-          {{ busy ? "正在查询订单…" : "订单信息暂未加载" }}
-        </p>
+        <template v-else-if="busy">
+          <div class="checkout-receipt-head">
+            <n-skeleton text width="34%" />
+          </div>
+          <div class="checkout-amount-block">
+            <n-skeleton text width="26%" /><n-skeleton
+              text
+              :repeat="2"
+              width="64%"
+            />
+          </div>
+          <div class="form-grid"><n-skeleton text :repeat="3" /></div>
+        </template>
+        <p v-else class="muted">订单信息暂未加载</p>
       </section>
-      <section class="checkout-flow">
-        <div class="checkout-flow-head">
+      <section
+        class="checkout-flow"
+        :class="{
+          'checkout-flow--paid': detail?.order.payment_status === 'paid',
+        }"
+      >
+        <template v-if="detail?.order.payment_status === 'paid'">
+          <div class="checkout-paid-state">
+            <div class="checkout-paid-mark" aria-hidden="true">✓</div>
+            <div>
+              <strong>付款已确认</strong><span>HashPay 已确认付款。</span>
+            </div>
+          </div>
+          <dl class="checkout-paid-meta">
+            <div>
+              <dt>交付状态</dt>
+              <dd>{{ deliveryNames[detail.order.delivery_status] }}</dd>
+            </div>
+          </dl>
+        </template>
+        <div
+          v-else-if="
+            detail &&
+            ['expired', 'invalid', 'closed'].includes(
+              detail.order.payment_status,
+            )
+          "
+          class="checkout-expired-state"
+        >
+          <strong>{{ paymentNames[detail.order.payment_status] }}</strong>
+          <span>{{
+            detail.order.payment_status === "expired"
+              ? "支付单已过期。若已经付款，请刷新状态等待 HashPay 核验。"
+              : "该支付单已终止，请返回商城重新下单。"
+          }}</span>
+        </div>
+        <div v-else class="checkout-flow-head">
           <span>订单与领取</span>
           <h1>先保存领取链接</h1>
           <small class="field-help"
             >付款后通过此链接领取；关闭浏览器后，请使用你保存的链接。</small
           >
         </div>
-        <div class="copy-row">
-          <n-input :value="receipt" readonly aria-label="领取链接" /><n-button
-            @click="copy(receipt)"
+        <div class="checkout-copy-field">
+          <span>领取链接</span>
+          <code :title="receipt">{{ receipt }}</code>
+          <n-button size="small" secondary @click="copy(receipt)"
             >复制链接</n-button
           >
         </div>
@@ -257,6 +332,11 @@ const expires = computed(() =>
             @click="pay"
             >前往 HashPay 付款</n-button
           >
+          <div class="form-actions">
+            <n-button :loading="busy" secondary size="small" @click="load"
+              >刷新状态</n-button
+            >
+          </div>
           <div
             v-if="detail.deliveries.some((item) => item.status === 'done')"
             class="deliveries grid"
@@ -267,7 +347,7 @@ const expires = computed(() =>
                 (item) => item.status === 'done',
               )"
               :key="item.id"
-              class="delivery-item"
+              class="delivery-item checkout-result"
             >
               <div class="section-title">
                 <span>第 {{ item.ordinal }} 份</span
@@ -294,29 +374,7 @@ const expires = computed(() =>
   margin: 0;
 }
 
-.copy-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.copy-row .n-input {
-  min-width: 0;
-}
-
-.copy-row .n-button {
-  flex-shrink: 0;
-}
-
-@media (max-width: 520px) {
-  .copy-row {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .copy-row .n-button {
-    align-self: flex-start;
-  }
+.checkout-result .section-title {
+  margin-bottom: 0;
 }
 </style>

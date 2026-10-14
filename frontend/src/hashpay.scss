@@ -1,5 +1,5 @@
 /* 从 HashPay src/app/styles.scss 裁剪。Copyright 2026 TGDash Team，Apache-2.0。
- * 来源 sunnyhmz7010/HashPay@7963dd9f3d1e6a7b9aa4492b623f18c643a9423d。
+ * 来源 sunnyhmz7010/HashPay@9be949cb0041fda454e98bf9982a0b0df34d7e19。
  * TinyFaka 修改：移除未使用的支付渠道、Telegram、图表与批量操作样式。
  * 许可证随静态资源分发：frontend/public/HashPay-LICENSE.txt。
  */
@@ -421,6 +421,179 @@ a {
   margin: 0;
 }
 
+.checkout-flow--paid {
+  gap: 1.65rem;
+}
+
+.checkout-step-back {
+  align-items: center;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  padding: 0.8rem 0.9rem;
+}
+
+/* 商品名可包含连续长文本，保留返回入口并允许名称在窄屏换行。 */
+.checkout-step-back > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.checkout-step-back .text-link {
+  flex: 0 0 auto;
+}
+
+.checkout-due-amount {
+  align-items: center;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 0.65rem;
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 0.9rem 1rem;
+}
+
+.checkout-due-amount > div {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.checkout-due-amount > div > span {
+  color: #15803d;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.checkout-due-amount .checkout-currency-title {
+  color: #052e16;
+  font-size: 1.8rem;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.checkout-copy-field {
+  align-items: center;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  display: grid;
+  gap: 0.35rem 0.7rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 0.8rem 0.9rem;
+}
+
+.checkout-copy-field > span {
+  grid-column: 1 / -1;
+  color: #6b7280;
+  font-size: 0.82rem;
+}
+
+.checkout-copy-field code {
+  color: #111827;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.checkout-paid-state {
+  align-items: center;
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.checkout-paid-mark {
+  align-items: center;
+  background: #16a34a;
+  border-radius: 999px;
+  color: #ffffff;
+  display: flex;
+  font-size: 1.3rem;
+  font-weight: 800;
+  height: 2.65rem;
+  justify-content: center;
+  line-height: 1;
+  width: 2.65rem;
+}
+
+.checkout-paid-state div:last-child {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.checkout-paid-state strong {
+  color: #052e16;
+  font-size: 1.35rem;
+  line-height: 1.2;
+}
+
+.checkout-paid-state span {
+  color: #166534;
+  line-height: 1.45;
+}
+
+.checkout-paid-meta {
+  color: #6b7280;
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+}
+
+.checkout-paid-meta div {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.checkout-paid-meta dt {
+  color: #9ca3af;
+  flex: 0 0 auto;
+}
+
+.checkout-paid-meta dd {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.checkout-result {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem;
+}
+
+.checkout-expired-state {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 0.5rem;
+  color: #991b1b;
+  display: grid;
+  gap: 0.45rem;
+  padding: 1rem;
+}
+
+.checkout-expired-state strong {
+  font-size: 1.25rem;
+}
+
+.checkout-expired-state span {
+  line-height: 1.55;
+}
+
 .metric-row {
   display: grid;
   gap: 12px;
@@ -657,6 +830,11 @@ a {
   .checkout-receipt-meta div:nth-child(1),
   .checkout-receipt-meta div:nth-child(2) {
     grid-column: auto;
+  }
+
+  .checkout-copy-field,
+  .checkout-due-amount {
+    grid-template-columns: 1fr;
   }
 
   .workspace-frame {

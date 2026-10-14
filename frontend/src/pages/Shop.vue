@@ -1,6 +1,8 @@
+<!-- 商品列表基于 HashPay Merchants.vue 的 panel/list-card 结构修改。
+     Copyright 2026 TGDash Team. Apache-2.0，见 frontend/public/HashPay-LICENSE.txt。 -->
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
-import { NAlert, NButton, NEmpty, NSpin, NTag } from "naive-ui";
+import { NAlert, NButton, NEmpty, NSkeleton, NSpin, NTag } from "naive-ui";
 import StoreLayout from "../components/StoreLayout.vue";
 import { api, errorText, kindNames, money, type Product } from "../api";
 const products = ref<Product[]>([]),
@@ -27,57 +29,59 @@ onMounted(load);
 </script>
 <template>
   <StoreLayout
-    ><main class="page grid catalog-page">
-      <n-alert
-        v-if="notice"
-        type="info"
-        :show-icon="false"
-        class="space-bottom"
-        >{{ notice }}</n-alert
-      >
-      <n-alert v-if="error" type="error" class="space-bottom"
+    ><main class="checkout-page catalog-page">
+      <n-alert v-if="notice" type="info" :show-icon="false">{{
+        notice
+      }}</n-alert>
+      <n-alert v-if="error" type="error"
         >{{ error }} <n-button text @click="load">重新加载</n-button></n-alert
       >
-      <n-spin :show="loading"
-        ><div v-if="products.length" class="product-grid">
+      <n-spin :show="loading && products.length > 0"
+        ><section
+          v-if="loading && !products.length"
+          class="panel grid"
+          aria-busy="true"
+          aria-label="正在加载商品列表"
+        >
+          <div v-for="row in 3" :key="row" class="list-card loading-row">
+            <n-skeleton text width="34%" /><n-skeleton
+              text
+              width="82%"
+            /><n-skeleton text width="64%" />
+          </div>
+        </section>
+        <section v-else-if="products.length" class="panel grid">
           <article
             v-for="product in products"
             :key="product.id"
-            class="panel product-card"
+            class="list-card merchant-card product-card"
           >
-            <div class="card-top">
-              <n-tag size="small" :bordered="false">{{
-                kindNames[product.kind]
-              }}</n-tag
-              ><span class="muted">{{
-                ["card", "account"].includes(product.kind)
-                  ? `库存 ${product.available}`
-                  : "支付后交付"
-              }}</span>
+            <div class="merchant-card-main">
+              <div class="merchant-card-title">
+                <strong :title="product.name">{{ product.name }}</strong>
+                <n-tag size="small">{{ kindNames[product.kind] }}</n-tag>
+              </div>
+              <p class="product-description" :title="product.description">
+                {{ product.description || "购买后凭专属链接领取商品。" }}
+              </p>
+              <p>
+                {{
+                  ["card", "account"].includes(product.kind)
+                    ? `库存 ${product.available}`
+                    : "支付后交付"
+                }}
+              </p>
             </div>
-            <h2>{{ product.name }}</h2>
-            <p class="product-description">
-              {{ product.description || "购买后凭专属链接领取商品。" }}
-            </p>
-            <div class="card-bottom">
+            <div class="merchant-card-actions">
               <strong>{{ money(product.price, product.currency) }}</strong
               ><router-link :to="`/products/${product.id}`"
-                ><n-button
-                  :disabled="
-                    ['card', 'account'].includes(product.kind) &&
-                    product.available === 0
-                  "
-                  >{{
-                    ["card", "account"].includes(product.kind) &&
-                    product.available === 0
-                      ? "暂时售罄"
-                      : "查看商品"
-                  }}</n-button
+                ><n-button size="small" quaternary
+                  >查看商品</n-button
                 ></router-link
               >
             </div>
           </article>
-        </div>
+        </section>
         <div v-else-if="!loading && !error" class="panel empty-panel">
           <n-empty description="暂无上架商品" /></div
       ></n-spin></main
@@ -85,62 +89,64 @@ onMounted(load);
 </template>
 
 <style scoped lang="scss">
-.product-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+.catalog-page {
+  grid-template-columns: minmax(0, 1fr);
 }
 
-.product-card {
+.list-card {
+  align-items: flex-start;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 14px;
+}
+
+.list-card p {
+  color: #6b7280;
+  margin: 4px 0 0;
+}
+
+.loading-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.merchant-card-main {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.merchant-card-main p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.merchant-card-title {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.merchant-card-title strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.merchant-card-actions {
+  align-items: flex-end;
+  align-self: stretch;
+  color: #6b7280;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-}
-
-.product-card h2 {
-  margin: 0;
-  font-size: 20px;
-  overflow-wrap: anywhere;
-}
-
-.card-top,
-.card-bottom {
-  display: flex;
-  align-items: center;
+  flex: 0 0 auto;
+  gap: 8px;
   justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.card-top {
-  font-size: 12px;
-}
-
-.card-bottom {
-  margin-top: auto;
-}
-
-.card-bottom strong {
-  font-size: 17px;
-}
-
-.product-description {
-  color: #6b7280;
-  font-size: 14px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  margin: 0;
-}
-
-@media (max-width: 820px) {
-  .product-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 520px) {
-  .product-grid {
-    grid-template-columns: 1fr;
-  }
 }
 </style>

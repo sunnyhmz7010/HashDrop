@@ -1,3 +1,5 @@
+<!-- 登录面板基于 HashPay LoginPanel.vue 修改，认证内容替换为单管理员密码和 TOTP。
+     Copyright 2026 TGDash Team. Apache-2.0，见 frontend/public/HashPay-LICENSE.txt。 -->
 <script setup lang="ts">
 import { ref } from "vue";
 import { useRouter } from "vue-router";
@@ -34,33 +36,32 @@ async function login() {
       <section class="panel grid login-panel">
         <div class="section-title"><h1>登录后台</h1></div>
         <p class="muted">管理商品、库存与订单。</p>
-        <form class="login-form" @submit.prevent="login">
-          <label class="field-label" for="password">管理员密码</label
-          ><n-input
-            id="password"
-            v-model:value="password"
-            type="password"
-            show-password-on="click"
-            :input-props="{ autocomplete: 'current-password' }"
-          /><label class="field-label" for="totp"
-            >动态验证码（已启用时填写）</label
-          ><n-input
-            id="totp"
-            v-model:value="totp"
-            :maxlength="6"
-            :input-props="{
-              inputmode: 'numeric',
-              autocomplete: 'one-time-code',
-            }"
-          /><n-alert v-if="error" type="error" class="space-top">{{
-            error
-          }}</n-alert
-          ><n-button
-            attr-type="submit"
-            type="primary"
-            block
-            class="space-top"
-            :loading="busy"
+        <form class="form-grid" @submit.prevent="login">
+          <div class="field-stack">
+            <label class="field-label" for="password">管理员密码</label
+            ><n-input
+              id="password"
+              v-model:value="password"
+              type="password"
+              show-password-on="click"
+              :input-props="{ autocomplete: 'current-password' }"
+            />
+          </div>
+          <div class="field-stack">
+            <label class="field-label" for="totp"
+              >动态验证码（已启用时填写）</label
+            ><n-input
+              id="totp"
+              v-model:value="totp"
+              :maxlength="6"
+              :input-props="{
+                inputmode: 'numeric',
+                autocomplete: 'one-time-code',
+              }"
+            />
+          </div>
+          <n-alert v-if="error" type="error">{{ error }}</n-alert
+          ><n-button attr-type="submit" type="primary" block :loading="busy"
             >登录</n-button
           >
         </form>
@@ -70,10 +71,6 @@ async function login() {
 </template>
 
 <style scoped lang="scss">
-.login-form > .field-label {
-  margin: 12px 0 7px;
-}
-
 .login-panel > p {
   margin: 0;
 }

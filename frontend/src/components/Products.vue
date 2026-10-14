@@ -391,7 +391,14 @@ function removeStock(id: string) {
   <FormDialog
     v-model:show="stockDialog"
     :title="`库存 · ${stockProduct?.name ?? ''}`"
-    ><n-alert v-if="stockError" type="error">{{ stockError }}</n-alert
+    ><n-alert v-if="stockError" type="error"
+      >{{ stockError }}
+      <n-button
+        text
+        :loading="stockLoading"
+        @click="stockProduct && viewStock(stockProduct)"
+        >重新查询</n-button
+      ></n-alert
     ><n-spin :show="stockLoading"
       ><div class="table-scroll">
         <table>
@@ -421,7 +428,7 @@ function removeStock(id: string) {
         </table>
       </div>
       <n-empty
-        v-if="!stockItems.length && !stockLoading"
+        v-if="!stockItems.length && !stockLoading && !stockError"
         description="暂无库存"
     /></n-spin>
     <p class="helper">

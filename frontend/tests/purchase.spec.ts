@@ -15,7 +15,7 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   const card = page
     .locator(".product-card")
     .filter({ has: page.locator(`a[href="/products/${cardProduct.id}"]`) });
-  await card.getByRole("link", { name: "查看商品" }).click();
+  await card.getByRole("link", { name: "详情" }).click();
   await expect(page.locator(".product-summary")).toBeVisible();
   await expect(
     page.getByRole("button", { name: "下单", exact: true }),
@@ -335,7 +335,7 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   await blocked
     .locator(".product-card")
     .filter({ has: blocked.locator(`a[href="/products/${cardProduct.id}"]`) })
-    .getByRole("link", { name: "查看商品" })
+    .getByRole("link", { name: "详情" })
     .click();
   await expect(blocked.locator(".product-summary")).toBeVisible();
   await blocked.getByRole("button", { name: "下单", exact: true }).click();

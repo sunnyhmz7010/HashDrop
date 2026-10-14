@@ -63,11 +63,13 @@ watch(
               class="product-back"
               tag="a"
               :href="href"
+              circle
               secondary
+              :aria-label="t('product.back')"
+              :title="t('product.back')"
               @click="navigate"
             >
               <template #icon><ProductIcon name="back" /></template>
-              {{ t("product.back") }}
             </n-button>
           </router-link>
           <ProductSummary :product="product" heading="h1">

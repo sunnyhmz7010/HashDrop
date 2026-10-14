@@ -95,7 +95,7 @@ test("Markdown 详情保存、图片视频展示与首页直接下单", async ({
   await page.goto(base);
   const card = page.locator(".product-card").filter({ hasText: name });
   await expect(card).toContainText("商品介绍在首页和详情顶部显示");
-  const view = card.getByRole("link", { name: "查看商品", exact: true });
+  const view = card.getByRole("link", { name: "详情", exact: true });
   const buy = card.getByRole("button", { name: "下单", exact: true });
   for (const control of [view, buy]) {
     expect((await control.innerText()).trim()).toBe("");

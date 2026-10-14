@@ -42,7 +42,6 @@ async function login() {
         <div class="section-title">
           <h1>{{ t("login.title") }}</h1>
         </div>
-        <p class="muted">{{ t("login.description") }}</p>
         <form class="form-grid" @submit.prevent="login">
           <div class="field-stack">
             <label class="field-label" for="login-username">{{
@@ -76,9 +75,3 @@ async function login() {
     </main></StoreLayout
   >
 </template>
-
-<style scoped lang="scss">
-.login-panel > p {
-  margin: 0;
-}
-</style>

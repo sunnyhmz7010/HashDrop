@@ -64,7 +64,9 @@ test("Markdown 详情保存、图片视频展示与首页直接下单", async ({
     .click();
   await editor.locator("#price input").fill("12.34");
   await editor.locator("#active").click();
-  await editor.locator("#description textarea").fill("首页只显示商品简介");
+  await editor
+    .locator("#description textarea")
+    .fill("商品介绍在首页和详情顶部显示");
   await editor.locator("#product-details-input").fill(details);
   await editor.locator("#static-content textarea").fill("测试交付内容");
   await editor
@@ -92,7 +94,7 @@ test("Markdown 详情保存、图片视频展示与首页直接下单", async ({
   await page.getByRole("button", { name: "取消", exact: true }).click();
   await page.goto(base);
   const card = page.locator(".product-card").filter({ hasText: name });
-  await expect(card).toContainText("首页只显示商品简介");
+  await expect(card).toContainText("商品介绍在首页和详情顶部显示");
   const view = card.getByRole("link", { name: "查看商品", exact: true });
   const buy = card.getByRole("button", { name: "下单", exact: true });
   for (const control of [view, buy]) {
@@ -103,7 +105,11 @@ test("Markdown 详情保存、图片视频展示与首页直接下单", async ({
   await expect(page).toHaveURL(`${base}/products/${product.id}`);
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByLabel("购买数量")).toHaveCount(0);
+  await expect(page.locator(".product-summary")).toContainText(
+    "商品介绍在首页和详情顶部显示",
+  );
   const content = page.locator(".product-details .markdown-content");
+  await expect(content).not.toContainText("商品介绍在首页和详情顶部显示");
   await verifyRichContent(content);
   await content.getByRole("img", { name: "商品展示" }).scrollIntoViewIfNeeded();
   await expect

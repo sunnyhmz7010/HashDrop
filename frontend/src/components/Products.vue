@@ -380,13 +380,7 @@ function removeStock(id: string) {
               :tab="t('product.preview_details')"
               display-directive="if"
             >
-              <MarkdownContent
-                v-if="model.details.trim()"
-                :content="model.details"
-              />
-              <p v-else class="pre-wrap">
-                {{ model.description || t("product.default_description") }}
-              </p>
+              <MarkdownContent :content="model.details" />
             </n-tab-pane>
           </n-tabs>
         </div>

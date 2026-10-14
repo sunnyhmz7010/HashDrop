@@ -8,7 +8,8 @@ import { NAlert, NButton, NEmpty, NSkeleton, NSpin, NTooltip } from "naive-ui";
 import StoreLayout from "../components/StoreLayout.vue";
 import ProductIcon from "../components/ProductIcon.vue";
 import PurchaseDialog from "../components/PurchaseDialog.vue";
-import { api, errorText, money, type Product } from "../api";
+import ProductSummary from "../components/ProductSummary.vue";
+import { api, errorText, type Product } from "../api";
 const products = ref<Product[]>([]),
   loading = ref(true),
   error = ref(""),
@@ -76,26 +77,8 @@ onMounted(load);
             :key="product.id"
             class="panel product-card"
           >
-            <div class="product-info">
-              <div class="product-heading">
-                <strong :title="product.name">{{ product.name }}</strong>
-              </div>
-              <p class="product-description" :title="product.description">
-                {{ product.description || t("shop.default_description") }}
-              </p>
-              <p class="product-stock">
-                {{
-                  ["card", "account"].includes(product.kind)
-                    ? t("stock.count", { quantity: product.available })
-                    : t("shop.after_payment")
-                }}
-              </p>
-            </div>
-            <div class="product-footer">
-              <strong class="product-price">{{
-                money(product.price, product.currency)
-              }}</strong>
-              <div class="product-actions">
+            <ProductSummary :product="product" truncate-introduction>
+              <template #actions>
                 <router-link
                   :to="`/products/${product.id}`"
                   custom
@@ -135,8 +118,8 @@ onMounted(load);
                       : t("shop.buy")
                   }}</n-tooltip
                 >
-              </div>
-            </div>
+              </template>
+            </ProductSummary>
           </article>
         </section>
         <div v-else-if="!loading && !error" class="panel empty-panel">
@@ -166,63 +149,8 @@ onMounted(load);
   min-width: 0;
 }
 
-.product-card p {
-  color: #6b7280;
-  margin: 0;
-}
-
 .loading-card {
   gap: 12px;
-}
-
-.product-info {
-  display: grid;
-  gap: 12px;
-  min-width: 0;
-}
-
-.product-description {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-  line-height: 1.6;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-  white-space: pre-line;
-}
-
-.product-heading {
-  min-width: 0;
-}
-
-.product-heading strong {
-  display: block;
-  font-size: 20px;
-  line-height: 1.4;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.product-footer {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  justify-content: space-between;
-  margin-top: auto;
-}
-
-.product-price {
-  font-size: 18px;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.product-actions {
-  display: flex;
-  gap: 8px;
-  flex-shrink: 0;
 }
 
 @media (max-width: 980px) {

@@ -23,7 +23,10 @@ body {
     env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
-body {
+/* 页面滚动条由 html 管理，保持与 HashPay 相同的占位宽度。 */
+html,
+body,
+.n-layout-scroll-container {
   scrollbar-color: rgb(17 24 39 / 0.28) transparent;
   scrollbar-width: thin;
 }

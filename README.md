@@ -65,6 +65,18 @@ docker compose up -d
 
 后台订单详情提供刷新状态、删除订单和重试交付。付款状态由 HashPay 签名查询结果决定，店主不能在本站手动改为已付款或关闭。网关 `expired` 不代表永不付款，因此继续保留库存；核验为 `invalid` 后自动释放尚未交付的库存。若原网关、原商户查询明确返回 `404` 和原生错误码 `errors.order_not_found`，未付款订单会自动关闭、释放预留库存并停止补查；已核验付款的订单保留付款和领取结果，未完成交付继续执行。普通 404、网关或商户配置不符、尚未核验过归属的历史订单不会触发释放；历史订单在一次成功的完整查询核验后自动记录归属。本站后台删除只从列表及统计中移除订单，保留网关映射、补查任务和购买者领取结果，不取消网关订单。
 
+Markdown 详情支持 `markdown-it-container` 的 `:::` 容器。`tip` / `success`、`info` / `note`、`warning`、`danger` / `error` 分别显示提示样式，`details` / `spoiler` 显示可点击展开的折叠内容；其他小写英文名称显示普通容器。标题可选，容器内支持 Markdown、图片和视频。嵌套时，外层使用更多冒号，例如 `:::: warning` 配合内层 `::: tip`；代码块内的 `:::` 保持为代码。
+
+```markdown
+::: warning 购买须知
+请先确认商品适合你的用途。
+:::
+
+::: details 更多说明
+这里可以填写列表、图片或视频。
+:::
+```
+
 ## 🧠 功能细节
 
 五张核心表：`products`、`stock_items`、`orders`、`deliveries`、`admin_sessions`。数据库启用 WAL、外键、busy timeout 和单连接事务。金额按币种精度以整数保存，JSON 金额按十进制解析核对。支持 CNY、USD、EUR、GBP、HKD、JPY、USDT 和 USDC。
@@ -76,7 +88,7 @@ HashPay 创建超时重试复用 `merchantNo`。回调解密成功不能证明�
 ## 🧱 技术栈
 
 - 后端：Go、`net/http`、modernc SQLite、`x/crypto` Argon2id。
-- 前端：Vue 3、TypeScript、Vue Router、Naive UI、Vite、SCSS；marked 解析 Markdown，DOMPurify 清理展示内容。
+- 前端：Vue 3、TypeScript、Vue Router、Naive UI、Vite、SCSS；markdown-it 与 markdown-it-container 解析详情，DOMPurify 清理展示内容。
 - 运行：Go `embed` 静态资源、SQLite、Docker Compose；也可使用 systemd 部署二进制。
 - 验证：Go 集成测试、Playwright 真实浏览器与测试 HashPay 边界。
 

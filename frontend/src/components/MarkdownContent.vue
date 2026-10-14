@@ -1,38 +1,136 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import createDOMPurify from "dompurify";
-import { Marked } from "marked";
+import MarkdownIt, { type Delimiter, type RendererRule } from "markdown-it";
+import container from "markdown-it-container";
+import { t } from "../i18n";
 
 const props = defineProps<{ content: string }>();
-const parser = new Marked({
-  gfm: true,
+const parser = new MarkdownIt({
+  html: true,
+  linkify: true,
   breaks: true,
-  renderer: {
-    image({ href, text }) {
-      // 视频直链沿用图片的 Markdown 写法，查询参数不会影响文件类型识别。
-      let url: URL;
-      try {
-        url = new URL(href, location.origin);
-      } catch {
-        return false;
-      }
-      if (!/\.(mp4|webm|ogv)$/i.test(url.pathname)) return false;
-      const escape = (value: string) =>
-        value.replace(
-          /[&<>"']/g,
-          (char) =>
-            ({
-              "&": "&amp;",
-              "<": "&lt;",
-              ">": "&gt;",
-              '"': "&quot;",
-              "'": "&#39;",
-            })[char]!,
-        );
-      return `<video src="${escape(href)}" aria-label="${escape(text)}" controls preload="metadata"></video>`;
-    },
-  },
 });
+parser.linkify.set({ fuzzyLink: true });
+const containerHeader = /^([a-z][a-z0-9-]*)(?:\s+(.+))?$/;
+const renderContainer: RendererRule = (tokens, index) => {
+  if (tokens[index].nesting === -1) return "</div>\n";
+  const [, name, title] = tokens[index].info.trim().match(containerHeader)!;
+  const label = title
+    ? `<p class="markdown-container-title">${parser.utils.escapeHtml(title)}</p>\n`
+    : "";
+  return `<div class="markdown-container markdown-container-${name}">\n${label}`;
+};
+parser.use(container, "container", {
+  validate: (params: string) => {
+    const header = params.trim().match(containerHeader);
+    return !!header && !["details", "spoiler"].includes(header[1]);
+  },
+  render: renderContainer,
+});
+for (const name of ["details", "spoiler"]) {
+  const render: RendererRule = (tokens, index) => {
+    if (tokens[index].nesting === -1) return "</details>\n";
+    const title =
+      tokens[index].info.trim().slice(name.length).trim() || t("shop.view");
+    return `<details class="markdown-container markdown-container-details"><summary>${parser.utils.escapeHtml(title)}</summary>\n`;
+  };
+  parser.use(container, name, { render });
+}
+// 先按原始段落识别任务标记，避免 [x] 被引用链接解析，或误判紧跟加粗的 [x]。
+parser.core.ruler.before("inline", "task_list_marker", (state) => {
+  for (let index = 2; index < state.tokens.length; index++) {
+    const token = state.tokens[index];
+    if (
+      token.type !== "inline" ||
+      state.tokens[index - 1].type !== "paragraph_open" ||
+      state.tokens[index - 2].type !== "list_item_open"
+    )
+      continue;
+    const marker = token.content.match(/^\[([ xX])\](?:\s+|$)/);
+    if (!marker) continue;
+    token.meta = {
+      ...token.meta,
+      taskChecked: marker[1].toLowerCase() === "x",
+    };
+    token.content = token.content.slice(marker[0].length);
+  }
+});
+parser.core.ruler.after("inline", "task_list_checkbox", (state) => {
+  for (const token of state.tokens) {
+    if (typeof token.meta?.taskChecked !== "boolean" || !token.children)
+      continue;
+    const checkbox = new state.Token("html_inline", "", 0);
+    checkbox.content = `<input type="checkbox" disabled${token.meta.taskChecked ? " checked" : ""}> `;
+    token.children.unshift(checkbox);
+  }
+});
+// 兼容旧内容的单波浪号删除线。独立分隔符组避免与原生 ~~ 删除线混配。
+const singleStrikeMarker = 0x7f;
+parser.inline.ruler.before(
+  "strikethrough",
+  "single_strike",
+  (state, silent) => {
+    if (silent || state.src[state.pos] !== "~") return false;
+    const scanned = state.scanDelims(state.pos, true);
+    if (scanned.length !== 1) return false;
+    state.push("text", "", 0).content = "~";
+    state.delimiters.push({
+      marker: singleStrikeMarker,
+      length: 0,
+      token: state.tokens.length - 1,
+      end: -1,
+      open: scanned.can_open,
+      close: scanned.can_close,
+    });
+    state.pos++;
+    return true;
+  },
+);
+parser.inline.ruler2.after("strikethrough", "single_strike", (state) => {
+  const apply = (delimiters: Delimiter[]) => {
+    for (const delimiter of delimiters) {
+      if (delimiter.marker !== singleStrikeMarker || delimiter.end === -1)
+        continue;
+      const open = state.tokens[delimiter.token];
+      const close = state.tokens[delimiters[delimiter.end].token];
+      Object.assign(open, {
+        type: "s_open",
+        tag: "s",
+        nesting: 1,
+        content: "",
+      });
+      Object.assign(close, {
+        type: "s_close",
+        tag: "s",
+        nesting: -1,
+        content: "",
+      });
+    }
+  };
+  apply(state.delimiters);
+  for (const meta of state.tokens_meta)
+    if (meta?.delimiters) apply(meta.delimiters);
+});
+const renderImage = parser.renderer.rules.image!;
+parser.renderer.rules.image = (tokens, index, options, env, renderer) => {
+  // 视频直链沿用图片语法，查询参数不影响文件类型识别。
+  const href = String(tokens[index].attrGet("src") ?? "");
+  let url: URL;
+  try {
+    url = new URL(href, location.origin);
+  } catch {
+    return renderImage(tokens, index, options, env, renderer);
+  }
+  if (!/\.(mp4|webm|ogv)$/i.test(url.pathname))
+    return renderImage(tokens, index, options, env, renderer);
+  const label = renderer.renderInlineAsText(
+    tokens[index].children ?? [],
+    options,
+    env,
+  );
+  return `<video src="${parser.utils.escapeHtml(href)}" aria-label="${parser.utils.escapeHtml(label)}" controls preload="metadata"></video>`;
+};
 // 每个渲染器使用独立清理实例，编辑预览和公开详情遵循相同的规则。
 const purifier = createDOMPurify(window);
 function safeURL(value: string, media: boolean): boolean {
@@ -50,6 +148,20 @@ function safeURL(value: string, media: boolean): boolean {
 }
 purifier.addHook("afterSanitizeAttributes", (node) => {
   if (!(node instanceof Element)) return;
+  if (node.hasAttribute("class")) {
+    // 只保留本文渲染器的容器类，避免富文本借用站点顶栏、弹窗等样式。
+    const classes = node
+      .getAttribute("class")!
+      .split(/\s+/)
+      .filter(
+        (name) =>
+          (["DIV", "DETAILS"].includes(node.tagName) &&
+            /^markdown-container(?:-[a-z][a-z0-9-]*)?$/.test(name)) ||
+          (node.tagName === "P" && name === "markdown-container-title"),
+      );
+    if (classes.length) node.setAttribute("class", classes.join(" "));
+    else node.removeAttribute("class");
+  }
   if (node.tagName === "A" && node.hasAttribute("href")) {
     if (!safeURL(node.getAttribute("href")!, false))
       node.removeAttribute("href");
@@ -97,7 +209,7 @@ purifier.addHook("afterSanitizeAttributes", (node) => {
   }
 });
 const html = computed(() =>
-  purifier.sanitize(parser.parse(props.content, { async: false }), {
+  purifier.sanitize(parser.render(props.content), {
     ALLOWED_TAGS: [
       "p",
       "br",
@@ -110,6 +222,7 @@ const html = computed(() =>
       "strong",
       "em",
       "del",
+      "s",
       "blockquote",
       "ul",
       "ol",
@@ -128,6 +241,9 @@ const html = computed(() =>
       "th",
       "td",
       "input",
+      "div",
+      "details",
+      "summary",
     ],
     ALLOWED_ATTR: [
       "href",
@@ -149,6 +265,8 @@ const html = computed(() =>
       "referrerpolicy",
       "target",
       "rel",
+      "class",
+      "open",
     ],
     ALLOW_DATA_ATTR: false,
     ALLOW_ARIA_ATTR: false,
@@ -251,5 +369,52 @@ const html = computed(() =>
   border: 0;
   border-top: 1px solid #e5e7eb;
   margin: 20px 0;
+}
+.markdown-content :deep(.markdown-container) {
+  margin: 16px 0;
+  padding: 14px 16px;
+  border-left: 3px solid #9ca3af;
+  border-radius: 8px;
+  background: #f6f7f9;
+  min-width: 0;
+}
+.markdown-content :deep(.markdown-container-tip),
+.markdown-content :deep(.markdown-container-success) {
+  border-color: #18a058;
+  background: #eef8f1;
+}
+.markdown-content :deep(.markdown-container-info),
+.markdown-content :deep(.markdown-container-note) {
+  border-color: #2080f0;
+  background: #eff6ff;
+}
+.markdown-content :deep(.markdown-container-warning) {
+  border-color: #f0a020;
+  background: #fff8eb;
+}
+.markdown-content :deep(.markdown-container-danger),
+.markdown-content :deep(.markdown-container-error) {
+  border-color: #d03050;
+  background: #fff1f3;
+}
+.markdown-content :deep(.markdown-container > :first-child) {
+  margin-top: 0;
+}
+.markdown-content :deep(.markdown-container > :last-child) {
+  margin-bottom: 0;
+}
+.markdown-content :deep(.markdown-container-title) {
+  font-weight: 600;
+}
+.markdown-content :deep(summary) {
+  cursor: pointer;
+  font-weight: 600;
+  border-radius: 4px;
+}
+.markdown-content :deep(summary:hover) {
+  color: #18a058;
+}
+.markdown-content :deep(summary:active) {
+  color: #0c7a43;
 }
 </style>

@@ -2,10 +2,16 @@ import { test, expect, type Locator } from "@playwright/test";
 
 async function verifyRichContent(content: Locator) {
   await expect(
-    content.getByRole("heading", { name: "商品介绍" }),
+    content.getByRole("heading", { name: "容器语法示例" }),
   ).toBeVisible();
-  await expect(content.locator("strong")).toContainText("详细说明");
+  await expect(
+    content.locator("strong").filter({ hasText: "详细说明" }),
+  ).toContainText("详细说明");
   await expect(content.locator("table")).toHaveCount(1);
+  await expect(content.locator("s, del")).toHaveText([
+    "旧版本说明",
+    "单波浪号说明",
+  ]);
   await expect(
     content.locator("script, iframe, object, svg, form, style"),
   ).toHaveCount(0);
@@ -20,7 +26,33 @@ async function verifyRichContent(content: Locator) {
   await expect(
     content.getByText("危险链接", { exact: true }),
   ).not.toHaveAttribute("href");
-  await expect(content.locator('input[type="checkbox"]')).toBeDisabled();
+  const tasks = content.locator('input[type="checkbox"]');
+  await expect(tasks).toHaveCount(2);
+  for (const task of await tasks.all()) {
+    await expect(task).toBeDisabled();
+    await expect(task).toBeChecked();
+  }
+  await expect(
+    content.locator("li").filter({ hasText: "加粗内容" }).locator("input"),
+  ).toHaveCount(0);
+  await expect(content.locator(".markdown-container-warning")).toContainText(
+    "购买须知",
+  );
+  await expect(
+    content.locator(".markdown-container-warning .markdown-container-tip"),
+  ).toContainText("嵌套提示");
+  await expect(content.locator(".markdown-container-custom")).toContainText(
+    "补充信息",
+  );
+  await expect(content.locator(".topbar, .form-modal")).toHaveCount(0);
+  await expect(
+    content.locator("pre").filter({ hasText: "这是代码" }),
+  ).toContainText("::: warning");
+  const fold = content.locator("details");
+  await expect(fold.getByText("折叠正文", { exact: true })).toBeHidden();
+  await fold.locator("summary").click();
+  await expect(fold.getByText("折叠正文", { exact: true })).toBeVisible();
+  await fold.locator("summary").click();
 }
 
 test("Markdown 详情保存、图片视频展示与首页直接下单", async ({ page }) => {
@@ -34,21 +66,30 @@ test("Markdown 详情保存、图片视频展示与首页直接下单", async ({
   const image = `${base}/__test/media/image.svg`;
   const video = `${base}/__test/media/clip.webm?demo=1`;
   const details = [
-    "## 商品介绍",
+    "## 容器语法示例",
     "这是一份支持 **详细说明** 的商品。",
+    "~~旧版本说明~~",
+    "~单波浪号说明~",
     "| 项目 | 内容 |\n| --- | --- |\n| 格式 | Markdown |",
+    ":::: warning 购买须知\n请先确认商品适合你的用途。\n\n::: tip 温馨提示\n**嵌套提示**：请保存订单领取链接。\n:::\n::::",
+    "::: custom 补充信息\n自定义容器也支持普通 Markdown。\n:::",
     `![商品展示](${image})`,
     "### 演示视频",
-    `![商品视频](${video})`,
+    `::: info 视频预览\n![商品视频](${video})\n:::`,
+    "::: details 更多说明\n**折叠正文**\n:::",
     "> 购买前请查看商品说明。",
     "- [x] 支持图片与视频",
+    "- [x] 已完成清单\n\n[x]: https://example.com",
+    "- [x]**加粗内容**",
     "```text\n" + "long-code-".repeat(40) + "\n```",
+    "```markdown\n::: warning\n这是代码，不能变成提示块。\n:::\n```",
     `<script>throw new Error('unsafe-script')</script>`,
     `<iframe src="${base}"></iframe>`,
     `<img src="${image}" onerror="alert(1)" style="position:fixed" id="evil" name="evil">`,
     '<a href="javascript:alert(1)" onclick="alert(1)">危险链接</a>',
     '<video src="javascript:alert(1)" autoplay></video>',
     '<img src="data:image/svg+xml,<svg onload=alert(1)></svg>">',
+    '<div class="topbar form-modal" id="evil-container" style="position:fixed">不允许借用站点样式</div>',
   ].join("\n\n");
   await page.goto(`${base}/admin/login`);
   await page.locator("#password input").fill("test-password-only");
@@ -152,6 +193,13 @@ test("Markdown 详情保存、图片视频展示与首页直接下单", async ({
     expect(bottom.y).toBeGreaterThanOrEqual(top.y + top.height);
     expect(bottom.x).toBe(top.x);
     if (width === 1440 || width === 390) {
+      await page.locator(".product-summary").scrollIntoViewIfNeeded();
+      if (width === 1440) {
+        await page.screenshot({
+          path: "../.local/markdown-containers-desktop.png",
+          animations: "disabled",
+        });
+      }
       await page.screenshot({
         path: `../.local/product-details-${width === 1440 ? "desktop" : "mobile"}.png`,
         fullPage: true,

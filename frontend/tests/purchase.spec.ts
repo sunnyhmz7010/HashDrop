@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import type { Product } from "../src/api";
 
 test("匿名购买、凭证领取与管理员库存管理", async ({ page, request }) => {
   const base = process.env.TINYFAKA_TEST_URL!;
@@ -7,7 +8,13 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(base);
   await expect(page.locator(".product-card").first()).toBeVisible();
-  const card = page.locator(".product-card").filter({ hasText: "卡密" });
+  const products: Product[] = await (
+    await request.get(`${base}/api/products`)
+  ).json();
+  const cardProduct = products.find((product) => product.kind === "card")!;
+  const card = page
+    .locator(".product-card")
+    .filter({ has: page.locator(`a[href="/products/${cardProduct.id}"]`) });
   await card.getByRole("link", { name: "查看商品" }).click();
   await expect(page.locator(".product-summary")).toBeVisible();
   await expect(
@@ -327,7 +334,7 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   await blocked.goto(base);
   await blocked
     .locator(".product-card")
-    .filter({ hasText: "卡密" })
+    .filter({ has: blocked.locator(`a[href="/products/${cardProduct.id}"]`) })
     .getByRole("link", { name: "查看商品" })
     .click();
   await expect(blocked.locator(".product-summary")).toBeVisible();

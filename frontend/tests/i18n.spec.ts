@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import type { Product } from "../src/api";
 
 test.use({ locale: "en-US" });
 
@@ -59,12 +60,21 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
   await page.screenshot({ path: "../.local/shop-en.png", fullPage: true });
 
   // 真实创建固定文本订单，切换语言不能改变领取凭证或业务内容。
+  const products: Product[] = await (
+    await request.get(`${base}/api/products`)
+  ).json();
+  const staticProduct = products.find((product) => product.kind === "static")!;
   await page
     .locator(".product-card")
-    .filter({ hasText: "Static text" })
+    .filter({ has: page.locator(`a[href="/products/${staticProduct.id}"]`) })
     .getByRole("link", { name: "View product" })
     .click();
   await expect(page.locator(".product-summary")).toBeVisible();
+  await expect(
+    page
+      .locator(".topbar")
+      .getByRole("button", { name: "Admin panel", exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Place order", exact: true }).click();
   await expect(
     page.getByRole("dialog", { name: "Confirm order" }),

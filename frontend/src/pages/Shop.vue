@@ -4,19 +4,11 @@
 import { t } from "../i18n";
 
 import { onMounted, ref } from "vue";
-import {
-  NAlert,
-  NButton,
-  NEmpty,
-  NSkeleton,
-  NSpin,
-  NTag,
-  NTooltip,
-} from "naive-ui";
+import { NAlert, NButton, NEmpty, NSkeleton, NSpin, NTooltip } from "naive-ui";
 import StoreLayout from "../components/StoreLayout.vue";
 import ProductIcon from "../components/ProductIcon.vue";
 import PurchaseDialog from "../components/PurchaseDialog.vue";
-import { api, errorText, kindNames, money, type Product } from "../api";
+import { api, errorText, money, type Product } from "../api";
 const products = ref<Product[]>([]),
   loading = ref(true),
   error = ref(""),
@@ -87,7 +79,6 @@ onMounted(load);
             <div class="product-info">
               <div class="product-heading">
                 <strong :title="product.name">{{ product.name }}</strong>
-                <n-tag size="small">{{ kindNames[product.kind] }}</n-tag>
               </div>
               <p class="product-description" :title="product.description">
                 {{ product.description || t("shop.default_description") }}
@@ -202,20 +193,15 @@ onMounted(load);
 }
 
 .product-heading {
-  align-items: flex-start;
-  display: flex;
-  gap: 8px;
   min-width: 0;
 }
 
 .product-heading strong {
-  flex: 1;
+  display: block;
+  font-size: 20px;
+  line-height: 1.4;
   min-width: 0;
   overflow-wrap: anywhere;
-}
-
-.product-heading .n-tag {
-  flex-shrink: 0;
 }
 
 .product-footer {

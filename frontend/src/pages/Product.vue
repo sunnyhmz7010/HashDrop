@@ -3,12 +3,13 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import { NAlert, NButton, NSkeleton, NTag } from "naive-ui";
-import { api, errorText, kindNames, money, type Product } from "../api";
+import { NAlert, NButton, NSkeleton } from "naive-ui";
+import { api, errorText, money, type Product } from "../api";
 import { t } from "../i18n";
 import StoreLayout from "../components/StoreLayout.vue";
 import MarkdownContent from "../components/MarkdownContent.vue";
 import PurchaseDialog from "../components/PurchaseDialog.vue";
+import ProductIcon from "../components/ProductIcon.vue";
 
 const route = useRoute();
 const product = ref<Product>(),
@@ -46,15 +47,28 @@ watch(
 
 <template>
   <StoreLayout>
+    <template #actions>
+      <router-link to="/admin"
+        ><n-button size="small" secondary>{{
+          t("nav.admin")
+        }}</n-button></router-link
+      >
+    </template>
     <main class="page product-page">
       <template v-if="product">
         <section class="panel product-summary">
-          <div class="product-summary-head">
-            <n-tag size="small">{{ kindNames[product.kind] }}</n-tag
-            ><router-link class="text-link" to="/">{{
-              t("product.back")
-            }}</router-link>
-          </div>
+          <router-link to="/" custom v-slot="{ href, navigate }">
+            <n-button
+              class="product-back"
+              tag="a"
+              :href="href"
+              secondary
+              @click="navigate"
+            >
+              <template #icon><ProductIcon name="back" /></template>
+              {{ t("product.back") }}
+            </n-button>
+          </router-link>
           <h1>{{ product.name }}</h1>
           <div class="product-summary-bottom">
             <div>
@@ -87,7 +101,6 @@ watch(
           </div>
         </section>
         <section class="panel product-details">
-          <h2>{{ t("product.details_title") }}</h2>
           <MarkdownContent
             v-if="product.details?.trim()"
             :content="product.details"
@@ -131,12 +144,8 @@ watch(
   display: grid;
   gap: 18px;
 }
-.product-summary-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
+.product-back {
+  justify-self: start;
 }
 .product-summary h1 {
   font-size: 26px;
@@ -161,12 +170,6 @@ watch(
 }
 .product-details {
   min-width: 0;
-}
-.product-details h2 {
-  font-size: 18px;
-  margin: 0 0 20px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid #e5e7eb;
 }
 @media (max-width: 640px) {
   .product-summary h1 {

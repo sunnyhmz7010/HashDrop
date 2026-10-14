@@ -106,7 +106,6 @@ const zh = {
   "product.unpublish": "下架",
   "product.description": "商品简介",
   "product.details": "详情内容（Markdown）",
-  "product.details_title": "商品详情",
   "product.edit_details": "编辑",
   "product.preview_details": "预览",
   "product.details_help":
@@ -448,7 +447,6 @@ const en: Record<MessageKey, string> = {
   "product.unpublish": "Unpublish",
   "product.description": "Short description",
   "product.details": "Details (Markdown)",
-  "product.details_title": "Product details",
   "product.edit_details": "Edit",
   "product.preview_details": "Preview",
   "product.details_help":

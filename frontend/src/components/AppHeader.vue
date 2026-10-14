@@ -11,7 +11,9 @@ import LocaleSwitch from "./LocaleSwitch.vue";
     <router-link to="/" class="brand" :title="site.title">{{
       site.title
     }}</router-link>
-    <div class="topbar-actions"><slot name="actions" /><LocaleSwitch /></div>
+    <div class="topbar-actions">
+      <slot name="before-actions" /><LocaleSwitch /><slot name="actions" />
+    </div>
   </n-layout-header>
 </template>
 
@@ -22,5 +24,18 @@ import LocaleSwitch from "./LocaleSwitch.vue";
 }
 .topbar-actions {
   flex: 0 0 auto;
+}
+
+@media (max-width: 820px) {
+  .topbar {
+    gap: 8px;
+  }
+  .topbar-actions {
+    gap: 6px;
+  }
+  .topbar-actions :deep(.locale-switch) {
+    flex-basis: 5.5rem;
+    width: 5.5rem;
+  }
 }
 </style>

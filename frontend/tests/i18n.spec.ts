@@ -10,7 +10,7 @@ async function switchLanguage(page: Page, name: string) {
     .click();
 }
 
-test("中英文切换、统一顶栏与侧栏退出", async ({ page, request }) => {
+test("中英文切换、统一顶栏与管理入口", async ({ page, request }) => {
   const base = process.env.TINYFAKA_TEST_URL!;
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -45,9 +45,17 @@ test("中英文切换、统一顶栏与侧栏退出", async ({ page, request }) 
     page.getByRole("button", { name: "View product" }).first(),
   ).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("lang", "en-US");
-  await expect(page.locator(".topbar a")).toHaveCount(1);
+  await expect(page.locator(".topbar a")).toHaveCount(2);
+  const adminEntry = page
+    .locator(".topbar")
+    .getByRole("button", { name: "Admin panel", exact: true });
+  await expect(adminEntry).toBeVisible();
+  await adminEntry.click();
+  await expect(
+    page.getByRole("heading", { name: "Admin sign in", exact: true }),
+  ).toBeVisible();
+  await page.locator(".topbar .brand").click();
   const publicBrand = (await page.locator(".topbar .brand").boundingBox())!;
-  const publicLanguage = (await page.locator(".locale-switch").boundingBox())!;
   await page.screenshot({ path: "../.local/shop-en.png", fullPage: true });
 
   // 真实创建固定文本订单，切换语言不能改变领取凭证或业务内容。
@@ -118,17 +126,23 @@ test("中英文切换、统一顶栏与侧栏退出", async ({ page, request }) 
   await expect(page.locator(".topbar a")).toHaveCount(1);
   await expect(
     page.locator(".topbar").getByRole("button", { name: "Sign out" }),
-  ).toHaveCount(0);
+  ).toBeVisible();
   await expect(
     page
       .locator(".workspace-release")
       .getByRole("button", { name: "Sign out" }),
-  ).toBeVisible();
+  ).toHaveCount(0);
   const adminBrand = (await page.locator(".topbar .brand").boundingBox())!;
   const adminLanguage = (await page.locator(".locale-switch").boundingBox())!;
+  const signOut = (await page
+    .locator(".topbar")
+    .getByRole("button", { name: "Sign out" })
+    .boundingBox())!;
   expect(adminBrand.x).toBe(publicBrand.x);
   expect(adminBrand.y).toBe(publicBrand.y);
-  expect(adminLanguage.x).toBe(publicLanguage.x);
+  expect(signOut.x).toBeGreaterThanOrEqual(
+    adminLanguage.x + adminLanguage.width,
+  );
   await page.screenshot({ path: "../.local/admin-en.png", fullPage: true });
 
   await page
@@ -178,6 +192,9 @@ test("中英文切换、统一顶栏与侧栏退出", async ({ page, request }) 
   for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 450 });
     await page.goto(base);
+    await expect(
+      page.getByRole("button", { name: "Admin panel", exact: true }),
+    ).toBeInViewport();
     const shopBrand = (await page.locator(".topbar .brand").boundingBox())!;
     await page.goto(`${base}/admin/orders`);
     await expect(
@@ -187,6 +204,11 @@ test("中英文切换、统一顶栏与侧栏退出", async ({ page, request }) 
       .locator(".topbar .brand")
       .boundingBox())!;
     expect(managementBrand.x).toBe(shopBrand.x);
+    await expect(
+      page
+        .locator(".topbar")
+        .getByRole("button", { name: "Sign out", exact: true }),
+    ).toBeInViewport();
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth > innerWidth + 1,
@@ -197,11 +219,15 @@ test("中英文切换、统一顶栏与侧栏退出", async ({ page, request }) 
       .poll(async () => (await page.locator(".n-drawer").boundingBox())?.x)
       .toBe(0);
     await expect(
-      page.getByRole("button", { name: "Sign out", exact: true }),
-    ).toBeInViewport();
+      page
+        .locator(".n-drawer")
+        .getByRole("button", { name: "Sign out", exact: true }),
+    ).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".n-drawer")).toBeHidden();
     if (width === 390) {
       await page.screenshot({
-        path: "../.local/admin-menu-en-mobile.png",
+        path: "../.local/admin-header-en-mobile.png",
         animations: "disabled",
       });
       await page.getByRole("button", { name: "Sign out", exact: true }).click();
@@ -211,7 +237,7 @@ test("中英文切换、统一顶栏与侧栏退出", async ({ page, request }) 
       expect(
         (await page.request.get(`${base}/api/admin/session`)).status(),
       ).toBe(401);
-    } else await page.keyboard.press("Escape");
+    }
   }
   await page.goto(`${base}/admin/orders`);
   await expect(

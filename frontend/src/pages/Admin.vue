@@ -55,7 +55,7 @@ async function logout() {
        Copyright 2026 TGDash Team. Apache-2.0，见 frontend/public/HashPay-LICENSE.txt。 -->
   <n-layout class="shell">
     <AppHeader>
-      <template #actions>
+      <template #before-actions>
         <n-button
           class="mobile-menu-button"
           circle
@@ -66,6 +66,11 @@ async function logout() {
         >
           <span class="hamburger-icon" aria-hidden="true"></span>
         </n-button>
+      </template>
+      <template #actions>
+        <n-button size="small" secondary :loading="busy" @click="logout">{{
+          t("nav.logout")
+        }}</n-button>
       </template>
     </AppHeader>
     <n-layout-content class="workspace-layout" content-class="workspace-page">
@@ -79,9 +84,6 @@ async function logout() {
             />
             <div class="workspace-release">
               <span>TinyFaka v{{ version }}</span>
-              <n-button block quaternary :loading="busy" @click="logout">{{
-                t("nav.logout")
-              }}</n-button>
             </div>
           </div>
         </n-drawer-content>
@@ -96,9 +98,6 @@ async function logout() {
             />
             <div class="workspace-release">
               <span>TinyFaka v{{ version }}</span>
-              <n-button block quaternary :loading="busy" @click="logout">{{
-                t("nav.logout")
-              }}</n-button>
             </div>
           </div>
         </n-layout-sider>

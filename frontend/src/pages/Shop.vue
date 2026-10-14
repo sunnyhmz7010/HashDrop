@@ -30,8 +30,15 @@ async function load() {
 onMounted(load);
 </script>
 <template>
-  <StoreLayout
-    ><main class="checkout-page catalog-page">
+  <StoreLayout>
+    <template #actions>
+      <router-link to="/admin"
+        ><n-button size="small" secondary>{{
+          t("nav.admin")
+        }}</n-button></router-link
+      >
+    </template>
+    <main class="checkout-page catalog-page">
       <n-alert v-if="notice" type="info" :show-icon="false">{{
         notice
       }}</n-alert>

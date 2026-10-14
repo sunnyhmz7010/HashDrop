@@ -7,7 +7,9 @@ import AppHeader from "./AppHeader.vue";
 
 <template>
   <n-layout class="shell checkout-shell">
-    <AppHeader />
+    <AppHeader
+      ><template #actions><slot name="actions" /></template
+    ></AppHeader>
     <n-layout-content class="checkout-content"><slot /></n-layout-content>
   </n-layout>
 </template>

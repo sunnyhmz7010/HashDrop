@@ -21,6 +21,7 @@ import (
 	"syscall"
 	"time"
 	"tinyfaka"
+	"unicode/utf8"
 )
 
 type App struct {
@@ -36,7 +37,6 @@ type App struct {
 	wake        chan struct{}
 	initialized atomic.Bool
 	setupMu     sync.Mutex
-	setupHash   string
 }
 
 func (a *App) settings() Config { a.configMu.RLock(); defer a.configMu.RUnlock(); return a.config }
@@ -114,9 +114,7 @@ func main() {
 			slog.Error("已有数据库但配置缺失，请恢复原配置，不能重新初始化")
 			os.Exit(1)
 		}
-		token := randomToken()
-		app.setupHash = tokenHash(token)
-		slog.Info("请打开初始化页面并填写一次性初始化凭证", "path", "/setup", "setup_token", token)
+		slog.Info("请打开初始化页面设置管理员账号和密码", "path", "/setup")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -157,7 +155,7 @@ func initialize(path, site, dataDir string, dev bool) error {
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		return fmt.Errorf("配置文件已存在，拒绝覆盖")
 	}
-	fmt.Fprintln(os.Stderr, "输入管理员密码（至少 12 字符）：")
+	fmt.Fprintln(os.Stderr, "输入管理员密码：")
 	var password string
 	if term.IsTerminal(int(os.Stdin.Fd())) {
 		b, err := term.ReadPassword(int(os.Stdin.Fd()))
@@ -173,8 +171,8 @@ func initialize(path, site, dataDir string, dev bool) error {
 		}
 		password = strings.TrimRight(line, "\r\n")
 	}
-	if len(password) < 12 || len(password) > 256 {
-		return fmt.Errorf("密码长度须为 12–256 字符")
+	if password == "" || utf8.RuneCountInString(password) > 256 {
+		return fmt.Errorf("密码不能为空或超过 256 字符")
 	}
 	key, _ := base64.RawURLEncoding.DecodeString(randomToken())
 	dedup, _ := base64.RawURLEncoding.DecodeString(randomToken())
@@ -185,7 +183,7 @@ func initialize(path, site, dataDir string, dev bool) error {
 	if err != nil {
 		return err
 	}
-	c := Config{Listen: "127.0.0.1:8080", PublicURL: site, Database: filepath.Join(absoluteDataDir, "tinyfaka.db"), BackupDir: filepath.Join(absoluteDataDir, "backups"), Title: "TinyFaka", Development: dev, AdminPassword: passwordHash(password), CurrentKey: "v1", EncryptionKeys: map[string]string{"v1": base64.StdEncoding.EncodeToString(key)}, DedupKey: base64.StdEncoding.EncodeToString(dedup)}
+	c := Config{Listen: "127.0.0.1:8080", PublicURL: site, Database: filepath.Join(absoluteDataDir, "tinyfaka.db"), BackupDir: filepath.Join(absoluteDataDir, "backups"), Title: "TinyFaka", Development: dev, AdminUsername: "admin", AdminPassword: passwordHash(password), CurrentKey: "v1", EncryptionKeys: map[string]string{"v1": base64.StdEncoding.EncodeToString(key)}, DedupKey: base64.StdEncoding.EncodeToString(dedup)}
 	if err := validateConfig(c); err != nil {
 		return err
 	}

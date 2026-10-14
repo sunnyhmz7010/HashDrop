@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 func bootstrapConfig(dataDir, listen string) (Config, error) {
@@ -33,7 +34,7 @@ func bootstrapConfig(dataDir, listen string) (Config, error) {
 type setupInput struct {
 	Title           string `json:"title"`
 	PublicURL       string `json:"public_url"`
-	Notice          string `json:"notice"`
+	Username        string `json:"username"`
 	Password        string `json:"password"`
 	PasswordConfirm string `json:"password_confirm"`
 	TOTPSecret      string `json:"totp_secret"`
@@ -61,10 +62,6 @@ func (a *App) setup(w http.ResponseWriter, r *http.Request) error {
 	if !a.limits.allow("setup:"+clientIP(r), 20, time.Minute) {
 		return &apiError{429, "初始化尝试过于频繁"}
 	}
-	token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-	if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") || len(token) != 43 || !constantEqual(tokenHash(token), a.setupHash) {
-		return &apiError{403, "初始化凭证无效，请查看当前启动日志"}
-	}
 	if !setupOrigin(r) {
 		return &apiError{403, "初始化请求来源无效"}
 	}
@@ -72,12 +69,12 @@ func (a *App) setup(w http.ResponseWriter, r *http.Request) error {
 	if err := readJSON(w, r, &input); err != nil {
 		return err
 	}
-	if len(input.Password) < 12 || len(input.Password) > 256 || input.Password != input.PasswordConfirm {
-		return bad("管理员密码须为 12–256 字符，且两次输入一致")
+	if input.Password == "" || utf8.RuneCountInString(input.Password) > 256 || input.Password != input.PasswordConfirm {
+		return bad("管理员密码不能为空或超过 256 字符，且两次输入须一致")
 	}
 	c := a.settings()
 	c.Title = strings.TrimSpace(input.Title)
-	c.Notice = input.Notice
+	c.AdminUsername = strings.TrimSpace(input.Username)
 	publicURL, err := normalizePublicURL(strings.TrimSpace(input.PublicURL))
 	if err != nil {
 		return bad(err.Error())
@@ -140,7 +137,6 @@ func (a *App) setup(w http.ResponseWriter, r *http.Request) error {
 	a.configMu.Unlock()
 	a.db = db
 	a.vault = v
-	a.setupHash = ""
 	// 原子发布初始化结果，业务路由和调度器在此之后才可访问 db/vault。
 	a.initialized.Store(true)
 	audit("system_initialized", "")

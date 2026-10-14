@@ -100,11 +100,13 @@ test("中英文切换、统一顶栏与侧栏退出", async ({ page, request }) 
   await page.locator("#password input").fill("wrong-password");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(
-    page.getByText("Incorrect password or one-time code", { exact: true }),
+    page.getByText("Incorrect username, password or one-time code", {
+      exact: true,
+    }),
   ).toBeVisible();
   await switchLanguage(page, "中文");
   await expect(
-    page.getByText("密码或动态验证码不正确", { exact: true }),
+    page.getByText("账号、密码或动态验证码不正确", { exact: true }),
   ).toBeVisible();
   await expect(page.locator("#password input")).toHaveValue("wrong-password");
   await switchLanguage(page, "English");

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const sessionCookie = "tinyfaka_session"
@@ -55,6 +56,7 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) error {
 		return &apiError{429, "登录尝试过多，请 15 分钟后再试"}
 	}
 	var input struct {
+		Username string `json:"username"`
 		Password string `json:"password"`
 		TOTP     string `json:"totp"`
 	}
@@ -65,9 +67,9 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) error {
 	// 限制 Argon2 的并行内存占用，适合单台低配 VPS。
 	a.authMu.Lock()
 	defer a.authMu.Unlock()
-	if len(input.Password) < 12 || len(input.Password) > 256 || !passwordMatches(c.AdminPassword, input.Password) || (c.TOTPSecret != "" && !validTOTP(c.TOTPSecret, input.TOTP, time.Now())) {
+	if input.Password == "" || utf8.RuneCountInString(input.Password) > 256 || !passwordMatches(c.AdminPassword, input.Password) || !constantEqual(c.AdminUsername, strings.TrimSpace(input.Username)) || (c.TOTPSecret != "" && !validTOTP(c.TOTPSecret, input.TOTP, time.Now())) {
 		audit("login_rejected", "")
-		return &apiError{401, "密码或动态验证码不正确"}
+		return &apiError{401, "账号、密码或动态验证码不正确"}
 	}
 	token := randomToken()
 	now := unixNow()

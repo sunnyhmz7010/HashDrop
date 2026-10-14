@@ -151,6 +151,7 @@ const zh = {
   "nav.menu": "管理菜单",
   "login.title": "登录后台",
   "login.description": "管理商品、库存与订单。",
+  "login.username": "管理员账号",
   "login.password": "管理员密码",
   "login.totp": "动态验证码（已启用时填写）",
   "login.submit": "登录",
@@ -200,21 +201,12 @@ const zh = {
   "product.loading_purchase": "正在加载购买信息",
   "common.reload": "重新加载",
   "setup.title": "初始化 TinyFaka",
-  "setup.description": "设置管理员和站点，保存后即可进入后台。",
   "setup.finished": "初始化已完成，请通过配置的站点地址登录。",
   "setup.login": "进入管理员登录",
   "setup.http_warning":
     "当前连接为 HTTP，提交的密码和私钥会明文传输，请在可信网络中完成初始化。",
-  "setup.credential_title": "初始化凭证",
-  "setup.credential_help":
-    "从当前容器启动日志复制 setup_token；服务重启后请使用新凭证。",
-  "setup.credential": "一次性初始化凭证",
-  "setup.site_admin": "站点与管理员",
   "setup.url_placeholder": "http://服务器地址:8080",
-  "setup.url_help":
-    "填写浏览器实际访问的完整地址，不带路径。登录和领取链接使用此地址。",
   "setup.confirm_password": "确认密码",
-  "setup.password_help": "密码至少 12 字符。此系统只有一位管理员。",
   "setup.enable_totp": "启用 TOTP",
   "setup.totp_label": "启用 TOTP 动态验证",
   "setup.totp_secret": "TOTP 密钥",
@@ -245,7 +237,7 @@ const zh = {
   "errors.csrf": "安全校验失败，请刷新页面",
   "errors.origin": "请求来源无效",
   "errors.login_rate": "登录尝试过多，请 15 分钟后再试",
-  "errors.credentials": "密码或动态验证码不正确",
+  "errors.credentials": "账号、密码或动态验证码不正确",
   "errors.order_missing": "订单不存在",
   "errors.config_permissions": "配置文件权限必须为 0600",
   "errors.key_version": "密钥版本无效",
@@ -254,6 +246,7 @@ const zh = {
   "errors.dedup_key": "去重密钥无效",
   "errors.data_paths": "数据库与备份目录不能为空",
   "errors.site_length": "站点名称或公告长度无效",
+  "errors.username": "管理员账号不能为空或超过 120 字符",
   "errors.password_hash": "管理员密码哈希无效",
   "errors.totp_secret": "TOTP 密钥必须为至少 16 字节的 Base32",
   "errors.gateway_url": "HashPay 地址必须为无路径的 HTTPS 地址",
@@ -329,7 +322,8 @@ const zh = {
   "errors.amount_format": "金额格式无效",
   "errors.amount_precision": "金额精度超限",
   "errors.amount_limit": "金额超限",
-  "errors.setup_password": "管理员密码须为 12–256 字符，且两次输入一致",
+  "errors.setup_password":
+    "管理员密码不能为空或超过 256 字符，且两次输入须一致",
   "errors.setup_totp_required": "启用 TOTP 时必须填写密钥和当前动态验证码",
   "errors.setup_totp_code": "动态验证码不匹配，请确认 TOTP 密钥与服务器时间",
   "errors.setup_gateway":
@@ -339,7 +333,6 @@ const zh = {
   "errors.public_key_encoding": "商户公钥编码失败",
   "errors.setup_repeat": "系统已初始化，不能重复设置",
   "errors.setup_rate": "初始化尝试过于频繁",
-  "errors.setup_credential": "初始化凭证无效，请查看当前启动日志",
   "errors.setup_origin": "初始化请求来源无效",
   "errors.existing_database": "数据库已存在，请恢复原配置，不要重新初始化",
   "locale.zh": "中文",
@@ -521,6 +514,7 @@ const en: Record<MessageKey, string> = {
   "nav.menu": "Admin menu",
   "login.title": "Admin sign in",
   "login.description": "Manage products, stock and orders.",
+  "login.username": "Admin username",
   "login.password": "Admin password",
   "login.totp": "One-time code (if enabled)",
   "login.submit": "Sign in",
@@ -579,22 +573,12 @@ const en: Record<MessageKey, string> = {
   "product.loading_purchase": "Loading purchase details",
   "common.reload": "Reload",
   "setup.title": "Initialize TinyFaka",
-  "setup.description": "Set up the admin and site to access the dashboard.",
   "setup.finished": "Setup is complete. Sign in using the configured site URL.",
   "setup.login": "Go to admin sign in",
   "setup.http_warning":
     "This connection uses HTTP. Passwords and private keys are transmitted in plain text. Complete setup on a trusted network.",
-  "setup.credential_title": "Setup credential",
-  "setup.credential_help":
-    "Copy setup_token from the current container startup log. Use the new credential after a service restart.",
-  "setup.credential": "One-time setup credential",
-  "setup.site_admin": "Site and admin",
   "setup.url_placeholder": "http://server-address:8080",
-  "setup.url_help":
-    "Enter the full URL used in your browser, without a path. Sign-in and claim links use this URL.",
   "setup.confirm_password": "Confirm password",
-  "setup.password_help":
-    "Use at least 12 characters. This system has one admin.",
   "setup.enable_totp": "Enable TOTP",
   "setup.totp_label": "Enable TOTP authentication",
   "setup.totp_secret": "TOTP secret",
@@ -632,7 +616,7 @@ const en: Record<MessageKey, string> = {
   "errors.csrf": "Security verification failed. Refresh this page.",
   "errors.origin": "Invalid request origin",
   "errors.login_rate": "Too many sign-in attempts. Try again in 15 minutes.",
-  "errors.credentials": "Incorrect password or one-time code",
+  "errors.credentials": "Incorrect username, password or one-time code",
   "errors.order_missing": "Order not found",
   "errors.config_permissions": "Configuration file permissions must be 0600",
   "errors.key_version": "Invalid key version",
@@ -641,6 +625,7 @@ const en: Record<MessageKey, string> = {
   "errors.dedup_key": "Invalid deduplication key",
   "errors.data_paths": "Database and backup directories cannot be empty",
   "errors.site_length": "Invalid site name or announcement length",
+  "errors.username": "Enter an admin username of up to 120 characters",
   "errors.password_hash": "Invalid admin password hash",
   "errors.totp_secret":
     "TOTP secret must contain at least 16 bytes encoded as Base32",
@@ -729,7 +714,7 @@ const en: Record<MessageKey, string> = {
   "errors.amount_precision": "Too many decimal places in the amount",
   "errors.amount_limit": "Amount exceeds the limit",
   "errors.setup_password":
-    "Admin password must be 12 to 256 characters and both entries must match",
+    "Enter a non-empty password of up to 256 characters and confirm it correctly",
   "errors.setup_totp_required":
     "Enter the TOTP secret and current code to enable TOTP",
   "errors.setup_totp_code":
@@ -742,8 +727,6 @@ const en: Record<MessageKey, string> = {
   "errors.setup_repeat":
     "The system is already initialized; setup cannot be repeated",
   "errors.setup_rate": "Too many setup attempts",
-  "errors.setup_credential":
-    "Invalid setup credential. Check the current startup log.",
   "errors.setup_origin": "Invalid setup request origin",
   "errors.existing_database":
     "Database already exists. Restore the original configuration instead of initializing again.",

@@ -62,7 +62,7 @@ func newTestApp(t *testing.T) (*App, *fakeGateway) {
 	g := &fakeGateway{key: key, orders: map[string]GatewayOrder{}}
 	g.server = httptest.NewServer(http.HandlerFunc(g.handler))
 	t.Cleanup(g.server.Close)
-	c := Config{Listen: "127.0.0.1:8080", PublicURL: "http://127.0.0.1:8080", Title: "TinyFaka", Development: true, Database: filepath.Join(dir, "test.db"), BackupDir: filepath.Join(dir, "backups"), AdminPassword: passwordHash("test-password-only"), HashPay: HashPayConfig{BaseURL: g.server.URL, MerchantID: "merchant-test", PrivateKeyFile: keyPath}}
+	c := Config{Listen: "127.0.0.1:8080", PublicURL: "http://127.0.0.1:8080", Title: "TinyFaka", Development: true, Database: filepath.Join(dir, "test.db"), BackupDir: filepath.Join(dir, "backups"), AdminUsername: "admin", AdminPassword: passwordHash("test-password-only"), HashPay: HashPayConfig{BaseURL: g.server.URL, MerchantID: "merchant-test", PrivateKeyFile: keyPath}}
 	app := &App{db: db, vault: v, config: c, limits: newLimiter(), adapters: map[string]APIAdapter{}, wake: make(chan struct{}, 1)}
 	app.initialized.Store(true)
 	return app, g
@@ -441,7 +441,7 @@ func TestAmbiguousAPIDelivery(t *testing.T) {
 }
 func TestSessionCSRFAndBackup(t *testing.T) {
 	a, _ := newTestApp(t)
-	req := httptest.NewRequest("POST", "/api/admin/login", strings.NewReader(`{"password":"test-password-only","totp":""}`))
+	req := httptest.NewRequest("POST", "/api/admin/login", strings.NewReader(`{"username":"admin","password":"test-password-only","totp":""}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Origin", a.config.PublicURL)
 	w := httptest.NewRecorder()
@@ -532,7 +532,7 @@ func TestBrowserFixture(t *testing.T) {
 	// 测试网关使用临时 TLS 证书，信任仅注入测试进程。
 	insertProduct(t, a, "card", 3)
 	insertProduct(t, a, "static", 0)
-	fresh, setupToken := newSetupApp(t)
+	fresh := newSetupApp(t)
 	freshServer := httptest.NewServer(fresh.routes())
 	t.Cleanup(freshServer.Close)
 	fresh.config.Listen = strings.TrimPrefix(freshServer.URL, "http://")
@@ -543,7 +543,7 @@ func TestBrowserFixture(t *testing.T) {
 			http.Error(w, "fixture", 500)
 			return
 		}
-		reply(w, 200, map[string]string{"url": freshServer.URL, "token": setupToken, "hashpay_url": g.server.URL, "private_key": string(key)})
+		reply(w, 200, map[string]string{"url": freshServer.URL, "hashpay_url": g.server.URL, "private_key": string(key)})
 	})
 	mux.HandleFunc("POST /__test/pay/{id}", func(w http.ResponseWriter, r *http.Request) {
 		g.set(r.PathValue("id"), "paid", "system")

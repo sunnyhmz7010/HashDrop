@@ -15,26 +15,22 @@ test("网页初始化、失败重填、HTTP 登录与只写私钥", async ({ pag
   await expect(
     page.getByRole("link", { name: "商城", exact: true }),
   ).toHaveCount(0);
-  await page
-    .getByLabel("一次性初始化凭证", { exact: true })
-    .fill("invalid-token");
+  await expect(
+    page.getByLabel("一次性初始化凭证", { exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByLabel("商城公告", { exact: true })).toHaveCount(0);
+  await page.getByLabel("管理员账号", { exact: true }).fill("store-owner");
   await page.getByLabel("站点名称", { exact: true }).fill("网页部署测试店铺");
-  await page
-    .getByLabel("管理员密码", { exact: true })
-    .fill("browser-setup-password");
-  await page
-    .getByLabel("确认密码", { exact: true })
-    .fill("browser-setup-password");
+  await page.getByLabel("管理员密码", { exact: true }).fill("1");
+  await page.getByLabel("确认密码", { exact: true }).fill("2");
   await page.getByRole("button", { name: "完成初始化", exact: true }).click();
   await expect(
-    page.getByText("初始化凭证无效，请查看当前启动日志", { exact: true }),
+    page.getByText("管理员密码不能为空或超过 256 字符，且两次输入须一致", {
+      exact: true,
+    }),
   ).toBeVisible();
-  await expect(page.getByLabel("管理员密码", { exact: true })).toHaveValue(
-    "browser-setup-password",
-  );
-  await page
-    .getByLabel("一次性初始化凭证", { exact: true })
-    .fill(fixture.token);
+  await expect(page.getByLabel("管理员密码", { exact: true })).toHaveValue("1");
+  await page.getByLabel("确认密码", { exact: true }).fill("1");
   await page.getByRole("switch", { name: "启用 TOTP", exact: true }).click();
   await page.getByRole("button", { name: "完成初始化", exact: true }).click();
   await expect(
@@ -88,11 +84,12 @@ test("网页初始化、失败重填、HTTP 登录与只写私钥", async ({ pag
     (
       await request.post(`${base}/api/setup`, {
         data: {},
-        headers: { Origin: base, Authorization: `Bearer ${fixture.token}` },
+        headers: { Origin: base },
       })
     ).status(),
   ).toBe(409);
-  await page.locator("#password input").fill("browser-setup-password");
+  await page.getByLabel("管理员账号", { exact: true }).fill("store-owner");
+  await page.locator("#password input").fill("1");
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "概览", exact: true }),
@@ -116,8 +113,7 @@ test("网页初始化、失败重填、HTTP 登录与只写私钥", async ({ pag
     (await fetch("/api/admin/settings")).text(),
   );
   expect(settings).not.toContain("PRIVATE KEY");
-  expect(settings).not.toContain(fixture.token);
-  expect(settings).not.toContain("browser-setup-password");
+  expect(settings).not.toContain("admin_password_hash");
   await page.route("**/api/setup/status", (route) => route.abort());
   await page.reload();
   await expect(page.locator("#site-title input")).toHaveValue(

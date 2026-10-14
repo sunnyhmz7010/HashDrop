@@ -14,7 +14,7 @@ import (
 
 func adminSessionRequest(t *testing.T, a *App) func(string, string, ...string) *httptest.ResponseRecorder {
 	t.Helper()
-	login := httptest.NewRequest("POST", "/api/admin/login", strings.NewReader(`{"password":"test-password-only"}`))
+	login := httptest.NewRequest("POST", "/api/admin/login", strings.NewReader(`{"username":"admin","password":"test-password-only"}`))
 	login.Header.Set("Origin", a.config.PublicURL)
 	login.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()

@@ -39,16 +39,19 @@
 ```sh
 docker compose pull
 docker compose up -d
-docker compose logs tinyfaka
 ```
 
-浏览器访问 `http://服务器地址:8080`，自动进入初始化页面。复制当前启动日志的 `setup_token`，在网页填写站点地址、管理员密码、可选 TOTP 和 HashPay 商户信息。配置与密钥由服务端生成并保存到 Docker 持久化卷；无需填写环境变量或手工编辑配置文件。HTTP 会明文传输密码与私钥，应在可信网络中完成初始化。
+当前 `main` 的无凭证账号初始化流程需下一版本镜像；已发布的 `v0.0.2` 请按[该版本说明](https://github.com/sunnyhmz7010/TinyFaka/blob/v0.0.2/README.md)初始化。
+
+浏览器访问 `http://服务器地址:8080`，自动进入初始化页面，直接填写管理员账号和密码，无需初始化凭证。页面同时提供站点名称、地址、可选 TOTP 和 HashPay 商户信息；商城公告在初始化后的后台系统设置中填写。密码不要求最小长度或字符组合，只须非空并与确认密码一致。配置与密钥由服务端生成并保存到 Docker 持久化卷；无需填写环境变量或手工编辑配置文件。HTTP 会明文传输密码与私钥，应在可信网络中完成初始化。
 
 容器中 `/app/tinyfaka` 是程序，`/data` 统一保存配置、私钥、数据库和备份，Compose 只挂载一个数据卷。`v0.0.1` 使用[旧版 Compose 文件](https://github.com/sunnyhmz7010/TinyFaka/blob/v0.0.1/compose.yaml)的两个目录；升级前需备份并迁移原配置、密钥和数据库到 `/data`，同步修改配置中的数据库、备份和私钥路径，不能重新初始化生成加密密钥。数据库结构由程序启动时自动迁移。
 
 默认镜像为 `ghcr.io/sunnyhmz7010/tinyfaka:latest`，可换成具体版本标签或摘要。只有推送 `v*` 版本标签才会发布镜像，推送 `main` 不触发发布。更新执行 `docker compose pull` 和 `docker compose up -d`，已有初始化信息保留。
 
 ## 📖 使用说明
+
+旧部署没有管理员账号字段时，账号默认 `admin`，原密码继续有效。
 
 顶栏右侧可切换中文和 English，语言偏好保存在当前浏览器。商城与后台共用顶栏，点击站点品牌返回首页；退出登录位于管理员左侧栏底部，手机端位于管理菜单底部。
 
@@ -105,7 +108,7 @@ npm --prefix frontend ci
 go run ./backend
 ```
 
-在另一终端运行 `npm --prefix frontend run dev`，访问 `http://127.0.0.1:5173`，填写后端日志的初始化凭证。站点地址保留为 Vite 的实际访问地址；它用于登录和 CSRF 的 Origin 校验。HTTP 使用 HttpOnly、SameSite Cookie，HTTPS 地址额外启用 Secure。测试网关仅存在于 Go 测试代码中，生产程序没有模拟付款接口。
+在另一终端运行 `npm --prefix frontend run dev`，访问 `http://127.0.0.1:5173`，在初始化页填写管理员账号和密码。站点地址保留为 Vite 的实际访问地址；它用于登录和 CSRF 的 Origin 校验。HTTP 使用 HttpOnly、SameSite Cookie，HTTPS 地址额外启用 Secure。测试网关仅存在于 Go 测试代码中，生产程序没有模拟付款接口。
 
 ### ⚙️ 命令
 

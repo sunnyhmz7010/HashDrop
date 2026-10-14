@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 type HashPayConfig struct {
@@ -27,6 +28,7 @@ type Config struct {
 	Title          string            `json:"title"`
 	Notice         string            `json:"notice"`
 	Development    bool              `json:"development"`
+	AdminUsername  string            `json:"admin_username"`
 	AdminPassword  string            `json:"admin_password_hash"`
 	TOTPSecret     string            `json:"totp_secret,omitempty"`
 	CurrentKey     string            `json:"current_key"`
@@ -50,6 +52,10 @@ func readConfig(path string) (Config, *vault, error) {
 	}
 	if err = json.Unmarshal(data, &c); err != nil {
 		return c, nil, err
+	}
+	// 旧配置仅保存密码，升级后使用默认管理员账号。
+	if c.AdminUsername == "" {
+		c.AdminUsername = "admin"
 	}
 	c.PublicURL, err = normalizePublicURL(c.PublicURL)
 	if err != nil {
@@ -96,6 +102,9 @@ func validateConfig(c Config) error {
 	}
 	if c.Title == "" || len(c.Title) > 120 || len(c.Notice) > 2000 {
 		return errors.New("站点名称或公告长度无效")
+	}
+	if strings.TrimSpace(c.AdminUsername) == "" || utf8.RuneCountInString(c.AdminUsername) > 120 {
+		return errors.New("管理员账号不能为空或超过 120 字符")
 	}
 	parts := strings.Split(c.AdminPassword, "$")
 	if len(parts) != 6 || parts[1] != "argon2id" || parts[2] != "v=19" || parts[3] != "m=65536,t=3,p=2" {

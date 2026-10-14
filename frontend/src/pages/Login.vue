@@ -1,4 +1,4 @@
-<!-- 登录面板基于 HashPay LoginPanel.vue 修改，认证内容替换为单管理员密码和 TOTP。
+<!-- 登录面板基于 HashPay LoginPanel.vue 修改，认证内容替换为单管理员账号、密码和 TOTP。
      Copyright 2026 TGDash Team. Apache-2.0，见 frontend/public/HashPay-LICENSE.txt。 -->
 <script setup lang="ts">
 import { t } from "../i18n";
@@ -8,7 +8,8 @@ import { useRouter } from "vue-router";
 import { NAlert, NButton, NInput } from "naive-ui";
 import StoreLayout from "../components/StoreLayout.vue";
 import { api, csrf, errorText } from "../api";
-const password = ref(""),
+const username = ref("admin"),
+  password = ref(""),
   totp = ref(""),
   busy = ref(false),
   error = ref(""),
@@ -20,7 +21,11 @@ async function login() {
   try {
     const result = await api<{ csrf: string }>("/admin/login", {
       method: "POST",
-      body: { password: password.value, totp: totp.value },
+      body: {
+        username: username.value,
+        password: password.value,
+        totp: totp.value,
+      },
     });
     csrf.value = result.csrf;
     password.value = "";
@@ -41,6 +46,17 @@ async function login() {
         </div>
         <p class="muted">{{ t("login.description") }}</p>
         <form class="form-grid" @submit.prevent="login">
+          <div class="field-stack">
+            <label class="field-label" for="login-username">{{
+              t("login.username")
+            }}</label>
+            <n-input
+              id="username"
+              v-model:value="username"
+              :maxlength="120"
+              :input-props="{ id: 'login-username', autocomplete: 'username' }"
+            />
+          </div>
           <div class="field-stack">
             <label class="field-label" for="password">{{
               t("login.password")

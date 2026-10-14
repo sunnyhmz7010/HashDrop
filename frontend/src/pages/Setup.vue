@@ -8,7 +8,6 @@ import { api, errorText, initialized, site } from "../api";
 import LocaleSwitch from "../components/LocaleSwitch.vue";
 
 const router = useRouter(),
-  token = ref(new URLSearchParams(location.hash.slice(1)).get("setup") ?? ""),
   busy = ref(false),
   error = ref(""),
   finished = ref(false),
@@ -18,7 +17,7 @@ const router = useRouter(),
 const form = reactive({
   title: "TinyFaka",
   public_url: location.origin,
-  notice: "",
+  username: "admin",
   password: "",
   password_confirm: "",
   totp_secret: "",
@@ -43,7 +42,6 @@ async function submit() {
   try {
     const result = await api<{ title: string; public_url: string }>("/setup", {
       method: "POST",
-      token: token.value.trim(),
       body: {
         ...form,
         public_url: validatedSiteURL(),
@@ -53,8 +51,7 @@ async function submit() {
       },
     });
     initialized.value = true;
-    site.value = { title: result.title, notice: form.notice };
-    token.value = "";
+    site.value = { title: result.title, notice: "" };
     form.password = form.password_confirm = form.private_key = "";
     form.totp_secret = form.totp_code = "";
     finished.value = true;
@@ -79,10 +76,10 @@ function validatedSiteURL(): string {
 <template>
   <main class="setup-shell">
     <section class="setup-panel">
-      <div class="section-title">
+      <div class="section-title setup-heading">
         <h1>{{ t("setup.title") }}</h1>
+        <LocaleSwitch />
       </div>
-      <p class="muted">{{ t("setup.description") }}</p>
       <n-alert v-if="finished" type="success"
         >{{ t("setup.finished") }}<a :href="loginURL">{{ t("setup.login") }}</a>
       </n-alert>
@@ -91,18 +88,6 @@ function validatedSiteURL(): string {
           t("setup.http_warning")
         }}</n-alert>
         <fieldset :disabled="busy">
-          <h3>{{ t("setup.credential_title") }}</h3>
-          <p class="helper">{{ t("setup.credential_help") }}</p>
-          <label class="field-label" for="setup-token">{{
-            t("setup.credential")
-          }}</label>
-          <n-input
-            v-model:value="token"
-            type="password"
-            show-password-on="click"
-            :input-props="{ id: 'setup-token', autocomplete: 'off' }"
-          />
-          <h3 class="space-top">{{ t("setup.site_admin") }}</h3>
           <label class="field-label" for="setup-title">{{
             t("settings.site_name")
           }}</label>
@@ -119,15 +104,13 @@ function validatedSiteURL(): string {
             :placeholder="t('setup.url_placeholder')"
             :input-props="{ id: 'setup-url' }"
           />
-          <p class="helper">{{ t("setup.url_help") }}</p>
-          <label class="field-label" for="setup-notice">{{
-            t("settings.notice")
+          <label class="field-label" for="setup-username">{{
+            t("login.username")
           }}</label>
           <n-input
-            v-model:value="form.notice"
-            type="textarea"
-            :maxlength="2000"
-            :input-props="{ id: 'setup-notice' }"
+            v-model:value="form.username"
+            :maxlength="120"
+            :input-props="{ id: 'setup-username', autocomplete: 'username' }"
           />
           <label class="field-label" for="setup-password">{{
             t("login.password")
@@ -151,7 +134,6 @@ function validatedSiteURL(): string {
             :maxlength="256"
             :input-props="{ id: 'setup-confirm', autocomplete: 'new-password' }"
           />
-          <p class="helper">{{ t("setup.password_help") }}</p>
           <div class="space-top">
             <n-switch
               v-model:value="totpEnabled"
@@ -225,12 +207,26 @@ function validatedSiteURL(): string {
           >{{ t("setup.submit") }}</n-button
         >
       </form>
-      <div class="setup-locale"><LocaleSwitch /></div>
     </section>
   </main>
 </template>
 
 <style scoped lang="scss">
+.setup-heading {
+  gap: 12px;
+}
+
+.setup-heading h1 {
+  flex: 1;
+  min-width: 0;
+  font-size: 20px;
+}
+
+.setup-heading :deep(.locale-switch) {
+  flex-basis: 7rem;
+  width: 7rem;
+}
+
 .setup-panel .field-label {
   margin: 12px 0 7px;
 }

@@ -13,37 +13,35 @@ import (
 	"testing"
 )
 
-func newSetupApp(t *testing.T) (*App, string) {
+func newSetupApp(t *testing.T) *App {
 	t.Helper()
 	dir := t.TempDir()
 	c, err := bootstrapConfig(filepath.Join(dir, "data"), "127.0.0.1:8080")
 	if err != nil {
 		t.Fatal(err)
 	}
-	token := randomToken()
-	a := &App{config: c, configPath: filepath.Join(dir, "config", "config.json"), setupHash: tokenHash(token), limits: newLimiter(), adapters: map[string]APIAdapter{}, wake: make(chan struct{}, 1)}
+	a := &App{config: c, configPath: filepath.Join(dir, "config", "config.json"), limits: newLimiter(), adapters: map[string]APIAdapter{}, wake: make(chan struct{}, 1)}
 	t.Cleanup(func() {
 		if a.db != nil {
 			a.db.Close()
 		}
 	})
-	return a, token
+	return a
 }
 func setupBody() setupInput {
-	return setupInput{Title: "网页初始化店铺", PublicURL: "http://127.0.0.1:8080", Password: "setup-password-only", PasswordConfirm: "setup-password-only"}
+	return setupInput{Title: "网页初始化店铺", PublicURL: "http://127.0.0.1:8080", Username: "admin", Password: "setup-password-only", PasswordConfirm: "setup-password-only"}
 }
-func postSetup(a *App, token, origin string, input setupInput) *httptest.ResponseRecorder {
+func postSetup(a *App, origin string, input setupInput) *httptest.ResponseRecorder {
 	body, _ := json.Marshal(input)
 	r := httptest.NewRequest("POST", "http://127.0.0.1:8080/api/setup", strings.NewReader(string(body)))
 	r.Header.Set("Content-Type", "application/json")
-	r.Header.Set("Authorization", "Bearer "+token)
 	r.Header.Set("Origin", origin)
 	w := httptest.NewRecorder()
 	a.routes().ServeHTTP(w, r)
 	return w
 }
-func TestSetupRequiresCredentialAndLeavesFailedInputUncommitted(t *testing.T) {
-	a, token := newSetupApp(t)
+func TestSetupRequiresOriginAndLeavesFailedInputUncommitted(t *testing.T) {
+	a := newSetupApp(t)
 	w := httptest.NewRecorder()
 	a.routes().ServeHTTP(w, httptest.NewRequest("GET", "/api/products", nil))
 	if w.Code != 503 {
@@ -51,28 +49,33 @@ func TestSetupRequiresCredentialAndLeavesFailedInputUncommitted(t *testing.T) {
 	}
 	a.runPending(context.Background()) // 初始化之前调度器不能访问空数据库。
 	input := setupBody()
-	for _, test := range []struct{ token, origin string }{{randomToken(), input.PublicURL}, {token, "http://other.example"}, {token, ""}} {
-		if w = postSetup(a, test.token, test.origin, input); w.Code != 403 {
-			t.Fatalf("接受了无效凭证或来源: %d %s", w.Code, w.Body)
+	for _, origin := range []string{"http://other.example", ""} {
+		if w = postSetup(a, origin, input); w.Code != 403 {
+			t.Fatalf("接受了无效来源: %d %s", w.Code, w.Body)
 		}
 	}
+	input.Password, input.PasswordConfirm = "", ""
+	if w = postSetup(a, input.PublicURL, input); w.Code != 400 {
+		t.Fatal("接受了空密码")
+	}
+	input = setupBody()
 	input.PasswordConfirm = "different-password"
-	if w = postSetup(a, token, input.PublicURL, input); w.Code != 400 {
+	if w = postSetup(a, input.PublicURL, input); w.Code != 400 {
 		t.Fatal("接受了不一致的密码")
 	}
 	input = setupBody()
 	input.TOTPEnabled = true
-	if w = postSetup(a, token, input.PublicURL, input); w.Code != 400 {
+	if w = postSetup(a, input.PublicURL, input); w.Code != 400 {
 		t.Fatal("启用 TOTP 却允许留空密钥")
 	}
 	input.TOTPSecret = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
 	input.TOTPCode = "invalid"
-	if w = postSetup(a, token, input.PublicURL, input); w.Code != 400 {
+	if w = postSetup(a, input.PublicURL, input); w.Code != 400 {
 		t.Fatal("启用 TOTP 却接受了错误验证码")
 	}
 	input = setupBody()
 	input.HashPayURL, input.MerchantID, input.PrivateKey = "https://pay.example.com", "merchant", "not-a-key"
-	if w = postSetup(a, token, input.PublicURL, input); w.Code != 400 {
+	if w = postSetup(a, input.PublicURL, input); w.Code != 400 {
 		t.Fatal("接受了无效私钥")
 	}
 	if a.initialized.Load() || a.db != nil {
@@ -82,6 +85,54 @@ func TestSetupRequiresCredentialAndLeavesFailedInputUncommitted(t *testing.T) {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Fatalf("失败的初始化留下配置或数据库: %s", path)
 		}
+	}
+}
+func TestSetupAcceptsShortPasswordAndCustomUsername(t *testing.T) {
+	a := newSetupApp(t)
+	input := setupBody()
+	input.Username, input.Password, input.PasswordConfirm = strings.Repeat("店", 41), "1", "1"
+	if w := postSetup(a, input.PublicURL, input); w.Code != 201 {
+		t.Fatalf("无凭证初始化或短密码未被接受: %d %s", w.Code, w.Body)
+	}
+	c, _, err := readConfig(a.configPath)
+	if err != nil || c.AdminUsername != input.Username || !passwordMatches(c.AdminPassword, input.Password) {
+		t.Fatalf("管理员账号和密码未持久化: %v", err)
+	}
+	for _, check := range []struct {
+		username string
+		want     int
+	}{{"admin", 401}, {input.Username, 200}} {
+		body, _ := json.Marshal(map[string]string{"username": check.username, "password": input.Password})
+		r := httptest.NewRequest("POST", "/api/admin/login", strings.NewReader(string(body)))
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("Origin", input.PublicURL)
+		w := httptest.NewRecorder()
+		a.routes().ServeHTTP(w, r)
+		if w.Code != check.want {
+			t.Fatalf("账号 %s 登录状态错误: %d", check.username, w.Code)
+		}
+	}
+	// 旧版配置没有账号字段，升级时沿用密码并补默认 admin 账号。
+	data, err := os.ReadFile(a.configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var legacy map[string]any
+	if err = json.Unmarshal(data, &legacy); err != nil {
+		t.Fatal(err)
+	}
+	delete(legacy, "admin_username")
+	data, err = json.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyPath := filepath.Join(t.TempDir(), "config.json")
+	if err = os.WriteFile(legacyPath, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	c, _, err = readConfig(legacyPath)
+	if err != nil || c.AdminUsername != "admin" || !passwordMatches(c.AdminPassword, input.Password) {
+		t.Fatalf("旧配置管理员不兼容: %v", err)
 	}
 }
 func TestPublicURLMatchesBrowserOrigin(t *testing.T) {
@@ -103,7 +154,7 @@ func TestPublicURLMatchesBrowserOrigin(t *testing.T) {
 	}
 }
 func TestSetupPersistsKeysAndSerializesConcurrentSubmissions(t *testing.T) {
-	a, token := newSetupApp(t)
+	a := newSetupApp(t)
 	source, _ := newTestApp(t)
 	key, err := os.ReadFile(source.config.HashPay.PrivateKeyFile)
 	if err != nil {
@@ -115,20 +166,20 @@ func TestSetupPersistsKeysAndSerializesConcurrentSubmissions(t *testing.T) {
 	var group sync.WaitGroup
 	for i := 0; i < 2; i++ {
 		group.Add(1)
-		go func() { defer group.Done(); responses <- postSetup(a, token, input.PublicURL, input) }()
+		go func() { defer group.Done(); responses <- postSetup(a, input.PublicURL, input) }()
 	}
 	group.Wait()
 	close(responses)
 	counts := map[int]int{}
 	for w := range responses {
 		counts[w.Code]++
-		for _, secret := range []string{token, input.Password, input.PrivateKey, "encryption_keys", "dedup_key"} {
+		for _, secret := range []string{input.Password, input.PrivateKey, "encryption_keys", "dedup_key"} {
 			if strings.Contains(w.Body.String(), secret) {
 				t.Fatal("初始化响应泄露凭据")
 			}
 		}
 	}
-	if counts[201] != 1 || counts[409] != 1 || a.setupHash != "" {
+	if counts[201] != 1 || counts[409] != 1 || !a.initialized.Load() {
 		t.Fatalf("初始化未保持一次性: %v", counts)
 	}
 	c, v, err := readConfig(a.configPath)
@@ -162,7 +213,7 @@ func TestSetupPersistsKeysAndSerializesConcurrentSubmissions(t *testing.T) {
 }
 func assertLoginCookie(t *testing.T, a *App, secure bool) {
 	t.Helper()
-	r := httptest.NewRequest("POST", "/api/admin/login", strings.NewReader(`{"password":"setup-password-only"}`))
+	r := httptest.NewRequest("POST", "/api/admin/login", strings.NewReader(`{"username":"admin","password":"setup-password-only"}`))
 	r.Header.Set("Origin", a.settings().PublicURL)
 	r.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -173,7 +224,7 @@ func assertLoginCookie(t *testing.T, a *App, secure bool) {
 	}
 }
 func TestSetupDoesNotReplaceExistingDatabase(t *testing.T) {
-	a, token := newSetupApp(t)
+	a := newSetupApp(t)
 	if err := os.MkdirAll(filepath.Dir(a.config.Database), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +233,7 @@ func TestSetupDoesNotReplaceExistingDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	input := setupBody()
-	w := postSetup(a, token, input.PublicURL, input)
+	w := postSetup(a, input.PublicURL, input)
 	if w.Code != 409 || a.initialized.Load() {
 		t.Fatal("配置丢失时允许重新初始化已有数据库")
 	}
@@ -192,14 +243,14 @@ func TestSetupDoesNotReplaceExistingDatabase(t *testing.T) {
 	}
 }
 func TestSetupConfigWriteFailureAllowsSafeRetry(t *testing.T) {
-	a, token := newSetupApp(t)
+	a := newSetupApp(t)
 	// 把配置父目录占为文件，模拟不能保存配置；空库必须清理，避免锁死初始化。
 	dir := filepath.Dir(a.configPath)
 	if err := os.WriteFile(dir, []byte("blocked"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	input := setupBody()
-	if w := postSetup(a, token, input.PublicURL, input); w.Code != 500 {
+	if w := postSetup(a, input.PublicURL, input); w.Code != 500 {
 		t.Fatalf("配置保存失败未被报告: %d", w.Code)
 	}
 	if a.initialized.Load() || a.db != nil {
@@ -211,7 +262,7 @@ func TestSetupConfigWriteFailureAllowsSafeRetry(t *testing.T) {
 	if err := os.Remove(dir); err != nil {
 		t.Fatal(err)
 	}
-	if w := postSetup(a, token, input.PublicURL, input); w.Code != 201 {
+	if w := postSetup(a, input.PublicURL, input); w.Code != 201 {
 		t.Fatalf("修复写权限后不能重试: %s", w.Body)
 	}
 }

@@ -34,7 +34,7 @@
 
 ### 📦 安装与运行
 
-推荐使用 GitHub Actions 构建并发布的 GHCR 镜像，并使用与镜像版本匹配的 Compose 配置。`v0.0.1` 请使用[对应的 Compose 文件](https://github.com/sunnyhmz7010/TinyFaka/blob/v0.0.1/compose.yaml)，将镜像固定为 `ghcr.io/sunnyhmz7010/tinyfaka:0.0.1`；当前 `main` 的 `/data` 布局需新版本镜像。将对应的 `compose.yaml` 保存到部署目录，然后执行：
+推荐使用 GitHub Actions 构建并发布的 GHCR 镜像，并使用与镜像版本匹配的 Compose 配置。`v0.0.2` 使用[对应的 Compose 文件](https://github.com/sunnyhmz7010/TinyFaka/blob/v0.0.2/compose.yaml)，可将镜像固定为 `ghcr.io/sunnyhmz7010/tinyfaka:0.0.2`。将 `compose.yaml` 保存到部署目录，然后执行：
 
 ```sh
 docker compose pull
@@ -44,7 +44,7 @@ docker compose logs tinyfaka
 
 浏览器访问 `http://服务器地址:8080`，自动进入初始化页面。复制当前启动日志的 `setup_token`，在网页填写站点地址、管理员密码、可选 TOTP 和 HashPay 商户信息。配置与密钥由服务端生成并保存到 Docker 持久化卷；无需填写环境变量或手工编辑配置文件。HTTP 会明文传输密码与私钥，应在可信网络中完成初始化。
 
-新的容器布局中 `/app/tinyfaka` 是程序，`/data` 统一保存配置、私钥、数据库和备份，Compose 只挂载一个数据卷。已有部署迁移时需保留原配置和加密密钥，并同步修改配置中的数据库、备份和私钥路径。
+容器中 `/app/tinyfaka` 是程序，`/data` 统一保存配置、私钥、数据库和备份，Compose 只挂载一个数据卷。`v0.0.1` 使用[旧版 Compose 文件](https://github.com/sunnyhmz7010/TinyFaka/blob/v0.0.1/compose.yaml)的两个目录；升级前需备份并迁移原配置、密钥和数据库到 `/data`，同步修改配置中的数据库、备份和私钥路径，不能重新初始化生成加密密钥。数据库结构由程序启动时自动迁移。
 
 默认镜像为 `ghcr.io/sunnyhmz7010/tinyfaka:latest`，可换成具体版本标签或摘要。只有推送 `v*` 版本标签才会发布镜像，推送 `main` 不触发发布。更新执行 `docker compose pull` 和 `docker compose up -d`，已有初始化信息保留。
 

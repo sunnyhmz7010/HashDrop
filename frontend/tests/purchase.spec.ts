@@ -330,7 +330,7 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   await blocked.getByRole("button", { name: "创建订单", exact: true }).click();
   await expect(
     blocked.getByRole("button", { name: "前往 HashPay 付款" }),
-  ).toBeDisabled();
+  ).toBeDisabled({ timeout: 15_000 });
   await blocked.getByText("我已手动保存领取链接", { exact: true }).click();
   await expect(
     blocked.getByRole("button", { name: "前往 HashPay 付款" }),

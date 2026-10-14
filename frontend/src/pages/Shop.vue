@@ -1,4 +1,4 @@
-<!-- 商品列表基于 HashPay Merchants.vue 的 panel/list-card 结构修改。
+<!-- 商品卡片沿用 HashPay 的 panel 与 Naive UI 样式，商城使用响应式网格。
      Copyright 2026 TGDash Team. Apache-2.0，见 frontend/public/HashPay-LICENSE.txt。 -->
 <script setup lang="ts">
 import { t } from "../i18n";
@@ -51,32 +51,36 @@ onMounted(load);
       <n-spin :show="loading && products.length > 0"
         ><section
           v-if="loading && !products.length"
-          class="panel grid"
+          class="product-grid"
           aria-busy="true"
           :aria-label="t('shop.loading')"
         >
-          <div v-for="row in 3" :key="row" class="list-card loading-row">
-            <n-skeleton text width="34%" /><n-skeleton
-              text
-              width="82%"
-            /><n-skeleton text width="64%" />
+          <div
+            v-for="row in 3"
+            :key="row"
+            class="panel loading-card"
+          >
+            <n-skeleton text width="60%" />
+            <n-skeleton text :repeat="3" />
+            <n-skeleton text width="40%" />
+            <n-skeleton height="34px" />
           </div>
         </section>
-        <section v-else-if="products.length" class="panel grid">
+        <section v-else-if="products.length" class="product-grid">
           <article
             v-for="product in products"
             :key="product.id"
-            class="list-card merchant-card product-card"
+            class="panel product-card"
           >
-            <div class="merchant-card-main">
-              <div class="merchant-card-title">
+            <div class="product-info">
+              <div class="product-heading">
                 <strong :title="product.name">{{ product.name }}</strong>
                 <n-tag size="small">{{ kindNames[product.kind] }}</n-tag>
               </div>
               <p class="product-description" :title="product.description">
                 {{ product.description || t("shop.default_description") }}
               </p>
-              <p>
+              <p class="product-stock">
                 {{
                   ["card", "account"].includes(product.kind)
                     ? t("stock.count", { quantity: product.available })
@@ -84,10 +88,12 @@ onMounted(load);
                 }}
               </p>
             </div>
-            <div class="merchant-card-actions">
-              <strong>{{ money(product.price, product.currency) }}</strong
+            <div class="product-footer">
+              <strong class="product-price">{{
+                money(product.price, product.currency)
+              }}</strong
               ><router-link :to="`/products/${product.id}`"
-                ><n-button size="small" quaternary>{{
+                ><n-button type="primary">{{
                   t("shop.view")
                 }}</n-button></router-link
               >
@@ -105,60 +111,87 @@ onMounted(load);
   grid-template-columns: minmax(0, 1fr);
 }
 
-.list-card {
-  align-items: flex-start;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  padding: 14px;
-}
-
-.list-card p {
-  color: #6b7280;
-  margin: 4px 0 0;
-}
-
-.loading-row {
+.product-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
 }
 
-.merchant-card-main {
-  display: grid;
-  gap: 5px;
-  min-width: 0;
-}
-
-.merchant-card-main p {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.merchant-card-title {
-  align-items: center;
-  display: flex;
-  gap: 8px;
-  min-width: 0;
-}
-
-.merchant-card-title strong {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.merchant-card-actions {
-  align-items: flex-end;
-  align-self: stretch;
-  color: #6b7280;
+.product-card,
+.loading-card {
   display: flex;
   flex-direction: column;
-  flex: 0 0 auto;
+  gap: 16px;
+  min-width: 0;
+}
+
+.product-card p {
+  color: #6b7280;
+  margin: 0;
+}
+
+.loading-card {
+  gap: 12px;
+}
+
+.product-info {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.product-description {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  line-height: 1.6;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.product-heading {
+  align-items: flex-start;
+  display: flex;
   gap: 8px;
+  min-width: 0;
+}
+
+.product-heading strong {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.product-heading .n-tag {
+  flex-shrink: 0;
+}
+
+.product-footer {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
   justify-content: space-between;
+  margin-top: auto;
+}
+
+.product-price {
+  font-size: 18px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 980px) {
+  .product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .product-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 </style>

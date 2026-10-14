@@ -1,4 +1,4 @@
-<!-- 登录面板基于 HashPay LoginPanel.vue 修改，认证内容替换为单管理员账号、密码和 TOTP。
+<!-- 登录面板基于 HashPay LoginPanel.vue 修改，认证内容替换为单管理员账号和密码。
      Copyright 2026 TGDash Team. Apache-2.0，见 frontend/public/HashPay-LICENSE.txt。 -->
 <script setup lang="ts">
 import { t } from "../i18n";
@@ -10,7 +10,6 @@ import StoreLayout from "../components/StoreLayout.vue";
 import { api, csrf, errorText } from "../api";
 const username = ref("admin"),
   password = ref(""),
-  totp = ref(""),
   busy = ref(false),
   error = ref(""),
   router = useRouter();
@@ -24,7 +23,6 @@ async function login() {
       body: {
         username: username.value,
         password: password.value,
-        totp: totp.value,
       },
     });
     csrf.value = result.csrf;
@@ -67,18 +65,6 @@ async function login() {
               type="password"
               show-password-on="click"
               :input-props="{ autocomplete: 'current-password' }"
-            />
-          </div>
-          <div class="field-stack">
-            <label class="field-label" for="totp">{{ t("login.totp") }}</label
-            ><n-input
-              id="totp"
-              v-model:value="totp"
-              :maxlength="6"
-              :input-props="{
-                inputmode: 'numeric',
-                autocomplete: 'one-time-code',
-              }"
             />
           </div>
           <n-alert v-if="error" type="error">{{ errorText(error) }}</n-alert

@@ -33,7 +33,6 @@ type App struct {
 	workerMu    sync.Mutex
 	authMu      sync.Mutex
 	limits      *limiter
-	adapters    map[string]APIAdapter
 	wake        chan struct{}
 	initialized atomic.Bool
 	setupMu     sync.Mutex
@@ -102,7 +101,7 @@ func main() {
 		slog.Info("备份完成并通过完整性校验")
 		return
 	}
-	app := &App{db: db, vault: v, config: c, configPath: *configPath, limits: newLimiter(), adapters: map[string]APIAdapter{}, wake: make(chan struct{}, 1)}
+	app := &App{db: db, vault: v, config: c, configPath: *configPath, limits: newLimiter(), wake: make(chan struct{}, 1)}
 	app.initialized.Store(!uninitialized)
 	defer func() {
 		if app.db != nil {
@@ -118,13 +117,6 @@ func main() {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	// 重启后 API 请求可能已产生副作用，恢复必须遵循适配器的幂等契约。
-	if !uninitialized {
-		if err = app.recoverDeliveries(ctx); err != nil {
-			slog.Error("交付恢复失败", "error", err)
-			os.Exit(1)
-		}
-	}
 	server := &http.Server{Handler: app.routes(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 45 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 * 1024}
 	ln, err := net.Listen("tcp", c.Listen)
 	if err != nil {

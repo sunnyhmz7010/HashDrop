@@ -5,19 +5,15 @@ import (
 	"crypto/cipher"
 	"crypto/hmac"
 	"crypto/rand"
-	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/subtle"
-	"encoding/base32"
 	"encoding/base64"
-	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"golang.org/x/crypto/argon2"
 	"strconv"
 	"strings"
-	"time"
 )
 
 func randomToken() string {
@@ -111,28 +107,6 @@ func passwordMatches(hash, password string) bool {
 	}
 	actual := argon2.IDKey([]byte(password), salt, 3, 64*1024, 2, 32)
 	return subtle.ConstantTimeCompare(actual, expected) == 1
-}
-func validTOTP(secret, code string, now time.Time) bool {
-	if len(code) != 6 {
-		return false
-	}
-	key, err := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(strings.ToUpper(strings.TrimSpace(secret)))
-	if err != nil {
-		return false
-	}
-	for delta := int64(-1); delta <= 1; delta++ {
-		b := make([]byte, 8)
-		binary.BigEndian.PutUint64(b, uint64(now.Unix()/30+delta))
-		h := hmac.New(sha1.New, key)
-		h.Write(b)
-		sum := h.Sum(nil)
-		offset := sum[len(sum)-1] & 15
-		n := (binary.BigEndian.Uint32(sum[offset:offset+4]) & 0x7fffffff) % 1000000
-		if hmac.Equal([]byte(fmt.Sprintf("%06d", n)), []byte(code)) {
-			return true
-		}
-	}
-	return false
 }
 
 // 首版支持固定法币精度；不通过 float64 转换订单金额。

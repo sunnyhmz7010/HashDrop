@@ -3,7 +3,7 @@ import { t } from "../i18n";
 
 import { onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
-import { NAlert, NButton, NInput, NSwitch } from "naive-ui";
+import { NAlert, NButton, NInput } from "naive-ui";
 import { api, errorText, initialized, site } from "../api";
 import LocaleSwitch from "../components/LocaleSwitch.vue";
 
@@ -12,7 +12,6 @@ const router = useRouter(),
   error = ref(""),
   finished = ref(false),
   loginURL = ref(""),
-  totpEnabled = ref(false),
   insecure = location.protocol === "http:";
 const form = reactive({
   title: "TinyFaka",
@@ -20,8 +19,6 @@ const form = reactive({
   username: "admin",
   password: "",
   password_confirm: "",
-  totp_secret: "",
-  totp_code: "",
   hashpay_url: "",
   merchant_id: "",
   private_key: "",
@@ -45,15 +42,11 @@ async function submit() {
       body: {
         ...form,
         public_url: validatedSiteURL(),
-        totp_enabled: totpEnabled.value,
-        totp_secret: totpEnabled.value ? form.totp_secret : "",
-        totp_code: totpEnabled.value ? form.totp_code : "",
       },
     });
     initialized.value = true;
     site.value = { title: result.title, notice: "" };
     form.password = form.password_confirm = form.private_key = "";
-    form.totp_secret = form.totp_code = "";
     finished.value = true;
     loginURL.value = `${result.public_url}/admin/login`;
     // 登录的 Origin 必须与站点地址一致，保存后引导到实际配置地址。
@@ -134,36 +127,6 @@ function validatedSiteURL(): string {
             :maxlength="256"
             :input-props="{ id: 'setup-confirm', autocomplete: 'new-password' }"
           />
-          <div class="space-top">
-            <n-switch
-              v-model:value="totpEnabled"
-              :disabled="busy"
-              :aria-label="t('setup.enable_totp')"
-            />{{ t("setup.totp_label") }}
-          </div>
-          <template v-if="totpEnabled">
-            <label class="field-label" for="setup-totp">{{
-              t("setup.totp_secret")
-            }}</label>
-            <n-input
-              v-model:value="form.totp_secret"
-              type="password"
-              :input-props="{ id: 'setup-totp', autocomplete: 'off' }"
-            />
-            <p class="helper">{{ t("setup.totp_help") }}</p>
-            <label class="field-label" for="setup-code">{{
-              t("setup.totp_code")
-            }}</label>
-            <n-input
-              v-model:value="form.totp_code"
-              :maxlength="6"
-              :input-props="{
-                id: 'setup-code',
-                inputmode: 'numeric',
-                autocomplete: 'one-time-code',
-              }"
-            />
-          </template>
           <h3 class="space-top">{{ t("setup.gateway_title") }}</h3>
           <label class="field-label" for="setup-gateway">{{
             t("settings.gateway_url")

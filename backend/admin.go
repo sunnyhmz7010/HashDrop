@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -58,7 +57,6 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) error {
 	var input struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
-		TOTP     string `json:"totp"`
 	}
 	if err := readJSON(w, r, &input); err != nil {
 		return err
@@ -67,9 +65,9 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) error {
 	// 限制 Argon2 的并行内存占用，适合单台低配 VPS。
 	a.authMu.Lock()
 	defer a.authMu.Unlock()
-	if input.Password == "" || utf8.RuneCountInString(input.Password) > 256 || !passwordMatches(c.AdminPassword, input.Password) || !constantEqual(c.AdminUsername, strings.TrimSpace(input.Username)) || (c.TOTPSecret != "" && !validTOTP(c.TOTPSecret, input.TOTP, time.Now())) {
+	if input.Password == "" || utf8.RuneCountInString(input.Password) > 256 || !passwordMatches(c.AdminPassword, input.Password) || !constantEqual(c.AdminUsername, strings.TrimSpace(input.Username)) {
 		audit("login_rejected", "")
-		return &apiError{401, "账号、密码或动态验证码不正确"}
+		return &apiError{401, "账号或密码不正确"}
 	}
 	token := randomToken()
 	now := unixNow()
@@ -194,10 +192,7 @@ func (a *App) recheckOrder(w http.ResponseWriter, r *http.Request) error {
 	return a.adminOrder(w, r)
 }
 func (a *App) retryOrder(w http.ResponseWriter, r *http.Request) error {
-	var input struct {
-		DeliveryID string `json:"delivery_id"`
-		Content    string `json:"content"`
-	}
+	var input struct{}
 	if err := readJSON(w, r, &input); err != nil {
 		return err
 	}
@@ -213,48 +208,10 @@ func (a *App) retryOrder(w http.ResponseWriter, r *http.Request) error {
 	if o.PaymentStatus != "paid" || o.ReservationStatus == "released" {
 		return bad("订单尚未核实付款或库存已释放")
 	}
-	if input.Content != "" {
-		if o.Kind != "api" || len(input.Content) > 65536 || input.DeliveryID == "" {
-			return bad("人工交付参数无效")
-		}
-		encrypted, e := a.vault.encrypt(input.Content, "delivery:"+input.DeliveryID)
-		if e != nil {
-			return e
-		}
-		result, e := a.db.Exec("UPDATE deliveries SET result=?,status='done',last_error='',updated_at=? WHERE id=? AND order_id=? AND status='manual'", encrypted, unixNow(), input.DeliveryID, o.ID)
-		if e != nil {
-			return e
-		}
-		n, e := result.RowsAffected()
-		if e != nil {
-			return e
-		}
-		if n != 1 {
-			return bad("该交付任务不处于人工处理状态")
-		}
-		if err = a.refreshDeliveryStatus(r.Context(), o.ID); err != nil {
-			return err
-		}
-		audit("delivery_manually_resolved", o.ID)
-	} else {
-		if o.Kind == "api" {
-			var cfg AdapterConfig
-			if err = json.Unmarshal([]byte(o.Config), &cfg); err != nil {
-				return err
-			}
-			adapter, exists := a.adapters[cfg.Adapter]
-			if !exists || !adapter.ReplaySafe() {
-				return bad("该适配器不支持安全重试，请核实外部结果后人工交付")
-			}
-			if _, err = a.db.Exec("UPDATE deliveries SET status='pending',attempts=0,next_retry=0 WHERE order_id=? AND status='manual'", o.ID); err != nil {
-				return err
-			}
-		}
-		if err = a.deliverOrder(r.Context(), o); err != nil {
-			return err
-		}
-		audit("delivery_retried", o.ID)
+	if err = a.deliverOrder(r.Context(), o); err != nil {
+		return err
 	}
+	audit("delivery_retried", o.ID)
 	return a.adminOrder(w, r)
 }
 func (a *App) deleteOrder(w http.ResponseWriter, r *http.Request) error {
@@ -276,23 +233,17 @@ func (a *App) deleteOrder(w http.ResponseWriter, r *http.Request) error {
 }
 
 type SettingsView struct {
-	Title         string   `json:"title"`
-	Notice        string   `json:"notice"`
-	PublicURL     string   `json:"public_url"`
-	HashPayURL    string   `json:"hashpay_url"`
-	MerchantID    string   `json:"merchant_id"`
-	KeyConfigured bool     `json:"key_configured"`
-	TOTPEnabled   bool     `json:"totp_enabled"`
-	Adapters      []string `json:"adapters"`
+	Title         string `json:"title"`
+	Notice        string `json:"notice"`
+	PublicURL     string `json:"public_url"`
+	HashPayURL    string `json:"hashpay_url"`
+	MerchantID    string `json:"merchant_id"`
+	KeyConfigured bool   `json:"key_configured"`
 }
 
 func (a *App) getSettings(w http.ResponseWriter, r *http.Request) error {
 	c := a.settings()
-	names := []string{}
-	for name := range a.adapters {
-		names = append(names, name)
-	}
-	reply(w, 200, SettingsView{c.Title, c.Notice, c.PublicURL, c.HashPay.BaseURL, c.HashPay.MerchantID, c.HashPay.PrivateKeyFile != "", c.TOTPSecret != "", names})
+	reply(w, 200, SettingsView{c.Title, c.Notice, c.PublicURL, c.HashPay.BaseURL, c.HashPay.MerchantID, c.HashPay.PrivateKeyFile != ""})
 	return nil
 }
 func (a *App) updateSettings(w http.ResponseWriter, r *http.Request) error {

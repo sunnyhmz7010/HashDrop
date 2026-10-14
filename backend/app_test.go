@@ -67,7 +67,7 @@ func newTestApp(t *testing.T) (*App, *fakeGateway) {
 	g.server = httptest.NewServer(http.HandlerFunc(g.handler))
 	t.Cleanup(g.server.Close)
 	c := Config{Listen: "127.0.0.1:8080", PublicURL: "http://127.0.0.1:8080", Title: "TinyFaka", Development: true, Database: filepath.Join(dir, "test.db"), BackupDir: filepath.Join(dir, "backups"), AdminUsername: "admin", AdminPassword: passwordHash("test-password-only"), HashPay: HashPayConfig{BaseURL: g.server.URL, MerchantID: "merchant-test", PrivateKeyFile: keyPath}}
-	app := &App{db: db, vault: v, config: c, limits: newLimiter(), adapters: map[string]APIAdapter{}, wake: make(chan struct{}, 1)}
+	app := &App{db: db, vault: v, config: c, limits: newLimiter(), wake: make(chan struct{}, 1)}
 	app.initialized.Store(true)
 	return app, g
 }
@@ -158,11 +158,7 @@ func insertProduct(t *testing.T, a *App, kind string, stock int) string {
 			t.Fatal(err)
 		}
 	}
-	cfg := `{}`
-	if kind == "api" {
-		cfg = `{"adapter":"test","parameters":{}}`
-	}
-	if _, err = a.db.Exec("INSERT INTO products(id,name,price,currency,kind,active,config,content,created_at,updated_at) VALUES(?,?,?,?,?,1,?,?,?,?)", id, "测试商品", 1234, "CNY", kind, cfg, content, unixNow(), unixNow()); err != nil {
+	if _, err = a.db.Exec("INSERT INTO products(id,name,price,currency,kind,active,content,created_at,updated_at) VALUES(?,?,?,?,?,1,?,?,?)", id, "测试商品", 1234, "CNY", kind, content, unixNow(), unixNow()); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < stock; i++ {
@@ -417,42 +413,9 @@ func TestForgedAndDuplicateCallback(t *testing.T) {
 	}
 }
 
-type uncertainAdapter struct {
-	calls int
-	safe  bool
-}
-
-func (u *uncertainAdapter) Validate(json.RawMessage) error { return nil }
-func (u *uncertainAdapter) ReplaySafe() bool               { return u.safe }
-func (u *uncertainAdapter) Deliver(context.Context, string, json.RawMessage) (APIResult, error) {
-	u.calls++
-	return APIResult{}, context.DeadlineExceeded
-}
-func TestAmbiguousAPIDelivery(t *testing.T) {
-	a, g := newTestApp(t)
-	adapter := &uncertainAdapter{}
-	a.adapters["test"] = adapter
-	o, _ := reserve(t, a, insertProduct(t, a, "api", 0), 1)
-	syncPaid(t, a, g, o)
-	for i := 0; i < 3; i++ {
-		if err := a.syncOrder(context.Background(), o.ID); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if adapter.calls != 1 {
-		t.Fatalf("不明请求重复执行 %d 次", adapter.calls)
-	}
-	loaded, err := a.loadOrder(context.Background(), o.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if loaded.PaymentStatus != "paid" || loaded.DeliveryStatus != "manual" {
-		t.Fatal("不明 API 结果未转人工")
-	}
-}
 func TestSessionCSRFAndBackup(t *testing.T) {
 	a, _ := newTestApp(t)
-	req := httptest.NewRequest("POST", "/api/admin/login", strings.NewReader(`{"username":"admin","password":"test-password-only","totp":""}`))
+	req := httptest.NewRequest("POST", "/api/admin/login", strings.NewReader(`{"username":"admin","password":"test-password-only"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Origin", a.config.PublicURL)
 	w := httptest.NewRecorder()
@@ -655,65 +618,5 @@ func TestGatewayTerminalStatePreservesAllocation(t *testing.T) {
 	}
 	if assigned != next.ID {
 		t.Fatal("后续订单库存被迟到付款占用")
-	}
-}
-
-type replayAdapter struct {
-	calls, effects int
-	key            string
-}
-
-func (r *replayAdapter) Validate(json.RawMessage) error { return nil }
-func (r *replayAdapter) ReplaySafe() bool               { return true }
-func (r *replayAdapter) Deliver(_ context.Context, key string, _ json.RawMessage) (APIResult, error) {
-	r.calls++
-	if r.key == "" {
-		r.key = key
-		r.effects++
-		return APIResult{}, context.DeadlineExceeded
-	}
-	if r.key != key {
-		r.effects++
-		return APIResult{}, fmt.Errorf("幂等键变化")
-	}
-	return APIResult{Content: "已开通"}, nil
-}
-func TestAPIReplayAndRestartRecovery(t *testing.T) {
-	a, g := newTestApp(t)
-	adapter := &replayAdapter{}
-	a.adapters["test"] = adapter
-	o, _ := reserve(t, a, insertProduct(t, a, "api", 0), 1)
-	syncPaid(t, a, g, o)
-	if _, err := a.db.Exec("UPDATE deliveries SET status='processing',next_retry=0 WHERE order_id=?", o.ID); err != nil {
-		t.Fatal(err)
-	}
-	if err := a.recoverDeliveries(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if err := a.syncOrder(context.Background(), o.ID); err != nil {
-		t.Fatal(err)
-	}
-	if err := a.syncOrder(context.Background(), o.ID); err != nil {
-		t.Fatal(err)
-	}
-	if adapter.calls != 2 || adapter.effects != 1 {
-		t.Fatalf("calls=%d effects=%d", adapter.calls, adapter.effects)
-	}
-	results, err := a.deliveryResults(context.Background(), o.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if results[0].Content != "已开通" {
-		t.Fatal("恢复未交付结果")
-	}
-}
-
-func TestTOTPVector(t *testing.T) {
-	secret := "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
-	if !validTOTP(secret, "287082", time.Unix(59, 0)) {
-		t.Fatal("TOTP 标准向量不匹配")
-	}
-	if validTOTP(secret, "287082", time.Unix(200, 0)) {
-		t.Fatal("过期 TOTP 被接受")
 	}
 }

@@ -41,9 +41,7 @@ const message = useMessage(),
   selected = ref<OrderDetail>(),
   selectedID = ref(""),
   busy = ref(false),
-  detailError = ref(""),
-  manualContent = ref(""),
-  manualDelivery = ref<string | null>(null);
+  detailError = ref("");
 const statusOptions = computed(() => [
   { label: t("orders.all_statuses"), value: "" },
   ...Object.entries(paymentNames.value).map(([value, label]) => ({
@@ -88,8 +86,6 @@ async function open(order: Order) {
   selected.value = undefined;
   show.value = true;
   detailError.value = "";
-  manualContent.value = "";
-  manualDelivery.value = null;
   busy.value = true;
   try {
     const result = await api<OrderDetail>(`/admin/orders/${order.id}`, {
@@ -103,7 +99,7 @@ async function open(order: Order) {
     if (current === generation) busy.value = false;
   }
 }
-async function action(name: string, body: unknown = {}) {
+async function action(name: string) {
   if (busy.value || !selected.value) return;
   const id = selected.value.order.id,
     current = generation;
@@ -113,13 +109,12 @@ async function action(name: string, body: unknown = {}) {
   try {
     const result = await api<OrderDetail>(`/admin/orders/${id}/${name}`, {
       method: "POST",
-      body,
+      body: {},
       signal: controller.signal,
     });
     if (current !== generation) return;
     selected.value = result;
     message.success(t("orders.updated"));
-    manualContent.value = "";
     await load();
   } catch (e) {
     if (current === generation) detailError.value = errorText(e);
@@ -277,7 +272,8 @@ async function copy(value: string) {
           <n-button
             v-if="
               selected.order.payment_status === 'paid' &&
-              selected.order.delivery_status !== 'done'
+              selected.order.delivery_status !== 'done' &&
+              kindNames[selected.order.kind]
             "
             :disabled="busy"
             secondary
@@ -353,7 +349,9 @@ async function copy(value: string) {
             </div>
             <div class="detail-item">
               <span>{{ t("product.kind") }}</span>
-              <strong>{{ kindNames[selected.order.kind] }}</strong>
+              <strong>{{
+                kindNames[selected.order.kind] || t("kind.unsupported")
+              }}</strong>
             </div>
           </div>
         </section>
@@ -415,47 +413,6 @@ async function copy(value: string) {
             v-if="!selected.deliveries.length"
             :description="t('delivery.empty')"
           />
-        </section>
-
-        <section
-          v-if="
-            selected.order.kind === 'api' &&
-            selected.order.payment_status === 'paid' &&
-            selected.deliveries.some((d) => d.status === 'manual')
-          "
-          class="order-modal-section"
-        >
-          <h3>{{ t("delivery.manual_title") }}</h3>
-          <n-select
-            v-model:value="manualDelivery"
-            :options="
-              selected.deliveries
-                .filter((d) => d.status === 'manual')
-                .map((d) => ({
-                  value: d.id,
-                  label: t('delivery.item', { ordinal: d.ordinal }),
-                }))
-            "
-            :placeholder="t('delivery.select_item')"
-          />
-          <n-input
-            v-model:value="manualContent"
-            type="textarea"
-            :placeholder="t('delivery.result_placeholder')"
-          />
-          <div class="row-actions">
-            <n-button
-              type="primary"
-              :disabled="!manualDelivery || !manualContent || busy"
-              @click="
-                action('retry', {
-                  delivery_id: manualDelivery,
-                  content: manualContent,
-                })
-              "
-              >{{ t("delivery.submit_manual") }}</n-button
-            >
-          </div>
         </section>
       </div>
     </n-spin>

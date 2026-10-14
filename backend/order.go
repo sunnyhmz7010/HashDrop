@@ -3,10 +3,8 @@ package main
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -30,17 +28,16 @@ type Order struct {
 	ExpiresAt         int64  `json:"expires_at"`
 	CreatedAt         int64  `json:"created_at"`
 	Content           string `json:"-"`
-	Config            string `json:"-"`
 	TokenHash         string `json:"-"`
 	Attempts          int    `json:"attempts"`
 	LastError         string `json:"last_error"`
 }
 
-const orderSelect = `SELECT id,product_id,product_name,kind,unit_price,currency,quantity,total,COALESCE(gateway_id,''),gateway_url,gateway_merchant_id,checkout_url,payment_status,delivery_status,reservation_status,expires_at,created_at,content,config,token_hash,attempts,last_error FROM orders`
+const orderSelect = `SELECT id,product_id,product_name,kind,unit_price,currency,quantity,total,COALESCE(gateway_id,''),gateway_url,gateway_merchant_id,checkout_url,payment_status,delivery_status,reservation_status,expires_at,created_at,content,token_hash,attempts,last_error FROM orders`
 
 func scanOrder(row scanner) (Order, error) {
 	var o Order
-	err := row.Scan(&o.ID, &o.ProductID, &o.ProductName, &o.Kind, &o.UnitPrice, &o.Currency, &o.Quantity, &o.Total, &o.GatewayID, &o.GatewayURL, &o.GatewayMerchantID, &o.CheckoutURL, &o.PaymentStatus, &o.DeliveryStatus, &o.ReservationStatus, &o.ExpiresAt, &o.CreatedAt, &o.Content, &o.Config, &o.TokenHash, &o.Attempts, &o.LastError)
+	err := row.Scan(&o.ID, &o.ProductID, &o.ProductName, &o.Kind, &o.UnitPrice, &o.Currency, &o.Quantity, &o.Total, &o.GatewayID, &o.GatewayURL, &o.GatewayMerchantID, &o.CheckoutURL, &o.PaymentStatus, &o.DeliveryStatus, &o.ReservationStatus, &o.ExpiresAt, &o.CreatedAt, &o.Content, &o.TokenHash, &o.Attempts, &o.LastError)
 	return o, err
 }
 func (a *App) loadOrder(ctx context.Context, id string) (Order, error) {
@@ -93,19 +90,6 @@ func (a *App) reserveOrder(ctx context.Context, productID string, quantity int) 
 	if quantity < 1 || quantity > 100 || p.Price > 9_000_000_000_000/int64(quantity) {
 		return Order{}, "", bad("数量或总金额超限")
 	}
-	if p.Kind == "api" {
-		var cfg AdapterConfig
-		if err = json.Unmarshal(p.Config, &cfg); err != nil {
-			return Order{}, "", err
-		}
-		adapter, exists := a.adapters[cfg.Adapter]
-		if !exists {
-			return Order{}, "", &apiError{503, "商品开通服务暂不可用"}
-		}
-		if err = adapter.Validate(cfg.Parameters); err != nil {
-			return Order{}, "", &apiError{503, "商品开通配置无效"}
-		}
-	}
 	token, id := randomToken(), newID()
 	content := ""
 	if p.Kind == "static" {
@@ -118,8 +102,8 @@ func (a *App) reserveOrder(ctx context.Context, productID string, quantity int) 
 			return Order{}, "", e
 		}
 	}
-	o := Order{ID: id, ProductID: p.ID, ProductName: p.Name, Kind: p.Kind, UnitPrice: p.Price, Currency: p.Currency, Quantity: quantity, Total: p.Price * int64(quantity), TokenHash: tokenHash(token), Content: content, Config: string(p.Config), PaymentStatus: "creating", DeliveryStatus: "pending", ReservationStatus: "reserved", CreatedAt: unixNow()}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO orders(id,product_id,product_name,kind,unit_price,currency,quantity,total,content,config,token_hash,payment_status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, o.ID, o.ProductID, o.ProductName, o.Kind, o.UnitPrice, o.Currency, o.Quantity, o.Total, o.Content, o.Config, o.TokenHash, o.PaymentStatus, o.CreatedAt, o.CreatedAt); err != nil {
+	o := Order{ID: id, ProductID: p.ID, ProductName: p.Name, Kind: p.Kind, UnitPrice: p.Price, Currency: p.Currency, Quantity: quantity, Total: p.Price * int64(quantity), TokenHash: tokenHash(token), Content: content, PaymentStatus: "creating", DeliveryStatus: "pending", ReservationStatus: "reserved", CreatedAt: unixNow()}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO orders(id,product_id,product_name,kind,unit_price,currency,quantity,total,content,token_hash,payment_status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`, o.ID, o.ProductID, o.ProductName, o.Kind, o.UnitPrice, o.Currency, o.Quantity, o.Total, o.Content, o.TokenHash, o.PaymentStatus, o.CreatedAt, o.CreatedAt); err != nil {
 		return Order{}, "", err
 	}
 	stockIDs := []string{}
@@ -161,7 +145,7 @@ func (a *App) reserveOrder(ctx context.Context, productID string, quantity int) 
 			stock = stockIDs[i-1]
 		}
 		deliveryID := newID()
-		if _, err = tx.ExecContext(ctx, "INSERT INTO deliveries(id,order_id,ordinal,stock_id,idempotency_key,updated_at) VALUES(?,?,?,?,?,?)", deliveryID, id, i, stock, id+":"+strconv.Itoa(i), unixNow()); err != nil {
+		if _, err = tx.ExecContext(ctx, "INSERT INTO deliveries(id,order_id,ordinal,stock_id,updated_at) VALUES(?,?,?,?,?)", deliveryID, id, i, stock, unixNow()); err != nil {
 			return Order{}, "", err
 		}
 	}

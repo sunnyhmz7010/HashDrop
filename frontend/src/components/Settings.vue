@@ -12,8 +12,6 @@ const message = useMessage(),
     hashpay_url: "",
     merchant_id: "",
     key_configured: false,
-    totp_enabled: false,
-    adapters: [],
   }),
   loading = ref(false),
   loaded = ref(false),
@@ -179,20 +177,6 @@ async function save() {
               ? t("settings.key_saved")
               : t("settings.key_missing")
           }}</n-alert>
-          <p class="helper">
-            TOTP:
-            {{
-              data.totp_enabled ? t("common.enabled") : t("common.disabled")
-            }}. {{ t("settings.secret_hint") }}
-          </p>
-          <p class="helper">
-            {{ t("settings.adapters") }}
-            {{
-              data.adapters.length
-                ? data.adapters.join(", ")
-                : t("settings.no_adapters")
-            }}
-          </p>
         </section>
       </form>
     </n-spin>

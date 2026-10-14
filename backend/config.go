@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/base32"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -30,7 +29,6 @@ type Config struct {
 	Development    bool              `json:"development"`
 	AdminUsername  string            `json:"admin_username"`
 	AdminPassword  string            `json:"admin_password_hash"`
-	TOTPSecret     string            `json:"totp_secret,omitempty"`
 	CurrentKey     string            `json:"current_key"`
 	EncryptionKeys map[string]string `json:"encryption_keys"`
 	DedupKey       string            `json:"dedup_key"`
@@ -114,12 +112,6 @@ func validateConfig(c Config) error {
 	hash, hashErr := base64.RawStdEncoding.DecodeString(parts[5])
 	if saltErr != nil || hashErr != nil || len(salt) != 16 || len(hash) != 32 {
 		return errors.New("管理员密码哈希无效")
-	}
-	if c.TOTPSecret != "" {
-		key, err := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(strings.ToUpper(strings.TrimSpace(c.TOTPSecret)))
-		if err != nil || len(key) < 16 {
-			return errors.New("TOTP 密钥必须为至少 16 字节的 Base32")
-		}
 	}
 	if c.HashPay.BaseURL != "" {
 		if err := validGatewayURL(c.HashPay.BaseURL); err != nil {

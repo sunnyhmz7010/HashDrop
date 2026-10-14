@@ -124,7 +124,7 @@ func TestGatewayPaidDoesNotRequireConfirmationMetadata(t *testing.T) {
 }
 
 func TestLegacyMigrationRetainsOrdersStockAndClaims(t *testing.T) {
-	for _, version := range []int{1, 2} {
+	for _, version := range []int{1, 2, 3} {
 		t.Run(fmt.Sprintf("version-%d", version), func(t *testing.T) {
 			testLegacyMigration(t, version)
 		})
@@ -148,7 +148,7 @@ func testLegacyMigration(t *testing.T, oldVersion int) {
 	}
 	defer old.Close()
 	old.SetMaxOpenConns(1)
-	for _, file := range []string{"migrations/001_init.sql", "migrations/002_gateway_orders.sql"}[:oldVersion] {
+	for _, file := range []string{"migrations/001_init.sql", "migrations/002_gateway_orders.sql", "migrations/003_gateway_identity.sql"}[:oldVersion] {
 		schema, err := tinyfaka.Assets.ReadFile(file)
 		if err != nil {
 			t.Fatal(err)
@@ -183,7 +183,40 @@ func testLegacyMigration(t *testing.T, oldVersion int) {
 			t.Fatal(err)
 		}
 		fields := strings.Join(columns, ",")
-		if _, err = old.Exec("INSERT INTO " + table + "(" + fields + ") SELECT " + fields + " FROM current_data." + table); err != nil {
+		values := append([]string(nil), columns...)
+		for i, name := range columns {
+			switch name {
+			case "config":
+				values[i] = "'{}'"
+			case "idempotency_key":
+				values[i] = "order_id || ':' || ordinal"
+			case "next_retry":
+				values[i] = "0"
+			}
+		}
+		if _, err = old.Exec("INSERT INTO " + table + "(" + fields + ") SELECT " + strings.Join(values, ",") + " FROM current_data." + table); err != nil {
+			t.Fatal(err)
+		}
+	}
+	retiredProduct := newID()
+	if _, err = old.Exec("INSERT INTO products(id,name,price,currency,kind,active,created_at,updated_at) VALUES(?,?,1234,'CNY','api',1,?,?)", retiredProduct, "旧开通商品", unixNow(), unixNow()); err != nil {
+		t.Fatal(err)
+	}
+	retiredOrders := []string{newID(), newID()}
+	for i, id := range retiredOrders {
+		state, reservation, result := "processing", "reserved", ""
+		deliveryID := newID()
+		if i == 1 {
+			state, reservation = "done", "consumed"
+			result, err = a.vault.encrypt("历史交付结果", "delivery:"+deliveryID)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err = old.Exec("INSERT INTO orders(id,product_id,product_name,kind,unit_price,currency,quantity,total,token_hash,payment_status,delivery_status,reservation_status,created_at,updated_at) VALUES(?,?,?,'api',1234,'CNY',1,1234,?,'paid',?,?,?,?)", id, retiredProduct, "旧开通商品", tokenHash(randomToken()), state, reservation, unixNow(), unixNow()); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = old.Exec("INSERT INTO deliveries(id,order_id,ordinal,result,status,idempotency_key,updated_at) VALUES(?,?,1,?,?,?,?)", deliveryID, id, result, state, id+":1", unixNow()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -198,6 +231,21 @@ func testLegacyMigration(t *testing.T, oldVersion int) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { a.db.Close() })
+	retired, err := scanProduct(a.db.QueryRow(productSelect+" WHERE p.id=?", retiredProduct))
+	if err != nil || retired.Kind != "static" || retired.Active || retired.Content != "" {
+		t.Fatal("旧开通商品未保留为下架的固定文本商品")
+	}
+	manual, err := a.loadOrder(context.Background(), retiredOrders[0])
+	if err != nil || manual.PaymentStatus != "paid" || manual.DeliveryStatus != "manual" {
+		t.Fatal("旧未完成交付丢失或被自动重试")
+	}
+	legacyResults, err := a.deliveryResults(context.Background(), retiredOrders[1])
+	if err != nil || len(legacyResults) != 1 || legacyResults[0].Content != "历史交付结果" {
+		t.Fatal("旧开通订单的领取内容丢失")
+	}
+	if _, err = a.db.Exec("INSERT INTO products(id,name,price,currency,kind,created_at,updated_at) VALUES('unsupported','unsupported',1,'CNY','api',0,0)"); err == nil {
+		t.Fatal("升级后仍允许新增已删除的商品类型")
+	}
 	after, err := a.deliveryResults(context.Background(), paid.ID)
 	if err != nil || len(after) != 1 || after[0].Content != before[0].Content {
 		t.Fatal("升级破坏了已交付密文或领取结果")
@@ -210,7 +258,7 @@ func testLegacyMigration(t *testing.T, oldVersion int) {
 		t.Fatal("升级错误推测了历史商户归属")
 	}
 	var version, foreignKeys, stock int
-	if err = a.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 3 {
+	if err = a.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 4 {
 		t.Fatal("数据库版本未升级")
 	}
 	if err = a.db.QueryRow("PRAGMA foreign_keys").Scan(&foreignKeys); err != nil || foreignKeys != 1 {

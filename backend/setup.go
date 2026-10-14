@@ -37,9 +37,6 @@ type setupInput struct {
 	Username        string `json:"username"`
 	Password        string `json:"password"`
 	PasswordConfirm string `json:"password_confirm"`
-	TOTPSecret      string `json:"totp_secret"`
-	TOTPCode        string `json:"totp_code"`
-	TOTPEnabled     bool   `json:"totp_enabled"`
 	HashPayURL      string `json:"hashpay_url"`
 	MerchantID      string `json:"merchant_id"`
 	PrivateKey      string `json:"private_key"`
@@ -81,12 +78,6 @@ func (a *App) setup(w http.ResponseWriter, r *http.Request) error {
 	}
 	c.PublicURL = publicURL
 	c.AdminPassword = passwordHash(input.Password)
-	if input.TOTPEnabled {
-		c.TOTPSecret = strings.TrimSpace(input.TOTPSecret)
-		if c.TOTPSecret == "" {
-			return bad("启用 TOTP 时必须填写密钥和当前动态验证码")
-		}
-	}
 	c.CurrentKey = "v1"
 	key, _ := base64.RawURLEncoding.DecodeString(randomToken())
 	dedup, _ := base64.RawURLEncoding.DecodeString(randomToken())
@@ -95,9 +86,6 @@ func (a *App) setup(w http.ResponseWriter, r *http.Request) error {
 	c.HashPay = HashPayConfig{BaseURL: strings.TrimRight(strings.TrimSpace(input.HashPayURL), "/"), MerchantID: strings.TrimSpace(input.MerchantID)}
 	if err := validateConfig(c); err != nil {
 		return bad(err.Error())
-	}
-	if c.TOTPSecret != "" && !validTOTP(c.TOTPSecret, input.TOTPCode, time.Now()) {
-		return bad("动态验证码不匹配，请确认 TOTP 密钥与服务器时间")
 	}
 	if c.HashPay.BaseURL != "" || c.HashPay.MerchantID != "" || input.PrivateKey != "" {
 		if c.HashPay.BaseURL == "" || c.HashPay.MerchantID == "" || input.PrivateKey == "" {

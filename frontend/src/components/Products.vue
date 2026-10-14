@@ -40,7 +40,6 @@ const model = reactive({
   kind: "card",
   active: false,
   static_content: "",
-  config: "{}",
 });
 const currencies = [
   "CNY",
@@ -83,7 +82,6 @@ function edit(product?: Product) {
           ...product,
           price: priceText(product.price, product.currency),
           static_content: "",
-          config: JSON.stringify(product.config, null, 2),
         }
       : {
           id: "",
@@ -94,7 +92,6 @@ function edit(product?: Product) {
           kind: "card",
           active: false,
           static_content: "",
-          config: "{}",
         },
   );
   formError.value = "";
@@ -115,7 +112,6 @@ async function save() {
         kind: model.kind,
         active: model.active,
         static_content: model.static_content,
-        config: JSON.parse(model.config),
       },
     });
     editor.value = false;
@@ -364,18 +360,6 @@ function removeStock(id: string) {
                 ? t('product.static_keep')
                 : t('product.static_placeholder')
             "
-          />
-        </div>
-        <div v-if="model.kind === 'api'" class="wide">
-          <n-alert type="info">{{ t("product.adapter_help") }}</n-alert
-          ><label class="field-label" for="api-config">{{
-            t("product.adapter_config")
-          }}</label
-          ><n-input
-            id="api-config"
-            v-model:value="model.config"
-            type="textarea"
-            :placeholder="t('product.config_placeholder')"
           />
         </div>
       </div>

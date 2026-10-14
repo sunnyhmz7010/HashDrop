@@ -108,13 +108,13 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
   await page.locator("#password input").fill("wrong-password");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(
-    page.getByText("Incorrect username, password or one-time code", {
+    page.getByText("Incorrect username or password", {
       exact: true,
     }),
   ).toBeVisible();
   await switchLanguage(page, "中文");
   await expect(
-    page.getByText("账号、密码或动态验证码不正确", { exact: true }),
+    page.getByText("账号或密码不正确", { exact: true }),
   ).toBeVisible();
   await expect(page.locator("#password input")).toHaveValue("wrong-password");
   await switchLanguage(page, "English");
@@ -160,6 +160,7 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
     .click();
   await page.getByRole("button", { name: "Add product", exact: true }).click();
   await page.locator("#product-kind").click();
+  await expect(page.locator(".n-base-select-option:visible")).toHaveCount(3);
   await expect(
     page
       .locator(".n-base-select-option")

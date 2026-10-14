@@ -19,6 +19,7 @@ test("网页初始化、失败重填、HTTP 登录与只写私钥", async ({ pag
     page.getByLabel("一次性初始化凭证", { exact: true }),
   ).toHaveCount(0);
   await expect(page.getByLabel("商城公告", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("switch")).toHaveCount(0);
   await page.getByLabel("管理员账号", { exact: true }).fill("store-owner");
   await page.getByLabel("站点名称", { exact: true }).fill("网页部署测试店铺");
   await page.getByLabel("管理员密码", { exact: true }).fill("1");
@@ -31,12 +32,6 @@ test("网页初始化、失败重填、HTTP 登录与只写私钥", async ({ pag
   ).toBeVisible();
   await expect(page.getByLabel("管理员密码", { exact: true })).toHaveValue("1");
   await page.getByLabel("确认密码", { exact: true }).fill("1");
-  await page.getByRole("switch", { name: "启用 TOTP", exact: true }).click();
-  await page.getByRole("button", { name: "完成初始化", exact: true }).click();
-  await expect(
-    page.getByText("启用 TOTP 时必须填写密钥和当前动态验证码", { exact: true }),
-  ).toBeVisible();
-  await page.getByRole("switch", { name: "启用 TOTP", exact: true }).click();
   await page
     .getByLabel("HashPay 地址", { exact: true })
     .fill(fixture.hashpay_url);
@@ -77,6 +72,9 @@ test("网页初始化、失败重填、HTTP 登录与只写私钥", async ({ pag
   await page.getByRole("button", { name: "完成初始化", exact: true }).click();
   await expect(page.getByLabel("管理员密码", { exact: true })).toBeDisabled();
   await expect(page.getByRole("heading", { name: "登录后台" })).toBeVisible();
+  await expect(
+    page.getByLabel("动态验证码（已启用时填写）", { exact: true }),
+  ).toHaveCount(0);
   await page.unroute("**/api/setup");
   const status = await request.get(`${base}/api/setup/status`);
   expect(await status.json()).toEqual({ initialized: true });

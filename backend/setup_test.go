@@ -20,7 +20,7 @@ func newSetupApp(t *testing.T) *App {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := &App{config: c, configPath: filepath.Join(dir, "config", "config.json"), limits: newLimiter(), adapters: map[string]APIAdapter{}, wake: make(chan struct{}, 1)}
+	a := &App{config: c, configPath: filepath.Join(dir, "config", "config.json"), limits: newLimiter(), wake: make(chan struct{}, 1)}
 	t.Cleanup(func() {
 		if a.db != nil {
 			a.db.Close()
@@ -62,16 +62,6 @@ func TestSetupRequiresOriginAndLeavesFailedInputUncommitted(t *testing.T) {
 	input.PasswordConfirm = "different-password"
 	if w = postSetup(a, input.PublicURL, input); w.Code != 400 {
 		t.Fatal("接受了不一致的密码")
-	}
-	input = setupBody()
-	input.TOTPEnabled = true
-	if w = postSetup(a, input.PublicURL, input); w.Code != 400 {
-		t.Fatal("启用 TOTP 却允许留空密钥")
-	}
-	input.TOTPSecret = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
-	input.TOTPCode = "invalid"
-	if w = postSetup(a, input.PublicURL, input); w.Code != 400 {
-		t.Fatal("启用 TOTP 却接受了错误验证码")
 	}
 	input = setupBody()
 	input.HashPayURL, input.MerchantID, input.PrivateKey = "https://pay.example.com", "merchant", "not-a-key"
@@ -122,6 +112,7 @@ func TestSetupAcceptsShortPasswordAndCustomUsername(t *testing.T) {
 		t.Fatal(err)
 	}
 	delete(legacy, "admin_username")
+	legacy["totp_secret"] = "retired-authentication-secret"
 	data, err = json.Marshal(legacy)
 	if err != nil {
 		t.Fatal(err)
@@ -133,6 +124,15 @@ func TestSetupAcceptsShortPasswordAndCustomUsername(t *testing.T) {
 	c, _, err = readConfig(legacyPath)
 	if err != nil || c.AdminUsername != "admin" || !passwordMatches(c.AdminPassword, input.Password) {
 		t.Fatalf("旧配置管理员不兼容: %v", err)
+	}
+	a.config = c
+	request := httptest.NewRequest("POST", "/api/admin/login", strings.NewReader(`{"username":"admin","password":"1"}`))
+	request.Header.Set("Origin", c.PublicURL)
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	a.routes().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("旧配置仍要求已移除的动态验证码: %s", response.Body)
 	}
 }
 func TestPublicURLMatchesBrowserOrigin(t *testing.T) {

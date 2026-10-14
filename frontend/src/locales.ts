@@ -12,7 +12,7 @@ const zh = {
   "kind.card": "卡密",
   "kind.account": "账号",
   "kind.static": "固定文本",
-  "kind.api": "业务开通",
+  "kind.unsupported": "已停止支持",
   "payment.creating": "正在创建支付单",
   "payment.pending": "等待付款",
   "payment.paid": "已付款",
@@ -66,10 +66,6 @@ const zh = {
   "orders.deadline": "支付有效期",
   "delivery.content": "交付内容",
   "delivery.empty": "暂无交付内容",
-  "delivery.manual_title": "核实外部开通结果后人工交付",
-  "delivery.select_item": "选择待处理份数",
-  "delivery.result_placeholder": "填写已核实的交付结果",
-  "delivery.submit_manual": "提交人工交付",
   "overview.products": "商品数量",
   "overview.stock": "可用库存",
   "overview.orders": "订单总数",
@@ -112,10 +108,6 @@ const zh = {
   "product.static_content": "固定交付内容",
   "product.static_keep": "留空保留现有内容；新内容只影响后续订单",
   "product.static_placeholder": "填写付款后展示的内容",
-  "product.adapter_help":
-    "只支持服务端已部署的适配器。未部署时可保存草稿，不能上架。",
-  "product.adapter_config": "非敏感适配器配置",
-  "product.config_placeholder": '{"adapter":"名称","parameters":{}}',
   "product.save": "保存商品",
   "stock.import_help":
     "每行一份卡密或账号。重复内容会自动跳过；账号与密码请放在同一行。",
@@ -143,8 +135,6 @@ const zh = {
   "settings.key_missing": "商户私钥尚未配置。请在上方填写并保存。",
   "common.enabled": "已启用",
   "common.disabled": "未启用",
-  "settings.adapters": "可用业务适配器：",
-  "settings.no_adapters": "暂无；API 商品只能保存为草稿",
   "nav.orders": "订单",
   "nav.open_menu": "打开管理菜单",
   "nav.logout": "退出登录",
@@ -154,7 +144,6 @@ const zh = {
   "login.description": "管理商品、库存与订单。",
   "login.username": "管理员账号",
   "login.password": "管理员密码",
-  "login.totp": "动态验证码（已启用时填写）",
   "login.submit": "登录",
   "errors.claim_link": "请填写本站完整领取链接",
   "common.copy_fallback": "复制失败，请长按或选中文字复制",
@@ -208,11 +197,6 @@ const zh = {
     "当前连接为 HTTP，提交的密码和私钥会明文传输，请在可信网络中完成初始化。",
   "setup.url_placeholder": "http://服务器地址:8080",
   "setup.confirm_password": "确认密码",
-  "setup.enable_totp": "启用 TOTP",
-  "setup.totp_label": "启用 TOTP 动态验证",
-  "setup.totp_secret": "TOTP 密钥",
-  "setup.totp_help": "填写验证器中的 Base32 密钥并单独备份；初始化后不会回显。",
-  "setup.totp_code": "当前动态验证码",
   "setup.gateway_title": "HashPay（可稍后在后台填写）",
   "setup.gateway_help":
     "地址、商户 ID、PEM 私钥一起填写，或全部留空。私钥保存后不会回显。",
@@ -227,9 +211,6 @@ const zh = {
   "errors.page_range": "页码超限",
   "errors.invalid_status": "状态无效",
   "errors.order_not_paid": "订单尚未核实付款或库存已释放",
-  "errors.manual_parameters": "人工交付参数无效",
-  "errors.delivery_not_manual": "该交付任务不处于人工处理状态",
-  "errors.unsafe_retry": "该适配器不支持安全重试，请核实外部结果后人工交付",
   "errors.gateway_locked": "存在历史订单，不能通过后台更换支付网关或商户",
   "errors.gateway_required": "HashPay 地址、商户 ID 和私钥须完整填写",
   "errors.sign_in": "请先登录",
@@ -238,7 +219,7 @@ const zh = {
   "errors.csrf": "安全校验失败，请刷新页面",
   "errors.origin": "请求来源无效",
   "errors.login_rate": "登录尝试过多，请 15 分钟后再试",
-  "errors.credentials": "账号、密码或动态验证码不正确",
+  "errors.credentials": "账号或密码不正确",
   "errors.order_missing": "订单不存在",
   "errors.config_permissions": "配置文件权限必须为 0600",
   "errors.key_version": "密钥版本无效",
@@ -249,7 +230,6 @@ const zh = {
   "errors.site_length": "站点名称或公告长度无效",
   "errors.username": "管理员账号不能为空或超过 120 字符",
   "errors.password_hash": "管理员密码哈希无效",
-  "errors.totp_secret": "TOTP 密钥必须为至少 16 字节的 Base32",
   "errors.gateway_url": "HashPay 地址必须为无路径的 HTTPS 地址",
   "errors.listen_address": "监听地址须为 127.0.0.1 或 0.0.0.0 的有效端口",
   "errors.listen_port": "监听端口须为 1–65535 的整数",
@@ -308,17 +288,12 @@ const zh = {
   "errors.gateway_status": "HashPay 订单状态未知",
   "errors.order_rate": "下单过于频繁，请稍后再试",
   "errors.payment_not_configured": "支付服务尚未配置，请联系店主",
-  "errors.activation_unavailable": "商品开通服务暂不可用",
-  "errors.activation_config": "商品开通配置无效",
   "errors.stock_shortage": "库存不足，请调整数量",
   "errors.stock_changed": "库存发生变化，请重试",
   "errors.claim_credential": "请输入有效的领取凭证",
   "errors.order_credential": "订单或凭证无效",
   "errors.product_fields": "商品名称、价格或内容长度无效",
   "errors.product_kind": "商品类型无效",
-  "errors.api_config": "API 配置无效",
-  "errors.adapter_missing": "该 API 适配器尚未部署，不能上架",
-  "errors.adapter_parameters": "API 适配器参数无效",
   "errors.product_kind_locked": "已有商品不能改变交付类型，请新建商品",
   "errors.static_required": "固定内容不能为空",
   "errors.cipher_format": "密文格式无效",
@@ -330,8 +305,6 @@ const zh = {
   "errors.amount_limit": "金额超限",
   "errors.setup_password":
     "管理员密码不能为空或超过 256 字符，且两次输入须一致",
-  "errors.setup_totp_required": "启用 TOTP 时必须填写密钥和当前动态验证码",
-  "errors.setup_totp_code": "动态验证码不匹配，请确认 TOTP 密钥与服务器时间",
   "errors.setup_gateway":
     "HashPay 地址、商户 ID 和私钥须完整填写，或全部留空稍后配置",
   "errors.private_key_length": "商户私钥长度超限",
@@ -351,17 +324,13 @@ const zh = {
   "stock.title": "库存 · {name}",
   "stock.count": "库存 {quantity}",
   "orders.quantity": "数量 {quantity}",
-  "settings.secret_hint": "私钥、密钥和密码保存后不会回显。",
   "errors.network": "网络请求失败，请重试",
   "errors.response_json": "服务响应格式无效，请重试",
   "errors.invalid_json": "JSON 格式无效，请检查配置",
+  "errors.product_retired": "商品交付类型已停止支持",
   "errors.payment_delivery": "付款查询或交付暂时失败",
   "errors.gateway_mismatch": "HashPay 金额/币种/商户或映射不一致",
   "errors.gateway_invalid": "HashPay 已将订单标记为失效，付款状态由网关决定",
-  "errors.uncertain_delivery": "业务接口结果不明，需要人工核实",
-  "errors.delivery_retry": "业务接口暂时失败，等待安全重试",
-  "errors.delivery_result": "业务接口返回结果无效",
-  "errors.adapter_unavailable": "适配器未部署",
   "errors.payment_identity": "支付订单身份、金额或币种不匹配",
 } as const;
 
@@ -373,7 +342,7 @@ const en: Record<MessageKey, string> = {
   "kind.card": "License key",
   "kind.account": "Account",
   "kind.static": "Static text",
-  "kind.api": "Service activation",
+  "kind.unsupported": "No longer supported",
   "payment.creating": "Creating payment order",
   "payment.pending": "Awaiting payment",
   "payment.paid": "Paid",
@@ -428,10 +397,6 @@ const en: Record<MessageKey, string> = {
   "orders.deadline": "Payment deadline",
   "delivery.content": "Delivery content",
   "delivery.empty": "No delivery content yet",
-  "delivery.manual_title": "Verify the external result before manual delivery",
-  "delivery.select_item": "Select an item to handle",
-  "delivery.result_placeholder": "Enter the verified delivery result",
-  "delivery.submit_manual": "Submit manual delivery",
   "overview.products": "Products",
   "overview.stock": "Available stock",
   "overview.orders": "Total orders",
@@ -476,10 +441,6 @@ const en: Record<MessageKey, string> = {
   "product.static_keep":
     "Leave blank to keep existing content; changes apply to future orders",
   "product.static_placeholder": "Enter the content shown after payment",
-  "product.adapter_help":
-    "Only adapters deployed on the server are supported. Products can be saved as drafts when an adapter is unavailable, but cannot be published.",
-  "product.adapter_config": "Non-sensitive adapter configuration",
-  "product.config_placeholder": '{"adapter":"adapter-name","parameters":{}}',
   "product.save": "Save product",
   "stock.import_help":
     "One license key or account per line. Duplicates are skipped. Keep the account name and password on the same line.",
@@ -512,8 +473,6 @@ const en: Record<MessageKey, string> = {
     "Merchant private key is not configured. Enter it above and save.",
   "common.enabled": "Enabled",
   "common.disabled": "Disabled",
-  "settings.adapters": "Available service adapters:",
-  "settings.no_adapters": "None; API products can only be saved as drafts",
   "nav.orders": "Orders",
   "nav.open_menu": "Open admin menu",
   "nav.logout": "Sign out",
@@ -523,7 +482,6 @@ const en: Record<MessageKey, string> = {
   "login.description": "Manage products, stock and orders.",
   "login.username": "Admin username",
   "login.password": "Admin password",
-  "login.totp": "One-time code (if enabled)",
   "login.submit": "Sign in",
   "errors.claim_link": "Enter a complete claim link from this site",
   "common.copy_fallback":
@@ -586,12 +544,6 @@ const en: Record<MessageKey, string> = {
     "This connection uses HTTP. Passwords and private keys are transmitted in plain text. Complete setup on a trusted network.",
   "setup.url_placeholder": "http://server-address:8080",
   "setup.confirm_password": "Confirm password",
-  "setup.enable_totp": "Enable TOTP",
-  "setup.totp_label": "Enable TOTP authentication",
-  "setup.totp_secret": "TOTP secret",
-  "setup.totp_help":
-    "Enter the Base32 secret from your authenticator and back it up separately. It will not be shown after setup.",
-  "setup.totp_code": "Current one-time code",
   "setup.gateway_title": "HashPay (can be configured later)",
   "setup.gateway_help":
     "Enter the URL, merchant ID and PEM key together, or leave all three blank. The key is not shown after saving.",
@@ -608,11 +560,6 @@ const en: Record<MessageKey, string> = {
   "errors.invalid_status": "Invalid status",
   "errors.order_not_paid":
     "Payment has not been verified or reserved stock has been released",
-  "errors.manual_parameters": "Invalid manual delivery parameters",
-  "errors.delivery_not_manual":
-    "This delivery task does not need manual handling",
-  "errors.unsafe_retry":
-    "This adapter cannot retry safely. Verify the external result before manual delivery.",
   "errors.gateway_locked":
     "Existing orders prevent changing the payment gateway or merchant in the dashboard",
   "errors.gateway_required":
@@ -623,7 +570,7 @@ const en: Record<MessageKey, string> = {
   "errors.csrf": "Security verification failed. Refresh this page.",
   "errors.origin": "Invalid request origin",
   "errors.login_rate": "Too many sign-in attempts. Try again in 15 minutes.",
-  "errors.credentials": "Incorrect username, password or one-time code",
+  "errors.credentials": "Incorrect username or password",
   "errors.order_missing": "Order not found",
   "errors.config_permissions": "Configuration file permissions must be 0600",
   "errors.key_version": "Invalid key version",
@@ -634,8 +581,6 @@ const en: Record<MessageKey, string> = {
   "errors.site_length": "Invalid site name or announcement length",
   "errors.username": "Enter an admin username of up to 120 characters",
   "errors.password_hash": "Invalid admin password hash",
-  "errors.totp_secret":
-    "TOTP secret must contain at least 16 bytes encoded as Base32",
   "errors.gateway_url": "HashPay URL must use HTTPS without a path",
   "errors.listen_address":
     "Listen address must use 127.0.0.1 or 0.0.0.0 with a valid port",
@@ -704,18 +649,12 @@ const en: Record<MessageKey, string> = {
   "errors.order_rate": "Too many orders. Please try again later.",
   "errors.payment_not_configured":
     "Payment is not configured. Contact the store owner.",
-  "errors.activation_unavailable": "Product activation service is unavailable",
-  "errors.activation_config": "Invalid product activation configuration",
   "errors.stock_shortage": "Not enough stock. Adjust the quantity.",
   "errors.stock_changed": "Stock has changed. Try again.",
   "errors.claim_credential": "Enter a valid claim credential",
   "errors.order_credential": "Invalid order or claim credential",
   "errors.product_fields": "Invalid product name, price or content length",
   "errors.product_kind": "Invalid product type",
-  "errors.api_config": "Invalid API configuration",
-  "errors.adapter_missing":
-    "This API adapter is not deployed; the product cannot be published",
-  "errors.adapter_parameters": "Invalid API adapter parameters",
   "errors.product_kind_locked":
     "Existing products cannot change delivery type. Create a new product.",
   "errors.static_required": "Static delivery content cannot be empty",
@@ -728,10 +667,6 @@ const en: Record<MessageKey, string> = {
   "errors.amount_limit": "Amount exceeds the limit",
   "errors.setup_password":
     "Enter a non-empty password of up to 256 characters and confirm it correctly",
-  "errors.setup_totp_required":
-    "Enter the TOTP secret and current code to enable TOTP",
-  "errors.setup_totp_code":
-    "One-time code does not match. Check the TOTP secret and server time.",
   "errors.setup_gateway":
     "Enter the HashPay URL, merchant ID and private key together, or leave all three blank to configure them later",
   "errors.private_key_length": "Merchant private key is too long",
@@ -753,23 +688,16 @@ const en: Record<MessageKey, string> = {
   "stock.title": "Stock · {name}",
   "stock.count": "Stock: {quantity}",
   "orders.quantity": "Qty {quantity}",
-  "settings.secret_hint":
-    "Private keys, encryption keys and passwords are not shown after saving.",
   "errors.network": "Network request failed. Try again.",
   "errors.response_json": "Invalid server response. Try again.",
   "errors.invalid_json": "Invalid JSON. Check the configuration.",
+  "errors.product_retired": "This product delivery type is no longer supported",
   "errors.payment_delivery":
     "Payment query or delivery is temporarily unavailable",
   "errors.gateway_mismatch":
     "HashPay amount, currency, merchant or order mapping does not match",
   "errors.gateway_invalid":
     "HashPay marked this order as invalid; the gateway controls payment status",
-  "errors.uncertain_delivery":
-    "The service result is unknown and needs manual verification",
-  "errors.delivery_retry":
-    "Service request failed temporarily; waiting for a safe retry",
-  "errors.delivery_result": "Invalid service delivery result",
-  "errors.adapter_unavailable": "Service adapter is not deployed",
   "errors.payment_identity":
     "Payment order identity, amount or currency does not match",
 };

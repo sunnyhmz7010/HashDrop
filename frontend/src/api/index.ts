@@ -59,7 +59,6 @@ export interface Product {
   available: number;
   reserved: number;
   sold: number;
-  config: Record<string, unknown>;
 }
 export interface Order {
   id: string;
@@ -96,8 +95,6 @@ export interface Settings {
   hashpay_url: string;
   merchant_id: string;
   key_configured: boolean;
-  totp_enabled: boolean;
-  adapters: string[];
 }
 const scales: Record<string, number> = {
   CNY: 2,
@@ -135,7 +132,6 @@ export const kindNames = computed<Record<string, string>>(() => ({
   card: t("kind.card"),
   account: t("kind.account"),
   static: t("kind.static"),
-  api: t("kind.api"),
 }));
 export const paymentNames = computed<Record<string, string>>(() => ({
   creating: t("payment.creating"),

@@ -5,13 +5,13 @@ import {
   NButton,
   NEmpty,
   NInput,
-  NModal,
   NSelect,
   NSpin,
   NSwitch,
   useDialog,
   useMessage,
 } from "naive-ui";
+import FormDialog from "./FormDialog.vue";
 import {
   api,
   errorText,
@@ -271,16 +271,12 @@ function removeStock(id: string) {
       >
     </div></n-spin
   >
-  <n-modal
+  <FormDialog
     v-model:show="editor"
-    preset="card"
     :title="model.id ? '编辑商品' : '新增商品'"
-    class="form-modal"
-    :mask-closable="!saving"
-    :closable="!saving"
-    :close-on-esc="!saving"
-    ><form @submit.prevent="save">
-      <div class="form-grid">
+    :busy="saving"
+    ><form id="product-form" @submit.prevent="save">
+      <div class="form-grid two">
         <div class="wide">
           <label class="field-label" for="product-name">商品名称</label
           ><n-input
@@ -357,22 +353,22 @@ function removeStock(id: string) {
       <n-alert v-if="formError" type="error" class="space-top">{{
         formError
       }}</n-alert>
-      <div class="modal-actions">
-        <n-button :disabled="saving" @click="editor = false">取消</n-button
-        ><n-button attr-type="submit" type="primary" :loading="saving"
-          >保存商品</n-button
-        >
-      </div>
-    </form></n-modal
-  >
-  <n-modal
+    </form>
+    <template #footer>
+      <n-button :disabled="saving" @click="editor = false">取消</n-button
+      ><n-button
+        attr-type="submit"
+        form="product-form"
+        type="primary"
+        :loading="saving"
+        >保存商品</n-button
+      >
+    </template>
+  </FormDialog>
+  <FormDialog
     v-model:show="importing"
-    preset="card"
     :title="`导入库存 · ${stockProduct?.name ?? ''}`"
-    class="form-modal"
-    :mask-closable="!saving"
-    :closable="!saving"
-    :close-on-esc="!saving"
+    :busy="saving"
     ><p class="muted">
       每行一份卡密或账号。重复内容会自动跳过；账号与密码请放在同一行。
     </p>
@@ -385,18 +381,16 @@ function removeStock(id: string) {
     /><n-alert v-if="stockError" type="error" class="space-top">{{
       stockError
     }}</n-alert>
-    <div class="modal-actions">
+    <template #footer>
       <n-button :disabled="saving" @click="importing = false">取消</n-button
       ><n-button type="primary" :loading="saving" @click="importItems"
         >导入库存</n-button
       >
-    </div></n-modal
+    </template></FormDialog
   >
-  <n-modal
+  <FormDialog
     v-model:show="stockDialog"
-    preset="card"
     :title="`库存 · ${stockProduct?.name ?? ''}`"
-    class="form-modal"
     ><n-alert v-if="stockError" type="error">{{ stockError }}</n-alert
     ><n-spin :show="stockLoading"
       ><div class="table-scroll">
@@ -430,6 +424,67 @@ function removeStock(id: string) {
         v-if="!stockItems.length && !stockLoading"
         description="暂无库存"
     /></n-spin>
-    <p class="helper">显示最新 200 条记录，敏感内容不在列表中回显。</p></n-modal
+    <p class="helper">
+      显示最新 200 条记录，敏感内容不在列表中回显。
+    </p></FormDialog
   >
 </template>
+
+<style scoped lang="scss">
+.table-panel {
+  padding: 0;
+  overflow: hidden;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.table-scroll table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 13px;
+}
+
+.table-scroll th {
+  color: #6b7280;
+  background: #f9fafb;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.table-scroll th,
+.table-scroll td {
+  padding: 9px 10px;
+  border-bottom: 1px solid #eef0f3;
+}
+
+.table-scroll tr:last-child td {
+  border-bottom: 0;
+}
+
+.table-scroll td {
+  white-space: nowrap;
+}
+
+.table-scroll .name-cell {
+  min-width: 8rem;
+  max-width: 16rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.table-scroll .row-actions {
+  flex-wrap: nowrap;
+}
+
+.form-grid .field-label {
+  margin-bottom: 7px;
+}
+
+.form-grid .wide {
+  grid-column: 1 / -1;
+}
+</style>

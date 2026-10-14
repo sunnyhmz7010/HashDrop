@@ -64,88 +64,94 @@ async function save() {
 }
 </script>
 <template>
-  <h2 class="space-bottom">系统设置</h2>
+  <div class="section-title"><h2>系统设置</h2></div>
   <n-spin :show="loading"
-    ><section class="panel settings-panel">
-      <form v-if="loaded" @submit.prevent="save">
-        <h3>站点</h3>
-        <label class="field-label" for="site-title">站点名称</label
-        ><n-input
-          id="site-title"
-          v-model:value="form.title"
-          :maxlength="120"
-        /><label class="field-label" for="notice">商城公告</label
-        ><n-input
-          id="notice"
-          v-model:value="form.notice"
-          type="textarea"
-          :maxlength="2000"
-        />
-        <p class="helper">站点地址：{{ data.public_url }}</p>
-        <h3 class="space-top">HashPay</h3>
-        <label class="field-label" for="hashpay-url">HashPay 地址</label
-        ><n-input
-          id="hashpay-url"
-          v-model:value="form.hashpay_url"
-          placeholder="https://pay.example.com"
-        /><label class="field-label" for="merchant-id">商户 ID</label
-        ><n-input id="merchant-id" v-model:value="form.merchant_id" /><label
-          class="field-label"
-          for="merchant-key"
-          >商户 RSA 私钥</label
-        ><n-input
-          v-model:value="form.private_key"
-          type="textarea"
-          placeholder="留空保留现有私钥；填写 PEM 私钥以配置或替换"
-          :input-props="{
-            id: 'merchant-key',
-            autocomplete: 'off',
-            spellcheck: false,
-          }"
-        /><label class="field-label" for="manual-policy"
-          >HashPay 人工确认付款</label
-        ><n-select
-          id="manual-policy"
-          v-model:value="form.manual_policy"
-          :options="[
-            { label: '保留订单，由店主核实后调整策略', value: 'hold' },
-            { label: '接受 HashPay 管理员确认的已付款订单', value: 'accept' },
-          ]"
-        />
-        <p v-if="data.public_url.startsWith('https://')" class="helper">
-          回调地址：{{ data.public_url }}/api/webhooks/hashpay
-        </p>
-        <p v-else class="helper">
-          HTTP 站点使用签名查询补查付款，无需设置回调地址。
-        </p>
-        <n-alert
-          :type="data.key_configured ? 'success' : 'warning'"
-          class="space-top"
-          >{{
-            data.key_configured
-              ? "商户私钥已保存；请通过小额订单验证接入。"
-              : "商户私钥尚未配置。请在上方填写并保存。"
-          }}</n-alert
-        >
-        <p class="helper">
-          TOTP：{{
-            data.totp_enabled ? "已启用" : "未启用"
-          }}。私钥、密钥和密码保存后不会回显。
-        </p>
-        <p class="helper">
-          可用业务适配器：{{
-            data.adapters.length
-              ? data.adapters.join("、")
-              : "暂无；API 商品只能保存为草稿"
-          }}
-        </p>
-        <n-button
-          type="primary"
-          attr-type="submit"
-          :loading="saving"
-          class="space-top"
-          >保存设置</n-button
-        >
+    ><section class="grid settings-panel">
+      <form v-if="loaded" class="settings-form" @submit.prevent="save">
+        <section class="panel form-section">
+          <h3>站点</h3>
+          <label class="field-label" for="site-title">站点名称</label
+          ><n-input
+            id="site-title"
+            v-model:value="form.title"
+            :maxlength="120"
+          /><label class="field-label" for="notice">商城公告</label
+          ><n-input
+            id="notice"
+            v-model:value="form.notice"
+            type="textarea"
+            :maxlength="2000"
+          />
+          <p class="helper">站点地址：{{ data.public_url }}</p>
+        </section>
+        <section class="panel form-section">
+          <h3>HashPay</h3>
+          <label class="field-label" for="hashpay-url">HashPay 地址</label
+          ><n-input
+            id="hashpay-url"
+            v-model:value="form.hashpay_url"
+            placeholder="https://pay.example.com"
+          /><label class="field-label" for="merchant-id">商户 ID</label
+          ><n-input id="merchant-id" v-model:value="form.merchant_id" /><label
+            class="field-label"
+            for="merchant-key"
+            >商户 RSA 私钥</label
+          ><n-input
+            v-model:value="form.private_key"
+            type="textarea"
+            placeholder="留空保留现有私钥；填写 PEM 私钥以配置或替换"
+            :input-props="{
+              id: 'merchant-key',
+              autocomplete: 'off',
+              spellcheck: false,
+            }"
+          /><label class="field-label" for="manual-policy"
+            >HashPay 人工确认付款</label
+          ><n-select
+            id="manual-policy"
+            v-model:value="form.manual_policy"
+            :options="[
+              { label: '保留订单，由店主核实后调整策略', value: 'hold' },
+              { label: '接受 HashPay 管理员确认的已付款订单', value: 'accept' },
+            ]"
+          />
+          <p v-if="data.public_url.startsWith('https://')" class="helper">
+            回调地址：{{ data.public_url }}/api/webhooks/hashpay
+          </p>
+          <p v-else class="helper">
+            HTTP 站点使用签名查询补查付款，无需设置回调地址。
+          </p>
+          <n-alert
+            :type="data.key_configured ? 'success' : 'warning'"
+            class="space-top"
+            >{{
+              data.key_configured
+                ? "商户私钥已保存；请通过小额订单验证接入。"
+                : "商户私钥尚未配置。请在上方填写并保存。"
+            }}</n-alert
+          >
+          <p class="helper">
+            TOTP：{{
+              data.totp_enabled ? "已启用" : "未启用"
+            }}。私钥、密钥和密码保存后不会回显。
+          </p>
+          <p class="helper">
+            可用业务适配器：{{
+              data.adapters.length
+                ? data.adapters.join("、")
+                : "暂无；API 商品只能保存为草稿"
+            }}
+          </p>
+        </section>
+        <div class="form-actions">
+          <n-button
+            type="primary"
+            attr-type="submit"
+            :loading="saving"
+            class="space-top"
+            >保存设置</n-button
+          >
+        </div>
       </form>
       <n-alert v-if="error" type="error" class="space-top"
         >{{ error }}
@@ -154,3 +160,18 @@ async function save() {
     </section></n-spin
   >
 </template>
+
+<style scoped lang="scss">
+.settings-form {
+  display: grid;
+  gap: 14px;
+}
+
+.settings-panel {
+  max-width: 760px;
+}
+
+.settings-form .helper {
+  margin: 0;
+}
+</style>

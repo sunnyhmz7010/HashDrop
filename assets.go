@@ -2,7 +2,7 @@ package tinyfaka
 
 import "embed"
 
-// 构建前先运行前端构建；目录占位文件确保后端测试可独立运行。
+// 构建前先运行前端构建；all 保留 Vite 生成的下划线开头资源。
 //
-//go:embed migrations/*.sql backend/web
+//go:embed migrations/*.sql all:backend/web
 var Assets embed.FS

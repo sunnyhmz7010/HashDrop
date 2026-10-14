@@ -26,25 +26,50 @@ async function load() {
 onMounted(load);
 </script>
 <template>
-  <n-alert v-if="error" type="error" class="space-bottom"
-    >{{ error }} <n-button text @click="load">重试</n-button></n-alert
-  ><n-spin :show="busy"
-    ><div class="metrics">
-      <article v-for="[key, label] in labels" :key="key" class="panel metric">
-        <span class="muted">{{ label }}</span
-        ><strong>{{ data?.[key!] ?? "—" }}</strong>
-      </article>
-    </div></n-spin
-  >
-  <section class="panel space-top">
-    <h2>日常管理</h2>
-    <p class="muted">
-      先配置 HashPay，再上架商品。卡密和账号商品需要导入库存后才能购买。
-    </p>
-    <div class="quick-links">
-      <router-link to="/admin/products">管理商品与库存 →</router-link
-      ><router-link to="/admin/orders">查看待处理订单 →</router-link
-      ><router-link to="/admin/settings">检查支付设置 →</router-link>
+  <div class="grid overview-page">
+    <div class="section-title">
+      <h2>概览</h2>
+      <n-button :loading="busy" @click="load">刷新</n-button>
     </div>
-  </section>
+    <n-alert v-if="error" type="error" class="space-bottom"
+      >{{ error }} <n-button text @click="load">重试</n-button></n-alert
+    ><n-spin :show="busy"
+      ><div class="metric-row">
+        <article v-for="[key, label] in labels" :key="key" class="metric">
+          <span class="muted">{{ label }}</span
+          ><strong>{{ data?.[key!] ?? "—" }}</strong>
+        </article>
+      </div></n-spin
+    >
+    <section class="panel space-top">
+      <div class="section-title"><h2>日常管理</h2></div>
+      <p class="muted">
+        先配置 HashPay，再上架商品。卡密和账号商品需要导入库存后才能购买。
+      </p>
+      <div class="quick-links">
+        <router-link to="/admin/products">管理商品与库存 →</router-link
+        ><router-link to="/admin/orders">查看待处理订单 →</router-link
+        ><router-link to="/admin/settings">检查支付设置 →</router-link>
+      </div>
+    </section>
+  </div>
 </template>
+
+<style scoped lang="scss">
+.quick-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.quick-links a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@media (max-width: 820px) {
+  .quick-links {
+    flex-direction: column;
+  }
+}
+</style>

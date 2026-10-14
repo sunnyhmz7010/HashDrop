@@ -94,7 +94,9 @@ test("网页初始化、失败重填、HTTP 登录与只写私钥", async ({ pag
   ).toBe(409);
   await page.locator("#password input").fill("browser-setup-password");
   await page.getByRole("button", { name: "登录", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "店铺管理" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "概览", exact: true }),
+  ).toBeVisible();
   const cookie = (await page.context().cookies()).find(
     (cookie) => cookie.name === "tinyfaka_session",
   );
@@ -103,7 +105,7 @@ test("网页初始化、失败重填、HTTP 登录与只写私钥", async ({ pag
     httpOnly: true,
     sameSite: "Strict",
   });
-  await page.getByRole("link", { name: "系统设置", exact: true }).click();
+  await page.getByRole("menuitem", { name: "系统设置", exact: true }).click();
   await expect(page.getByLabel("商户 RSA 私钥", { exact: true })).toHaveValue(
     "",
   );
@@ -118,7 +120,9 @@ test("网页初始化、失败重填、HTTP 登录与只写私钥", async ({ pag
   expect(settings).not.toContain("browser-setup-password");
   await page.route("**/api/setup/status", (route) => route.abort());
   await page.reload();
-  await expect(page.locator("#site-title input")).toHaveValue("网页部署测试店铺");
+  await expect(page.locator("#site-title input")).toHaveValue(
+    "网页部署测试店铺",
+  );
   await page.unroute("**/api/setup/status");
   await page
     .getByLabel("商户 RSA 私钥", { exact: true })

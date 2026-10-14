@@ -5,13 +5,14 @@ import {
   NButton,
   NEmpty,
   NInput,
-  NModal,
   NSelect,
   NSpin,
   NTag,
   useDialog,
   useMessage,
 } from "naive-ui";
+import FormDialog from "./FormDialog.vue";
+import OrderRow from "./OrderRow.vue";
 import {
   api,
   copyText,
@@ -137,69 +138,59 @@ async function copy(value: string) {
 }
 </script>
 <template>
-  <div class="section-title space-bottom">
-    <h2>订单管理</h2>
-    <n-select
-      class="status-filter"
-      v-model:value="status"
-      :options="statusOptions"
-      :disabled="loading"
-      @update:value="() => load(1)"
-      aria-label="付款状态筛选"
-    />
-  </div>
-  <n-alert v-if="error" type="error" class="space-bottom"
-    >{{ error }} <n-button text @click="load()">重试</n-button></n-alert
-  ><n-spin :show="loading"
-    ><div v-if="items.length" class="panel table-panel">
-      <div class="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>订单号</th>
-              <th>商品 / 数量</th>
-              <th>金额</th>
-              <th>付款</th>
-              <th>交付</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="order in items" :key="order.id">
-              <td class="code-cell">{{ order.id }}</td>
-              <td class="name-cell">
-                {{ order.product_name }} × {{ order.quantity }}
-              </td>
-              <td>{{ money(order.total, order.currency) }}</td>
-              <td>{{ paymentNames[order.payment_status] }}</td>
-              <td>{{ deliveryNames[order.delivery_status] }}</td>
-              <td>
-                <n-button size="small" @click="open(order)">查看</n-button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+  <div class="orders-view grid">
+    <div class="section-title">
+      <h2>订单管理</h2>
+      <n-button :loading="loading" @click="load()">刷新</n-button>
+    </div>
+    <n-alert v-if="error" type="error"
+      >{{ error }} <n-button text @click="load()">重试</n-button></n-alert
+    >
+    <div class="orders-workbench">
+      <div class="orders-filter">
+        <n-select
+          class="status-filter"
+          v-model:value="status"
+          :options="statusOptions"
+          :disabled="loading"
+          @update:value="() => load(1)"
+          aria-label="付款状态筛选"
+        />
+      </div>
+      <n-spin :show="loading"
+        ><div class="orders-table">
+          <div class="orders-table-head order-row--plain">
+            <span>订单 / 商品</span><span>付款状态</span><span>金额</span
+            ><span>交付 / 数量</span><span>创建时间</span>
+          </div>
+          <OrderRow
+            v-for="order in items"
+            :key="order.id"
+            :order="order"
+            @open="open(order)"
+          />
+          <div
+            v-if="!items.length && !loading && !error"
+            class="orders-table-empty"
+          >
+            <n-empty
+              :description="status ? '没有符合条件的订单' : '暂无订单'"
+            />
+          </div></div
+      ></n-spin>
+      <div class="orders-pagination">
+        <span>第 {{ page }} 页</span>
+        <div class="topbar-actions">
+          <n-button :disabled="page === 1 || loading" @click="load(page - 1)"
+            >上一页</n-button
+          ><n-button :disabled="!more || loading" @click="load(page + 1)"
+            >下一页</n-button
+          >
+        </div>
       </div>
     </div>
-    <div v-else-if="!loading && !error" class="panel empty-panel">
-      <n-empty :description="status ? '没有符合条件的订单' : '暂无订单'" /></div
-  ></n-spin>
-  <div class="pagination">
-    <n-button :disabled="page === 1 || loading" @click="load(page - 1)"
-      >上一页</n-button
-    ><span>第 {{ page }} 页</span
-    ><n-button :disabled="!more || loading" @click="load(page + 1)"
-      >下一页</n-button
-    >
   </div>
-  <n-modal
-    v-model:show="show"
-    preset="card"
-    title="订单详情"
-    class="form-modal"
-    :mask-closable="!busy"
-    :closable="!busy"
-    :close-on-esc="!busy"
+  <FormDialog v-model:show="show" title="订单详情" :busy="busy"
     ><n-spin :show="busy"
       ><template v-if="selected"
         ><h2>
@@ -294,6 +285,6 @@ async function copy(value: string) {
       ></n-spin
     ><n-alert v-if="detailError" type="error" class="space-top">{{
       detailError
-    }}</n-alert></n-modal
+    }}</n-alert></FormDialog
   >
 </template>

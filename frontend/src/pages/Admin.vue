@@ -1,8 +1,19 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { NButton, useMessage } from "naive-ui";
-import { api, csrf, errorText } from "../api";
+import {
+  NButton,
+  NDrawer,
+  NDrawerContent,
+  NLayout,
+  NLayoutContent,
+  NLayoutHeader,
+  NLayoutSider,
+  NMenu,
+  useMessage,
+} from "naive-ui";
+import { api, csrf, errorText, site } from "../api";
+import { version } from "../../package.json";
 import Overview from "../components/Overview.vue";
 import Products from "../components/Products.vue";
 import Orders from "../components/Orders.vue";
@@ -10,7 +21,8 @@ import Settings from "../components/Settings.vue";
 const route = useRoute(),
   router = useRouter(),
   message = useMessage(),
-  busy = ref(false);
+  busy = ref(false),
+  navOpen = ref(false);
 const section = computed(() => String(route.params.section ?? "overview"));
 const sections = [
   { id: "overview", name: "概览" },
@@ -18,6 +30,14 @@ const sections = [
   { id: "orders", name: "订单" },
   { id: "settings", name: "系统设置" },
 ];
+const menuOptions = sections.map((item) => ({
+  key: item.id,
+  label: item.name,
+}));
+function openPage(key: string) {
+  navOpen.value = false;
+  void router.push(`/admin/${key}`);
+}
 async function logout() {
   busy.value = true;
   try {
@@ -32,23 +52,67 @@ async function logout() {
 }
 </script>
 <template>
-  <div class="admin-heading">
-    <div>
-      <p class="eyebrow">管理后台</p>
-      <h1>店铺管理</h1>
-    </div>
-    <n-button :loading="busy" @click="logout">退出登录</n-button>
-  </div>
-  <nav class="admin-nav">
-    <router-link
-      v-for="item in sections"
-      :key="item.id"
-      :to="`/admin/${item.id}`"
-      :class="{ active: section === item.id }"
-      >{{ item.name }}</router-link
-    >
-  </nav>
-  <Products v-if="section === 'products'" /><Orders
-    v-else-if="section === 'orders'"
-  /><Settings v-else-if="section === 'settings'" /><Overview v-else />
+  <!-- 基于 HashPay src/app/pages/Admin.vue 修改，接入 TinyFaka 路由和密码会话。
+       Copyright 2026 TGDash Team. Apache-2.0，见 frontend/public/HashPay-LICENSE.txt。 -->
+  <n-layout class="shell">
+    <n-layout-header class="topbar">
+      <div class="topbar-brand">
+        <n-button
+          class="mobile-menu-button"
+          circle
+          quaternary
+          size="small"
+          aria-label="打开管理菜单"
+          @click="navOpen = true"
+        >
+          <span class="hamburger-icon" aria-hidden="true"></span>
+        </n-button>
+        <span class="brand">{{ site.title }}</span>
+      </div>
+      <div class="topbar-actions">
+        <router-link to="/"
+          ><n-button quaternary size="small">商城</n-button></router-link
+        >
+        <n-button quaternary size="small" :loading="busy" @click="logout"
+          >退出登录</n-button
+        >
+      </div>
+    </n-layout-header>
+    <n-layout-content class="workspace-layout" content-class="workspace-page">
+      <n-drawer v-model:show="navOpen" placement="left" :width="260">
+        <n-drawer-content closable title="管理菜单">
+          <div class="workspace-nav workspace-nav--drawer">
+            <n-menu
+              :value="section"
+              :options="menuOptions"
+              @update:value="openPage"
+            />
+            <div class="workspace-release">
+              <span>TinyFaka v{{ version }}</span>
+            </div>
+          </div>
+        </n-drawer-content>
+      </n-drawer>
+      <n-layout has-sider class="workspace-frame">
+        <n-layout-sider bordered :width="210">
+          <div class="workspace-nav">
+            <n-menu
+              :value="section"
+              :options="menuOptions"
+              @update:value="openPage"
+            />
+            <div class="workspace-release">
+              <span>TinyFaka v{{ version }}</span>
+            </div>
+          </div>
+        </n-layout-sider>
+        <n-layout-content class="workspace-content">
+          <Products v-if="section === 'products'" /><Orders
+            v-else-if="section === 'orders'"
+          />
+          <Settings v-else-if="section === 'settings'" /><Overview v-else />
+        </n-layout-content>
+      </n-layout>
+    </n-layout-content>
+  </n-layout>
 </template>

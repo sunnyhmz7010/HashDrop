@@ -104,6 +104,8 @@ const zh = {
   "product.publication": "上架状态",
   "product.publish": "上架",
   "product.unpublish": "下架",
+  "product.hidden": "隐藏商品",
+  "product.hidden_help": "仅通过商品链接访问，不在商城首页展示。",
   "product.description": "商品介绍",
   "product.details": "商品详情（Markdown）",
   "product.edit_details": "编辑",
@@ -442,6 +444,9 @@ const en: Record<MessageKey, string> = {
   "product.publication": "Publication status",
   "product.publish": "Publish",
   "product.unpublish": "Unpublish",
+  "product.hidden": "Hidden product",
+  "product.hidden_help":
+    "Accessible via a direct link; hidden from the storefront.",
   "product.description": "Product introduction",
   "product.details": "Details (Markdown)",
   "product.edit_details": "Edit",

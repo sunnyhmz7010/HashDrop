@@ -96,9 +96,6 @@ async function buy() {
           <strong>{{ product.name }}</strong
           ><span>{{ money(product.price, product.currency) }}</span>
         </div>
-        <p v-if="['card', 'account'].includes(product.kind)" class="helper">
-          {{ t("stock.count", { quantity: product.available }) }}
-        </p>
         <div class="field-stack">
           <label class="field-label" for="purchase-quantity">{{
             t("product.quantity")
@@ -162,9 +159,6 @@ async function buy() {
 .purchase-summary span,
 .purchase-total > span {
   color: #6b7280;
-}
-.purchase-form p {
-  margin: 0;
 }
 .purchase-total {
   display: flex;

@@ -58,7 +58,12 @@ watch(
     <main class="page product-page">
       <template v-if="product">
         <section class="panel product-summary">
-          <router-link to="/" custom v-slot="{ href, navigate }">
+          <router-link
+            v-if="!product.hidden"
+            to="/"
+            custom
+            v-slot="{ href, navigate }"
+          >
             <n-button
               class="product-back"
               tag="a"

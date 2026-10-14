@@ -258,7 +258,7 @@ func testLegacyMigration(t *testing.T, oldVersion int) {
 		t.Fatal("升级错误推测了历史商户归属")
 	}
 	var version, foreignKeys, stock int
-	if err = a.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 5 {
+	if err = a.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 6 {
 		t.Fatal("数据库版本未升级")
 	}
 	if err = a.db.QueryRow("PRAGMA foreign_keys").Scan(&foreignKeys); err != nil || foreignKeys != 1 {

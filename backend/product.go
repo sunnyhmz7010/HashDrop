@@ -16,6 +16,7 @@ type Product struct {
 	Currency    string `json:"currency"`
 	Kind        string `json:"kind"`
 	Active      bool   `json:"active"`
+	Hidden      bool   `json:"hidden"`
 	Available   int    `json:"available"`
 	Reserved    int    `json:"reserved"`
 	Sold        int    `json:"sold"`
@@ -23,7 +24,7 @@ type Product struct {
 	UpdatedAt   int64  `json:"updated_at"`
 }
 
-const productSelect = `SELECT p.id,p.name,p.description,p.details,p.price,p.currency,p.kind,p.active,p.content,p.updated_at,
+const productSelect = `SELECT p.id,p.name,p.description,p.details,p.price,p.currency,p.kind,p.active,p.hidden,p.content,p.updated_at,
  (SELECT COUNT(*) FROM stock_items s WHERE s.product_id=p.id AND s.status='available'),
  (SELECT COUNT(*) FROM stock_items s WHERE s.product_id=p.id AND s.status='reserved'),
  (SELECT COUNT(*) FROM stock_items s WHERE s.product_id=p.id AND s.status='sold') FROM products p`
@@ -40,13 +41,14 @@ type scanner interface{ Scan(...any) error }
 
 func scanProduct(row scanner) (Product, error) {
 	var p Product
-	err := row.Scan(&p.ID, &p.Name, &p.Description, &p.Details, &p.Price, &p.Currency, &p.Kind, &p.Active, &p.Content, &p.UpdatedAt, &p.Available, &p.Reserved, &p.Sold)
+	err := row.Scan(&p.ID, &p.Name, &p.Description, &p.Details, &p.Price, &p.Currency, &p.Kind, &p.Active, &p.Hidden, &p.Content, &p.UpdatedAt, &p.Available, &p.Reserved, &p.Sold)
 	return p, err
 }
 func (a *App) products(active bool) ([]Product, error) {
 	q := productSelect
 	if active {
-		q += " WHERE p.active=1"
+		// 隐藏仅控制商城列表，直接访问详情和下单仍按上架状态判断。
+		q += " WHERE p.active=1 AND p.hidden=0"
 	}
 	q += " ORDER BY p.created_at DESC"
 	rows, err := a.db.Query(q)
@@ -107,6 +109,7 @@ type productInput struct {
 	Currency      string  `json:"currency"`
 	Kind          string  `json:"kind"`
 	Active        bool    `json:"active"`
+	Hidden        *bool   `json:"hidden"`
 	StaticContent string  `json:"static_content"`
 }
 
@@ -132,11 +135,12 @@ func (a *App) saveProduct(w http.ResponseWriter, r *http.Request) error {
 	id := r.PathValue("id")
 	content := ""
 	details := ""
+	hidden := false
 	if id == "" {
 		id = newID()
 	} else {
 		var kind string
-		if err := a.db.QueryRow("SELECT kind,content,details FROM products WHERE id=?", id).Scan(&kind, &content, &details); err == sql.ErrNoRows {
+		if err := a.db.QueryRow("SELECT kind,content,details,hidden FROM products WHERE id=?", id).Scan(&kind, &content, &details, &hidden); err == sql.ErrNoRows {
 			return &apiError{404, "商品不存在"}
 		} else if err != nil {
 			return err
@@ -147,6 +151,9 @@ func (a *App) saveProduct(w http.ResponseWriter, r *http.Request) error {
 	}
 	if input.Details != nil {
 		details = *input.Details
+	}
+	if input.Hidden != nil {
+		hidden = *input.Hidden
 	}
 	if input.Kind == "static" {
 		if input.StaticContent != "" {
@@ -161,8 +168,8 @@ func (a *App) saveProduct(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	now := unixNow()
-	_, err := a.db.Exec(`INSERT INTO products(id,name,description,details,price,currency,kind,active,content,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)
- ON CONFLICT(id) DO UPDATE SET name=excluded.name,description=excluded.description,details=excluded.details,price=excluded.price,currency=excluded.currency,active=excluded.active,content=excluded.content,updated_at=excluded.updated_at`, id, input.Name, input.Description, details, input.Price, input.Currency, input.Kind, input.Active, content, now, now)
+	_, err := a.db.Exec(`INSERT INTO products(id,name,description,details,price,currency,kind,active,hidden,content,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+ ON CONFLICT(id) DO UPDATE SET name=excluded.name,description=excluded.description,details=excluded.details,price=excluded.price,currency=excluded.currency,active=excluded.active,hidden=excluded.hidden,content=excluded.content,updated_at=excluded.updated_at`, id, input.Name, input.Description, details, input.Price, input.Currency, input.Kind, input.Active, hidden, content, now, now)
 	if err != nil {
 		return err
 	}

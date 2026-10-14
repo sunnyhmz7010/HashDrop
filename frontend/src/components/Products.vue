@@ -43,6 +43,7 @@ const model = reactive({
   currency: "CNY",
   kind: "card",
   active: false,
+  hidden: false,
   static_content: "",
 });
 const currencies = [
@@ -84,6 +85,7 @@ function edit(product?: Product) {
     product
       ? {
           ...product,
+          hidden: product.hidden ?? false,
           details: product.details ?? "",
           price: priceText(product.price, product.currency),
           static_content: "",
@@ -97,6 +99,7 @@ function edit(product?: Product) {
           currency: "CNY",
           kind: "card",
           active: false,
+          hidden: false,
           static_content: "",
         },
   );
@@ -118,6 +121,7 @@ async function save() {
         currency: model.currency,
         kind: model.kind,
         active: model.active,
+        hidden: model.hidden,
         static_content: model.static_content,
       },
     });
@@ -247,7 +251,12 @@ function removeStock(id: string) {
           </thead>
           <tbody>
             <tr v-for="p in products" :key="p.id">
-              <td class="name-cell">{{ p.name }}</td>
+              <td class="name-cell">
+                <router-link v-if="p.active" :to="`/products/${p.id}`">{{
+                  p.name
+                }}</router-link>
+                <template v-else>{{ p.name }}</template>
+              </td>
               <td>{{ kindNames[p.kind] }}</td>
               <td>{{ money(p.price, p.currency) }}</td>
               <td>
@@ -259,6 +268,9 @@ function removeStock(id: string) {
               </td>
               <td>
                 {{ p.active ? t("product.active") : t("product.inactive") }}
+                <span v-if="p.hidden" class="muted">
+                  · {{ t("product.hidden") }}</span
+                >
               </td>
               <td>
                 <div class="row-actions">
@@ -342,6 +354,17 @@ function removeStock(id: string) {
           <span class="muted">{{
             model.active ? t("product.publish") : t("product.unpublish")
           }}</span>
+        </div>
+        <div class="wide">
+          <label class="field-label" for="hidden">{{
+            t("product.hidden")
+          }}</label>
+          <n-switch
+            id="hidden"
+            v-model:value="model.hidden"
+            :aria-label="t('product.hidden')"
+          />
+          <p class="helper">{{ t("product.hidden_help") }}</p>
         </div>
         <div class="wide">
           <label class="field-label" for="description">{{
@@ -535,6 +558,10 @@ function removeStock(id: string) {
 
 .table-scroll .row-actions {
   flex-wrap: nowrap;
+}
+
+.name-cell a {
+  color: #18a058;
 }
 
 .form-grid .field-label {

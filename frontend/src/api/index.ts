@@ -57,6 +57,7 @@ export interface Product {
   currency: string;
   kind: string;
   active: boolean;
+  hidden: boolean;
   available: number;
   reserved: number;
   sold: number;

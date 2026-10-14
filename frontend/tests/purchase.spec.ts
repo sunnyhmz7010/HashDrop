@@ -5,9 +5,7 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(base);
-  await expect(
-    page.getByRole("heading", { name: "选好商品，付款后领取" }),
-  ).toBeVisible();
+  await expect(page.locator(".product-card").first()).toBeVisible();
   const card = page.locator(".product-card").filter({ hasText: "卡密" });
   await card.getByRole("button", { name: "查看商品" }).click();
   await page.getByRole("button", { name: "创建订单", exact: true }).click();
@@ -90,6 +88,11 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   await expect(page.locator("#site-title input")).toHaveValue(
     "TinyFaka 测试店铺",
   );
+  await expect(page.locator(".n-spin-content")).toHaveCSS("opacity", "1");
+  await page.screenshot({
+    path: "../.local/settings-desktop.png",
+    fullPage: true,
+  });
   for (const width of [1440, 768, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto(base);

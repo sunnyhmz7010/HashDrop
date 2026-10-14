@@ -41,35 +41,5 @@ onMounted(load);
         </article>
       </div></n-spin
     >
-    <section class="panel space-top">
-      <div class="section-title"><h2>日常管理</h2></div>
-      <p class="muted">
-        先配置 HashPay，再上架商品。卡密和账号商品需要导入库存后才能购买。
-      </p>
-      <div class="quick-links">
-        <router-link to="/admin/products">管理商品与库存 →</router-link
-        ><router-link to="/admin/orders">查看待处理订单 →</router-link
-        ><router-link to="/admin/settings">检查支付设置 →</router-link>
-      </div>
-    </section>
   </div>
 </template>
-
-<style scoped lang="scss">
-.quick-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 14px;
-}
-
-.quick-links a {
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-@media (max-width: 820px) {
-  .quick-links {
-    flex-direction: column;
-  }
-}
-</style>

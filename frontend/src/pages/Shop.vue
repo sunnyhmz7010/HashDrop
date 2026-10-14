@@ -28,10 +28,6 @@ onMounted(load);
 <template>
   <StoreLayout
     ><main class="page grid catalog-page">
-      <section class="catalog-heading">
-        <div class="section-title"><h1>选好商品，付款后领取</h1></div>
-        <p>无需注册。请保存订单领取链接，它是查看交付内容的凭证。</p>
-      </section>
       <n-alert
         v-if="notice"
         type="info"
@@ -89,11 +85,6 @@ onMounted(load);
 </template>
 
 <style scoped lang="scss">
-.catalog-heading p {
-  margin: 0;
-  color: #6b7280;
-}
-
 .product-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

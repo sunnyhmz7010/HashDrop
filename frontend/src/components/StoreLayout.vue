@@ -1,13 +1,7 @@
 <!-- 基于 HashPay src/app/pages/Pay.vue 修改：保留页框，导航接入 TinyFaka。
      Copyright 2026 TGDash Team. Apache-2.0，见 frontend/public/HashPay-LICENSE.txt。 -->
 <script setup lang="ts">
-import {
-  NButton,
-  NLayout,
-  NLayoutContent,
-  NLayoutFooter,
-  NLayoutHeader,
-} from "naive-ui";
+import { NButton, NLayout, NLayoutContent, NLayoutHeader } from "naive-ui";
 import { site } from "../api";
 </script>
 
@@ -32,9 +26,6 @@ import { site } from "../api";
       </div>
     </n-layout-header>
     <n-layout-content class="checkout-content"><slot /></n-layout-content>
-    <n-layout-footer class="checkout-footer"
-      >{{ site.title }} · 凭证领取</n-layout-footer
-    >
   </n-layout>
 </template>
 

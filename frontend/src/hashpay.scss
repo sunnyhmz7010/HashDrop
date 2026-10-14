@@ -243,23 +243,6 @@ a {
   gap: 7px;
 }
 
-.form-section {
-  border-bottom: 1px solid #eef0f3;
-  display: grid;
-  gap: 12px;
-  padding-bottom: 16px;
-}
-
-.form-section:last-child {
-  border-bottom: 0;
-  padding-bottom: 0;
-}
-
-.form-section h3 {
-  font-size: 15px;
-  margin: 0;
-}
-
 .field-help {
   color: #6b7280;
   font-size: 12px;
@@ -334,22 +317,6 @@ a {
   margin: 0 auto;
   padding: clamp(1rem, 4vw, 2rem);
   width: min(72rem, calc(100vw - 2rem));
-}
-
-.checkout-footer {
-  align-items: center;
-  background: transparent;
-  color: #6b7280;
-  display: flex;
-  font-size: 0.8rem;
-  gap: 0.4rem;
-  justify-content: center;
-  padding: 0.25rem 1rem 1.5rem;
-}
-
-.checkout-footer a:hover {
-  color: #16a34a;
-  text-decoration: underline;
 }
 
 .checkout-receipt,

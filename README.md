@@ -34,14 +34,14 @@
 
 ### 📦 安装与运行
 
-推荐使用 GitHub Actions 构建并发布的 GHCR 镜像，并使用与镜像版本匹配的 Compose 配置。`v0.0.2` 使用[对应的 Compose 文件](https://github.com/sunnyhmz7010/TinyFaka/blob/v0.0.2/compose.yaml)，可将镜像固定为 `ghcr.io/sunnyhmz7010/tinyfaka:0.0.2`。将 `compose.yaml` 保存到部署目录，然后执行：
+推荐使用 GitHub Actions 构建并发布的 GHCR 镜像，并使用与镜像版本匹配的 Compose 配置。`v0.0.3` 使用[对应的 Compose 文件](https://github.com/sunnyhmz7010/TinyFaka/blob/v0.0.3/compose.yaml)，可将镜像固定为 `ghcr.io/sunnyhmz7010/tinyfaka:0.0.3`。将 `compose.yaml` 保存到部署目录，然后执行：
 
 ```sh
 docker compose pull
 docker compose up -d
 ```
 
-当前 `main` 的无凭证账号初始化流程需下一版本镜像；已发布的 `v0.0.2` 请按[该版本说明](https://github.com/sunnyhmz7010/TinyFaka/blob/v0.0.2/README.md)初始化。
+`v0.0.3` 使用无凭证的管理员账号初始化流程；继续使用 `v0.0.2` 时请按[该版本说明](https://github.com/sunnyhmz7010/TinyFaka/blob/v0.0.2/README.md)初始化。
 
 浏览器访问 `http://服务器地址:8080`，自动进入初始化页面，直接填写管理员账号和密码，无需初始化凭证。页面同时提供站点名称、地址和 HashPay 商户信息；商城公告在初始化后的后台系统设置中填写。密码不要求最小长度或字符组合，只须非空并与确认密码一致。配置与密钥由服务端生成并保存到 Docker 持久化卷；无需填写环境变量或手工编辑配置文件。HTTP 会明文传输密码与私钥，应在可信网络中完成初始化。
 

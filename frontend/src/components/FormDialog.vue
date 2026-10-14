@@ -13,13 +13,14 @@ withDefaults(defineProps<{ title: string; busy?: boolean }>(), { busy: false });
       role="dialog"
       aria-modal="true"
       :aria-label="title"
-      :title="title"
+      :title="$slots.header ? undefined : title"
       :closable="!busy"
       :content-style="{ minHeight: '0', overflow: 'auto' }"
       :header-style="{ flexShrink: '0' }"
       :footer-style="{ flexShrink: '0' }"
       @close="show = false"
     >
+      <template v-if="$slots.header" #header><slot name="header" /></template>
       <slot />
       <template v-if="$slots.footer" #footer
         ><div class="form-actions"><slot name="footer" /></div

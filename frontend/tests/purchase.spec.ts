@@ -75,7 +75,11 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
     .click();
   await page.keyboard.press("Escape");
   await expect(page.locator(".form-modal")).toBeVisible();
-  await expect(page.locator(".form-modal .code-cell")).toContainText(orderID);
+  await expect(
+    page
+      .getByRole("dialog", { name: "订单详情" })
+      .getByText(orderID, { exact: true }),
+  ).toBeVisible();
   await page.unroute(`**/api/admin/orders/${orderID}`);
   await page.keyboard.press("Escape");
   await expect(page.locator(".form-modal")).toHaveCount(0);
@@ -222,10 +226,22 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
     "卡密-",
   );
   await expect(page.locator(".form-modal")).toHaveCSS("opacity", "1");
+  await expect(page.getByText("订单状态已更新", { exact: true })).toBeHidden();
   await page.screenshot({
     path: "../.local/order-actions-desktop.png",
     fullPage: true,
   });
+  await page.setViewportSize({ width: 390, height: 900 });
+  await expect(page.getByRole("dialog", { name: "订单详情" })).toBeInViewport();
+  await page.screenshot({ path: "../.local/order-actions-mobile.png" });
+  const orderDialog = page.getByRole("dialog", { name: "订单详情" });
+  await orderDialog.locator(".delivery-item pre").scrollIntoViewIfNeeded();
+  await expect(orderDialog.locator(".delivery-item pre")).toBeInViewport();
+  await expect(
+    orderDialog.getByText("订单详情", { exact: true }),
+  ).toBeInViewport();
+  await page.screenshot({ path: "../.local/order-delivery-mobile.png" });
+  await page.setViewportSize({ width: 1440, height: 1000 });
   let finishDelete = () => {};
   const pendingDelete = new Promise<void>((resolve) => {
     finishDelete = resolve;

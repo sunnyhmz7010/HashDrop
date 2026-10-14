@@ -30,7 +30,7 @@ func newSetupApp(t *testing.T) (*App, string) {
 	return a, token
 }
 func setupBody() setupInput {
-	return setupInput{Title: "网页初始化店铺", PublicURL: "http://127.0.0.1:8080", Password: "setup-password-only", PasswordConfirm: "setup-password-only", ManualPolicy: "hold"}
+	return setupInput{Title: "网页初始化店铺", PublicURL: "http://127.0.0.1:8080", Password: "setup-password-only", PasswordConfirm: "setup-password-only"}
 }
 func postSetup(a *App, token, origin string, input setupInput) *httptest.ResponseRecorder {
 	body, _ := json.Marshal(input)

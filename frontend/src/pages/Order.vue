@@ -50,7 +50,7 @@ async function load() {
     detail.value = result;
     error.value = "";
     if (
-      result.order.payment_status !== "closed" &&
+      !["closed", "invalid"].includes(result.order.payment_status) &&
       result.order.delivery_status !== "done"
     )
       timer = setTimeout(load, 8000);
@@ -227,7 +227,7 @@ const expires = computed(() =>
           <n-alert
             v-if="detail.order.payment_status === 'review'"
             type="warning"
-            >付款状态需要店主核实，库存仍为你保留。请勿重复付款。</n-alert
+            >网关订单暂未通过核验，库存仍为你保留。请勿重复付款。</n-alert
           >
           <n-alert
             v-else-if="detail.order.payment_status === 'creating'"

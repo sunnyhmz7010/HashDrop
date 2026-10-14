@@ -110,7 +110,7 @@ func (a *App) overview(w http.ResponseWriter, r *http.Request) error {
 	for _, q := range []struct {
 		query  string
 		target *int
-	}{{"SELECT COUNT(*) FROM products", &products}, {"SELECT COUNT(*) FROM stock_items WHERE status='available'", &stock}, {"SELECT COUNT(*) FROM orders", &orders}, {"SELECT COUNT(*) FROM orders WHERE payment_status='paid'", &paid}, {"SELECT COUNT(*) FROM orders WHERE payment_status='review' OR delivery_status='manual'", &manual}} {
+	}{{"SELECT COUNT(*) FROM products", &products}, {"SELECT COUNT(*) FROM stock_items WHERE status='available'", &stock}, {"SELECT COUNT(*) FROM orders WHERE deleted_at IS NULL", &orders}, {"SELECT COUNT(*) FROM orders WHERE deleted_at IS NULL AND payment_status='paid'", &paid}, {"SELECT COUNT(*) FROM orders WHERE deleted_at IS NULL AND (payment_status='review' OR delivery_status='manual')", &manual}} {
 		if err = a.db.QueryRowContext(r.Context(), q.query).Scan(q.target); err != nil {
 			return err
 		}
@@ -127,15 +127,15 @@ func (a *App) adminOrders(w http.ResponseWriter, r *http.Request) error {
 		return bad("页码超限")
 	}
 	status := r.URL.Query().Get("status")
-	q := orderSelect
+	q := orderSelect + " WHERE deleted_at IS NULL"
 	args := []any{}
 	if status != "" {
 		switch status {
-		case "creating", "pending", "paid", "review", "closed":
+		case "creating", "pending", "paid", "expired", "invalid", "review", "closed":
 		default:
 			return bad("状态无效")
 		}
-		q += " WHERE payment_status=?"
+		q += " AND payment_status=?"
 		args = append(args, status)
 	}
 	q += " ORDER BY created_at DESC,id DESC LIMIT 21 OFFSET ?"
@@ -164,7 +164,7 @@ func (a *App) adminOrders(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 func (a *App) adminOrder(w http.ResponseWriter, r *http.Request) error {
-	o, err := a.loadOrder(r.Context(), r.PathValue("id"))
+	o, err := scanOrder(a.db.QueryRowContext(r.Context(), orderSelect+" WHERE id=? AND deleted_at IS NULL", r.PathValue("id")))
 	if err == sql.ErrNoRows {
 		return &apiError{404, "订单不存在"}
 	}
@@ -179,6 +179,12 @@ func (a *App) adminOrder(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 func (a *App) recheckOrder(w http.ResponseWriter, r *http.Request) error {
+	var id string
+	if err := a.db.QueryRowContext(r.Context(), "SELECT id FROM orders WHERE id=? AND deleted_at IS NULL", r.PathValue("id")).Scan(&id); err == sql.ErrNoRows {
+		return &apiError{404, "订单不存在"}
+	} else if err != nil {
+		return err
+	}
 	if err := a.syncOrder(r.Context(), r.PathValue("id")); err != nil {
 		return &apiError{502, safeGatewayError(err)}
 	}
@@ -249,59 +255,22 @@ func (a *App) retryOrder(w http.ResponseWriter, r *http.Request) error {
 	}
 	return a.adminOrder(w, r)
 }
-func (a *App) releaseOrder(w http.ResponseWriter, r *http.Request) error {
-	var input struct {
-		Confirm bool `json:"confirm"`
-	}
-	if err := readJSON(w, r, &input); err != nil {
-		return err
-	}
-	if !input.Confirm {
-		return bad("请明确确认释放库存")
-	}
-	a.workerMu.Lock()
-	defer a.workerMu.Unlock()
-	o, err := a.loadOrder(r.Context(), r.PathValue("id"))
+func (a *App) deleteOrder(w http.ResponseWriter, r *http.Request) error {
+	// 后台逻辑删除，不取消网关订单、不释放库存、不破坏领取与回调映射。
+	result, err := a.db.ExecContext(r.Context(), "UPDATE orders SET deleted_at=COALESCE(deleted_at,?),updated_at=? WHERE id=?", unixNow(), unixNow(), r.PathValue("id"))
 	if err != nil {
 		return err
 	}
-	if o.PaymentStatus == "paid" || o.GatewayID == "" {
-		return bad("订单已付款或支付结果不明，不能释放")
-	}
-	if o.PaymentStatus == "closed" {
-		return a.adminOrder(w, r)
-	}
-	client, err := newHashPay(a.settings().HashPay)
-	if err != nil {
-		return &apiError{503, "支付网关未就绪"}
-	}
-	remote, err := client.query(r.Context(), o.GatewayID)
-	if err != nil {
-		return &apiError{502, safeGatewayError(err)}
-	}
-	amount, e := decimalMinor(remote.Amount.String(), o.Currency)
-	if e != nil || remote.ID != o.GatewayID || remote.MerchantNo != o.ID || remote.MerchantID != a.settings().HashPay.MerchantID || remote.Currency != o.Currency || amount != o.Total || remote.Status != "invalid" {
-		return bad("只有查询确认归属、金额正确且为 invalid 的订单才能释放；过期订单不能释放")
-	}
-	tx, err := a.db.BeginTx(r.Context(), nil)
+	count, err := result.RowsAffected()
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
-	if _, err = tx.Exec("UPDATE stock_items SET status='available',order_id=NULL WHERE order_id=? AND status='reserved'", o.ID); err != nil {
-		return err
+	if count == 0 {
+		return &apiError{404, "订单不存在"}
 	}
-	if _, err = tx.Exec("UPDATE deliveries SET stock_id=NULL,status='manual',last_error='订单关闭并释放库存',updated_at=? WHERE order_id=? AND status<>'done'", unixNow(), o.ID); err != nil {
-		return err
-	}
-	if _, err = tx.Exec("UPDATE orders SET payment_status='closed',delivery_status='manual',reservation_status='released',updated_at=? WHERE id=? AND payment_status<>'paid'", unixNow(), o.ID); err != nil {
-		return err
-	}
-	if err = tx.Commit(); err != nil {
-		return err
-	}
-	audit("reservation_released", o.ID)
-	return a.adminOrder(w, r)
+	audit("order_deleted", r.PathValue("id"))
+	reply(w, 200, map[string]bool{"ok": true})
+	return nil
 }
 
 type SettingsView struct {
@@ -310,7 +279,6 @@ type SettingsView struct {
 	PublicURL     string   `json:"public_url"`
 	HashPayURL    string   `json:"hashpay_url"`
 	MerchantID    string   `json:"merchant_id"`
-	ManualPolicy  string   `json:"manual_policy"`
 	KeyConfigured bool     `json:"key_configured"`
 	TOTPEnabled   bool     `json:"totp_enabled"`
 	Adapters      []string `json:"adapters"`
@@ -322,22 +290,21 @@ func (a *App) getSettings(w http.ResponseWriter, r *http.Request) error {
 	for name := range a.adapters {
 		names = append(names, name)
 	}
-	reply(w, 200, SettingsView{c.Title, c.Notice, c.PublicURL, c.HashPay.BaseURL, c.HashPay.MerchantID, c.HashPay.ManualPolicy, c.HashPay.PrivateKeyFile != "", c.TOTPSecret != "", names})
+	reply(w, 200, SettingsView{c.Title, c.Notice, c.PublicURL, c.HashPay.BaseURL, c.HashPay.MerchantID, c.HashPay.PrivateKeyFile != "", c.TOTPSecret != "", names})
 	return nil
 }
 func (a *App) updateSettings(w http.ResponseWriter, r *http.Request) error {
 	var input struct {
-		Title        string `json:"title"`
-		Notice       string `json:"notice"`
-		HashPayURL   string `json:"hashpay_url"`
-		MerchantID   string `json:"merchant_id"`
-		ManualPolicy string `json:"manual_policy"`
-		PrivateKey   string `json:"private_key"`
+		Title      string `json:"title"`
+		Notice     string `json:"notice"`
+		HashPayURL string `json:"hashpay_url"`
+		MerchantID string `json:"merchant_id"`
+		PrivateKey string `json:"private_key"`
 	}
 	if err := readJSON(w, r, &input); err != nil {
 		return err
 	}
-	// 同一把锁阻止补查与网关配置切换并发；存在未关闭订单时禁止更换商户映射。
+	// 同一把锁阻止补查与网关配置切换并发；未终止订单（包括已删除记录）仍使用原商户映射。
 	a.workerMu.Lock()
 	defer a.workerMu.Unlock()
 	a.configMu.Lock()
@@ -345,7 +312,7 @@ func (a *App) updateSettings(w http.ResponseWriter, r *http.Request) error {
 	c := a.config
 	if strings.TrimRight(input.HashPayURL, "/") != strings.TrimRight(c.HashPay.BaseURL, "/") || input.MerchantID != c.HashPay.MerchantID {
 		var count int
-		if err := a.db.QueryRow("SELECT COUNT(*) FROM orders WHERE payment_status<>'closed'").Scan(&count); err != nil {
+		if err := a.db.QueryRow("SELECT COUNT(*) FROM orders WHERE payment_status NOT IN ('closed','invalid')").Scan(&count); err != nil {
 			return err
 		}
 		if count > 0 {
@@ -356,7 +323,6 @@ func (a *App) updateSettings(w http.ResponseWriter, r *http.Request) error {
 	c.Notice = input.Notice
 	c.HashPay.BaseURL = strings.TrimRight(input.HashPayURL, "/")
 	c.HashPay.MerchantID = strings.TrimSpace(input.MerchantID)
-	c.HashPay.ManualPolicy = input.ManualPolicy
 	if c.HashPay.BaseURL != "" || c.HashPay.MerchantID != "" || input.PrivateKey != "" {
 		if c.HashPay.BaseURL == "" || c.HashPay.MerchantID == "" || (c.HashPay.PrivateKeyFile == "" && input.PrivateKey == "") {
 			return bad("HashPay 地址、商户 ID 和私钥须完整填写")

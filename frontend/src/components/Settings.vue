@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
-import { NAlert, NButton, NInput, NSelect, NSpin, useMessage } from "naive-ui";
+import { NAlert, NButton, NInput, NSpin, useMessage } from "naive-ui";
 import { api, errorText, site, type Settings } from "../api";
 const message = useMessage(),
   data = ref<Settings>({
@@ -9,7 +9,6 @@ const message = useMessage(),
     public_url: "",
     hashpay_url: "",
     merchant_id: "",
-    manual_policy: "hold",
     key_configured: false,
     totp_enabled: false,
     adapters: [],
@@ -23,7 +22,6 @@ const form = reactive({
   notice: "",
   hashpay_url: "",
   merchant_id: "",
-  manual_policy: "hold",
   private_key: "",
 });
 async function load() {
@@ -37,7 +35,6 @@ async function load() {
       notice: data.value.notice,
       hashpay_url: data.value.hashpay_url,
       merchant_id: data.value.merchant_id,
-      manual_policy: data.value.manual_policy,
       private_key: "",
     });
     loaded.value = true;
@@ -155,22 +152,6 @@ async function save() {
                   autocomplete: 'off',
                   spellcheck: false,
                 }"
-              />
-            </div>
-            <div class="field-stack settings-wide">
-              <label class="field-label" for="manual-policy"
-                >HashPay 人工确认付款</label
-              >
-              <n-select
-                id="manual-policy"
-                v-model:value="form.manual_policy"
-                :options="[
-                  { label: '保留订单，由店主核实后调整策略', value: 'hold' },
-                  {
-                    label: '接受 HashPay 管理员确认的已付款订单',
-                    value: 'accept',
-                  },
-                ]"
               />
             </div>
           </div>

@@ -185,7 +185,7 @@ func initialize(path, site, dataDir string, dev bool) error {
 	if err != nil {
 		return err
 	}
-	c := Config{Listen: "127.0.0.1:8080", PublicURL: site, Database: filepath.Join(absoluteDataDir, "tinyfaka.db"), BackupDir: filepath.Join(absoluteDataDir, "backups"), Title: "TinyFaka", Development: dev, AdminPassword: passwordHash(password), CurrentKey: "v1", EncryptionKeys: map[string]string{"v1": base64.StdEncoding.EncodeToString(key)}, DedupKey: base64.StdEncoding.EncodeToString(dedup), HashPay: HashPayConfig{ManualPolicy: "hold"}}
+	c := Config{Listen: "127.0.0.1:8080", PublicURL: site, Database: filepath.Join(absoluteDataDir, "tinyfaka.db"), BackupDir: filepath.Join(absoluteDataDir, "backups"), Title: "TinyFaka", Development: dev, AdminPassword: passwordHash(password), CurrentKey: "v1", EncryptionKeys: map[string]string{"v1": base64.StdEncoding.EncodeToString(key)}, DedupKey: base64.StdEncoding.EncodeToString(dedup)}
 	if err := validateConfig(c); err != nil {
 		return err
 	}

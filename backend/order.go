@@ -215,9 +215,6 @@ func (a *App) syncOrderLocked(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	if o.PaymentStatus == "paid" {
-		return a.deliverOrder(ctx, o)
-	}
 	config := a.settings()
 	client, err := newHashPay(config.HashPay)
 	if err != nil {
@@ -252,11 +249,7 @@ func (a *App) syncOrderLocked(ctx context.Context, id string) error {
 		return errors.New("HashPay 查询结果不匹配")
 	}
 	if remote.Status == "paid" {
-		by := remote.Payment.TX.ConfirmedBy
-		if by != "system" && !(by == "admin" && config.HashPay.ManualPolicy == "accept") {
-			_, err = a.db.ExecContext(ctx, "UPDATE orders SET payment_status='review',last_error='网关人工确认或付款证据缺失，请核实人工付款策略',next_check=?,updated_at=? WHERE id=? AND payment_status<>'paid'", unixNow()+900, unixNow(), id)
-			return err
-		}
+		// 已完成签名查询和身份/金额核验，付款状态由 HashPay 决定。
 		if err = a.markPaid(ctx, id); err != nil {
 			return err
 		}
@@ -266,15 +259,41 @@ func (a *App) syncOrderLocked(ctx context.Context, id string) error {
 		}
 		return a.deliverOrder(ctx, o)
 	}
-	status, next := "pending", int64(30)
-	if remote.Status == "expired" || remote.Status == "invalid" {
-		status = "review"
-		next = 900
-	} else if remote.Status != "pending" {
+	if remote.Status == "invalid" {
+		return a.invalidateOrder(ctx, id)
+	}
+	if remote.Status != "pending" && remote.Status != "expired" {
 		return errors.New("HashPay 订单状态未知")
 	}
-	_, err = a.db.ExecContext(ctx, "UPDATE orders SET payment_status=CASE WHEN payment_status='closed' THEN 'closed' ELSE ? END,next_check=?,last_error='',updated_at=? WHERE id=? AND payment_status<>'paid'", status, unixNow()+next, unixNow(), id)
+	next := int64(30)
+	if remote.Status == "expired" {
+		next = 900 // 过期仍可能迟到付款，继续保留库存并补查。
+	}
+	_, err = a.db.ExecContext(ctx, "UPDATE orders SET payment_status=?,next_check=?,last_error='',updated_at=? WHERE id=?", remote.Status, unixNow()+next, unixNow(), id)
 	return err
+}
+
+func (a *App) invalidateOrder(ctx context.Context, id string) error {
+	// 仅在已核验的 HashPay invalid 终态释放预留；已售库存不能重新出售。
+	tx, err := a.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, "UPDATE stock_items SET status='available',order_id=NULL WHERE order_id=? AND status='reserved'", id); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, "UPDATE deliveries SET stock_id=NULL,status='manual',last_error='HashPay 订单已失效',updated_at=? WHERE order_id=? AND status<>'done'", unixNow(), id); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, "UPDATE orders SET payment_status='invalid',reservation_status=CASE WHEN reservation_status='reserved' THEN 'released' ELSE reservation_status END,delivery_status=CASE WHEN delivery_status='done' THEN 'done' ELSE 'cancelled' END,last_error='',updated_at=? WHERE id=?", unixNow(), id); err != nil {
+		return err
+	}
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	audit("gateway_order_invalid", id)
+	return nil
 }
 func (a *App) markPaid(ctx context.Context, id string) error {
 	tx, err := a.db.BeginTx(ctx, nil)

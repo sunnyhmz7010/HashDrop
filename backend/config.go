@@ -18,7 +18,6 @@ type HashPayConfig struct {
 	BaseURL        string `json:"base_url"`
 	MerchantID     string `json:"merchant_id"`
 	PrivateKeyFile string `json:"private_key_file"`
-	ManualPolicy   string `json:"manual_policy"`
 }
 type Config struct {
 	Listen         string            `json:"listen"`
@@ -112,9 +111,6 @@ func validateConfig(c Config) error {
 		if err != nil || len(key) < 16 {
 			return errors.New("TOTP 密钥必须为至少 16 字节的 Base32")
 		}
-	}
-	if c.HashPay.ManualPolicy != "hold" && c.HashPay.ManualPolicy != "accept" {
-		return errors.New("人工付款策略必须为 hold 或 accept")
 	}
 	if c.HashPay.BaseURL != "" {
 		if err := validGatewayURL(c.HashPay.BaseURL); err != nil {

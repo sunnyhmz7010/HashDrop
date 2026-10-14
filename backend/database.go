@@ -42,32 +42,60 @@ func openDatabase(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, err
 	}
-	if version > 1 {
+	if version > 2 {
 		db.Close()
 		return nil, fmt.Errorf("数据库版本 %d 高于程序支持的版本", version)
 	}
-	if version == 0 {
-		schema, readErr := tinyfaka.Assets.ReadFile("migrations/001_init.sql")
-		if readErr != nil {
-			db.Close()
-			return nil, readErr
-		}
-		tx, txErr := db.Begin()
-		if txErr != nil {
-			db.Close()
-			return nil, txErr
-		}
-		if _, err = tx.Exec(string(schema)); err == nil {
-			err = tx.Commit()
-		} else {
-			_ = tx.Rollback()
-		}
-		if err != nil {
+	if version < 2 {
+		if err = migrateDatabase(db, version); err != nil {
 			db.Close()
 			return nil, err
 		}
 	}
 	return db, nil
+}
+
+func migrateDatabase(db *sql.DB, version int) error {
+	// 迁移发生在启动阶段。固定连接，事务中重建 orders 后检查所有外键。
+	conn, err := db.Conn(context.Background())
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if _, err = conn.ExecContext(context.Background(), "PRAGMA foreign_keys=OFF"); err != nil {
+		return err
+	}
+	for _, file := range []string{"migrations/001_init.sql", "migrations/002_gateway_orders.sql"}[version:] {
+		schema, readErr := tinyfaka.Assets.ReadFile(file)
+		if readErr != nil {
+			return readErr
+		}
+		tx, txErr := conn.BeginTx(context.Background(), nil)
+		if txErr != nil {
+			return txErr
+		}
+		if _, err = tx.Exec(string(schema)); err != nil {
+			tx.Rollback()
+			return err
+		}
+		rows, checkErr := tx.Query("PRAGMA foreign_key_check")
+		if checkErr != nil {
+			tx.Rollback()
+			return checkErr
+		}
+		invalid := rows.Next()
+		checkErr = rows.Err()
+		rows.Close()
+		if invalid || checkErr != nil {
+			tx.Rollback()
+			return fmt.Errorf("迁移 %s 的外键校验失败: %v", file, checkErr)
+		}
+		if err = tx.Commit(); err != nil {
+			return err
+		}
+	}
+	_, err = conn.ExecContext(context.Background(), "PRAGMA foreign_keys=ON")
+	return err
 }
 
 func backupDatabase(ctx context.Context, db *sql.DB, target string) error {

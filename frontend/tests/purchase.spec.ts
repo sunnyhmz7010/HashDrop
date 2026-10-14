@@ -213,5 +213,63 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
     blocked.getByRole("button", { name: "前往 HashPay 付款" }),
   ).toBeEnabled();
   await blocked.close();
+  await page.goto(`${base}/admin/orders`);
+  const paidRow = page.locator(".order-row").filter({ hasText: orderID });
+  await paidRow.getByRole("button", { name: orderID, exact: true }).click();
+  await page.getByRole("button", { name: "刷新状态", exact: true }).click();
+  await expect(page.getByText("订单状态已更新", { exact: true })).toBeVisible();
+  await expect(page.locator(".form-modal .delivery-item pre")).toContainText(
+    "卡密-",
+  );
+  await expect(page.locator(".form-modal")).toHaveCSS("opacity", "1");
+  await page.screenshot({
+    path: "../.local/order-actions-desktop.png",
+    fullPage: true,
+  });
+  let finishDelete = () => {};
+  const pendingDelete = new Promise<void>((resolve) => {
+    finishDelete = resolve;
+  });
+  await page.route(`**/api/admin/orders/${orderID}`, async (route) => {
+    if (route.request().method() === "DELETE") {
+      await pendingDelete;
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "删除暂时失败" }),
+      });
+    } else await route.continue();
+  });
+  await page.getByRole("button", { name: "删除订单", exact: true }).click();
+  const confirmation = page.locator(".n-dialog");
+  await confirmation
+    .getByRole("button", { name: "删除订单", exact: true })
+    .click();
+  try {
+    await expect(
+      confirmation.getByRole("button", { name: "取消", exact: true }),
+    ).toBeDisabled();
+    await page.keyboard.press("Escape");
+    await expect(confirmation).toBeVisible();
+  } finally {
+    finishDelete();
+  }
+  await expect(
+    confirmation.getByRole("button", { name: "取消", exact: true }),
+  ).toBeEnabled();
+  await expect(page.locator(".form-modal")).toBeVisible();
+  await expect(paidRow).toBeVisible();
+  await expect(
+    confirmation.getByRole("button", { name: "删除订单", exact: true }),
+  ).toBeEnabled();
+  await page.unroute(`**/api/admin/orders/${orderID}`);
+  await confirmation
+    .getByRole("button", { name: "删除订单", exact: true })
+    .click();
+  await expect(paidRow).toHaveCount(0);
+  await page.reload();
+  await expect(paidRow).toHaveCount(0);
+  await page.goto(receipt);
+  await expect(page.locator(".delivery-item pre")).toContainText("卡密-");
   expect(errors).toEqual([]);
 });

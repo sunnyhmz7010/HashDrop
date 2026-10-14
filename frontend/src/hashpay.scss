@@ -563,6 +563,11 @@ a {
   color: #6b7280;
 }
 
+.order-status.is-error {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
 .order-amount-cell strong,
 .order-payment-cell strong {
   font-size: 13px;

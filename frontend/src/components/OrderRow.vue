@@ -9,6 +9,8 @@ const statusClass = computed(
   () =>
     ({
       paid: "is-success",
+      expired: "is-muted",
+      invalid: "is-error",
       pending: "is-warning",
       creating: "is-warning",
       review: "is-warning",

@@ -54,7 +54,7 @@ docker compose logs tinyfaka
 
 购买者创建订单后先保存领取链接，再跳转 HashPay。链接中的 `#token=` 是私密凭证，前端仅通过 Bearer 请求本地 API；不会传给 HashPay。丢失链接且当前浏览器会话没有保存凭证时，原则上无法自动找回。
 
-订单异常可在后台重新核实付款或重试原交付。网关 `expired` 不代表永不付款，因此继续保留库存。释放需要管理员明确操作并二次查询确认 `invalid`；HashPay 原生商户 API 不提供取消订单接口。
+后台订单详情提供刷新状态、删除订单和重试交付。付款状态由 HashPay 签名查询结果决定，店主不能在本站手动改为已付款或关闭。网关 `expired` 不代表永不付款，因此继续保留库存；核验为 `invalid` 后自动释放尚未交付的库存。删除从后台列表及统计中移除订单，保留网关映射、补查任务和购买者领取结果，不取消网关订单。
 
 ## 🧠 功能细节
 
@@ -62,7 +62,7 @@ docker compose logs tinyfaka
 
 库存、固定内容和交付结果使用 AES-256-GCM 加密，并通过记录 ID 的附加认证数据防跨记录替换。去重密钥独立保留；领取 Token 和管理员会话只保存 SHA-256 哈希。配置文件与商户私钥不由静态服务提供，不在 API 返回。
 
-HashPay 创建超时重试复用 `merchantNo`。回调解密成功不能证明来源，首次付款确认必须签名查询并匹配商户、订单号、金额、币种、`paid` 和付款证据。默认保留人工确认付款，店主可明确选择接受 HashPay 管理员确认。API 请求结果不明时禁止盲目重试。
+HashPay 创建超时重试复用 `merchantNo`。回调解密成功不能证明来源，付款确认必须签名查询并匹配商户、订单号、金额、币种和 `paid`；HashPay 自动确认及管理员确认均按网关状态接受。API 请求结果不明时禁止盲目重试。启动时按版本事务迁移 SQLite，保留现有订单、库存、交付与外键关系。
 
 ## 🧱 技术栈
 
@@ -81,7 +81,7 @@ TinyFaka/
 │   ├── src/pages/        # 商城、订单、登录与后台入口
 │   ├── src/components/   # 管理页面组件
 │   └── tests/            # 核心购买与管理流程浏览器验证
-├── migrations/001_init.sql
+├── migrations/           # SQLite 初始化与版本迁移
 ├── .github/workflows/docker.yml # GitHub 构建并发布 GHCR 镜像
 ├── Dockerfile            # 前端和 Go 多阶段构建，运行镜像无 Node.js
 ├── compose.yaml          # VPS 直接拉取镜像部署

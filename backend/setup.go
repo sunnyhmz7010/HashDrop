@@ -42,7 +42,6 @@ type setupInput struct {
 	HashPayURL      string `json:"hashpay_url"`
 	MerchantID      string `json:"merchant_id"`
 	PrivateKey      string `json:"private_key"`
-	ManualPolicy    string `json:"manual_policy"`
 }
 
 func (a *App) setupStatus(w http.ResponseWriter, r *http.Request) error {
@@ -96,10 +95,7 @@ func (a *App) setup(w http.ResponseWriter, r *http.Request) error {
 	dedup, _ := base64.RawURLEncoding.DecodeString(randomToken())
 	c.EncryptionKeys = map[string]string{"v1": base64.StdEncoding.EncodeToString(key)}
 	c.DedupKey = base64.StdEncoding.EncodeToString(dedup)
-	c.HashPay = HashPayConfig{BaseURL: strings.TrimRight(strings.TrimSpace(input.HashPayURL), "/"), MerchantID: strings.TrimSpace(input.MerchantID), ManualPolicy: input.ManualPolicy}
-	if c.HashPay.ManualPolicy == "" {
-		c.HashPay.ManualPolicy = "hold"
-	}
+	c.HashPay = HashPayConfig{BaseURL: strings.TrimRight(strings.TrimSpace(input.HashPayURL), "/"), MerchantID: strings.TrimSpace(input.MerchantID)}
 	if err := validateConfig(c); err != nil {
 		return bad(err.Error())
 	}

@@ -62,7 +62,7 @@ func newTestApp(t *testing.T) (*App, *fakeGateway) {
 	g := &fakeGateway{key: key, orders: map[string]GatewayOrder{}}
 	g.server = httptest.NewServer(http.HandlerFunc(g.handler))
 	t.Cleanup(g.server.Close)
-	c := Config{Listen: "127.0.0.1:8080", PublicURL: "http://127.0.0.1:8080", Title: "TinyFaka", Development: true, Database: filepath.Join(dir, "test.db"), BackupDir: filepath.Join(dir, "backups"), AdminPassword: passwordHash("test-password-only"), HashPay: HashPayConfig{BaseURL: g.server.URL, MerchantID: "merchant-test", PrivateKeyFile: keyPath, ManualPolicy: "hold"}}
+	c := Config{Listen: "127.0.0.1:8080", PublicURL: "http://127.0.0.1:8080", Title: "TinyFaka", Development: true, Database: filepath.Join(dir, "test.db"), BackupDir: filepath.Join(dir, "backups"), AdminPassword: passwordHash("test-password-only"), HashPay: HashPayConfig{BaseURL: g.server.URL, MerchantID: "merchant-test", PrivateKeyFile: keyPath}}
 	app := &App{db: db, vault: v, config: c, limits: newLimiter(), adapters: map[string]APIAdapter{}, wake: make(chan struct{}, 1)}
 	app.initialized.Store(true)
 	return app, g
@@ -291,7 +291,7 @@ func TestPaymentMismatchHoldsInventory(t *testing.T) {
 		})
 	}
 }
-func TestStaticSnapshotAndManualPolicy(t *testing.T) {
+func TestStaticSnapshotAndGatewayAdminPayment(t *testing.T) {
 	a, g := newTestApp(t)
 	id := insertProduct(t, a, "static", 0)
 	o, _ := reserve(t, a, id, 1)
@@ -317,12 +317,8 @@ func TestStaticSnapshotAndManualPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.PaymentStatus != "review" {
-		t.Fatal("人工付款未保留核实")
-	}
-	a.config.HashPay.ManualPolicy = "accept"
-	if err = a.syncOrder(context.Background(), o.ID); err != nil {
-		t.Fatal(err)
+	if loaded.PaymentStatus != "paid" {
+		t.Fatal("HashPay 人工确认的已付款状态未被接受")
 	}
 	results, err := a.deliveryResults(context.Background(), o.ID)
 	if err != nil {
@@ -610,28 +606,24 @@ func TestUnknownGatewayCreationReusesOrder(t *testing.T) {
 	}
 }
 
-func TestReleaseRequiresTerminalStateAndPreservesAllocation(t *testing.T) {
+func TestGatewayTerminalStatePreservesAllocation(t *testing.T) {
 	a, g := newTestApp(t)
 	product := insertProduct(t, a, "card", 1)
 	o, _ := reserve(t, a, product, 1)
 	if err := a.syncOrder(context.Background(), o.ID); err != nil {
 		t.Fatal(err)
 	}
-	release := func() *httptest.ResponseRecorder {
-		req := httptest.NewRequest("POST", "/release", strings.NewReader(`{"confirm":true}`))
-		req.SetPathValue("id", o.ID)
-		req.Header.Set("Content-Type", "application/json")
-		w := httptest.NewRecorder()
-		wrap(a.releaseOrder)(w, req)
-		return w
-	}
 	g.set(o.ID, "expired", "")
-	if w := release(); w.Code != 400 {
-		t.Fatalf("过期库存被释放: %s", w.Body)
+	if err := a.syncOrder(context.Background(), o.ID); err != nil {
+		t.Fatal(err)
+	}
+	expired, err := a.loadOrder(context.Background(), o.ID)
+	if err != nil || expired.PaymentStatus != "expired" || expired.ReservationStatus != "reserved" {
+		t.Fatal("过期状态未同步或库存被释放")
 	}
 	g.set(o.ID, "invalid", "")
-	if w := release(); w.Code != 200 {
-		t.Fatalf("终态释放失败: %s", w.Body)
+	if err := a.syncOrder(context.Background(), o.ID); err != nil {
+		t.Fatal(err)
 	}
 	next, _ := reserve(t, a, product, 1)
 	// 即使网关异常地从终态转回付款，也不能拿走后来订单预留的库存。

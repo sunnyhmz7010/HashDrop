@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
-import { NAlert, NButton, NInput, NSelect, NSwitch } from "naive-ui";
+import { NAlert, NButton, NInput, NSwitch } from "naive-ui";
 import { api, errorText, initialized, site } from "../api";
 
 const router = useRouter(),
@@ -23,7 +23,6 @@ const form = reactive({
   hashpay_url: "",
   merchant_id: "",
   private_key: "",
-  manual_policy: "hold",
 });
 onMounted(async () => {
   try {
@@ -190,15 +189,6 @@ async function submit() {
           <p class="helper">
             地址、商户 ID、PEM 私钥一起填写，或全部留空。私钥保存后不会回显。
           </p>
-          <label class="field-label">HashPay 人工确认付款</label>
-          <n-select
-            v-model:value="form.manual_policy"
-            :disabled="busy"
-            :options="[
-              { label: '保留订单，由店主核实后调整策略', value: 'hold' },
-              { label: '接受 HashPay 管理员确认的已付款订单', value: 'accept' },
-            ]"
-          />
           <p class="helper">
             HTTP 站点使用签名查询补查付款。HashPay 回调地址只接受 HTTPS。
           </p>

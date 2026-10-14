@@ -86,7 +86,6 @@ export interface Settings {
   public_url: string;
   hashpay_url: string;
   merchant_id: string;
-  manual_policy: string;
   key_configured: boolean;
   totp_enabled: boolean;
   adapters: string[];
@@ -133,13 +132,16 @@ export const paymentNames: Record<string, string> = {
   creating: "正在创建支付单",
   pending: "等待付款",
   paid: "已付款",
-  review: "需要核实",
+  expired: "已过期",
+  invalid: "已失效",
+  review: "核验异常",
   closed: "已关闭",
 };
 export const deliveryNames: Record<string, string> = {
   pending: "等待交付",
   processing: "交付处理中",
   done: "交付完成",
+  cancelled: "已停止交付",
   manual: "人工处理",
 };
 export function errorText(error: unknown): string {

@@ -118,14 +118,58 @@ async function action(name: string, body: unknown = {}) {
     if (current === generation) busy.value = false;
   }
 }
-function release() {
-  dialog.warning({
-    title: "确认关闭并释放库存？",
+function remove() {
+  if (busy.value || !selected.value) return;
+  const id = selected.value.order.id,
+    current = generation;
+  const confirmation = dialog.warning({
+    title: "删除订单？",
     content:
-      "系统将再次查询 HashPay，只有返回 invalid 才能释放；expired 不允许释放。HashPay 原生商户 API 不提供取消接口。",
-    positiveText: "确认查询并释放",
+      "该订单将从后台列表移除。HashPay 订单、库存预留和购买者领取链接继续保留，付款状态仍由网关决定。",
+    positiveText: "删除订单",
     negativeText: "取消",
-    onPositiveClick: () => action("release", { confirm: true }),
+    onPositiveClick: async () => {
+      if (busy.value || current !== generation || selectedID.value !== id)
+        return false;
+      busy.value = true;
+      confirmation.loading = true;
+      confirmation.negativeButtonProps = { disabled: true };
+      confirmation.closable = false;
+      confirmation.maskClosable = false;
+      confirmation.closeOnEsc = false;
+      detailError.value = "";
+      controller = new AbortController();
+      try {
+        await api(`/admin/orders/${id}`, {
+          method: "DELETE",
+          signal: controller.signal,
+        });
+        if (current !== generation) return true;
+        const next =
+          items.value.length === 1 && page.value > 1
+            ? page.value - 1
+            : page.value;
+        items.value = items.value.filter((item) => item.id !== id);
+        show.value = false;
+        selected.value = undefined;
+        message.success("订单已删除");
+        await load(next);
+        return true;
+      } catch (e) {
+        if (current === generation) {
+          detailError.value = errorText(e);
+          message.error(detailError.value);
+        }
+        return false;
+      } finally {
+        if (current === generation) busy.value = false;
+        confirmation.loading = false;
+        confirmation.negativeButtonProps = { disabled: false };
+        confirmation.closable = true;
+        confirmation.maskClosable = true;
+        confirmation.closeOnEsc = true;
+      }
+    },
   });
 }
 async function copy(value: string) {
@@ -141,7 +185,7 @@ async function copy(value: string) {
   <div class="orders-view grid">
     <div class="section-title">
       <h2>订单管理</h2>
-      <n-button :loading="loading" @click="load()">刷新</n-button>
+      <n-button :loading="loading" @click="load()">刷新列表</n-button>
     </div>
     <n-alert v-if="error" type="error"
       >{{ error }} <n-button text @click="load()">重试</n-button></n-alert
@@ -210,7 +254,7 @@ async function copy(value: string) {
         >
         <div class="row-actions space-bottom">
           <n-button :disabled="busy" @click="action('recheck')"
-            >重新核实付款</n-button
+            >刷新状态</n-button
           ><n-button
             v-if="
               selected.order.payment_status === 'paid' &&
@@ -219,16 +263,8 @@ async function copy(value: string) {
             :disabled="busy"
             @click="action('retry')"
             >重试交付</n-button
-          ><n-button
-            v-if="
-              selected.order.payment_status === 'review' &&
-              selected.order.reservation_status === 'reserved'
-            "
-            :disabled="busy"
-            type="error"
-            secondary
-            @click="release"
-            >关闭并释放库存</n-button
+          ><n-button :disabled="busy" type="error" secondary @click="remove"
+            >删除订单</n-button
           >
         </div>
         <article

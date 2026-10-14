@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixture";
 
 test("网页初始化、失败重填、HTTP 登录与只写私钥", async ({ page, request }) => {
   const fixture = await (

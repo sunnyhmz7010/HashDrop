@@ -1,4 +1,4 @@
-import { test, expect, type Locator } from "@playwright/test";
+import { test, expect, type Locator } from "./fixture";
 
 async function verifyRichContent(content: Locator) {
   await expect(

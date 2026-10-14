@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixture";
 
 test("隐藏商品通过链接购买，取消隐藏后恢复首页入口", async ({
   page,

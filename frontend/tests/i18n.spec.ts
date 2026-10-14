@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page } from "./fixture";
 import type { Product } from "../src/api";
 
 test.use({ locale: "en-US" });

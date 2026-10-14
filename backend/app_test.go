@@ -511,6 +511,13 @@ func TestBrowserFixture(t *testing.T) {
 	t.Cleanup(freshServer.Close)
 	fresh.config.Listen = strings.TrimPrefix(freshServer.URL, "http://")
 	mux := http.NewServeMux()
+	mux.HandleFunc("POST /__test/reset-limits", func(w http.ResponseWriter, r *http.Request) {
+		// 各浏览器用例分别使用真实限额，避免共享夹具累积请求导致互相限流。
+		a.limits.mu.Lock()
+		clear(a.limits.entries)
+		a.limits.mu.Unlock()
+		reply(w, 200, map[string]bool{"ok": true})
+	})
 	mux.HandleFunc("GET /__test/media/clip.webm", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "video/webm")
 		http.ServeFile(w, r, "../frontend/tests/fixtures/test-1s.webm")

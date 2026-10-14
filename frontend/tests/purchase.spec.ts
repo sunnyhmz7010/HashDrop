@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixture";
 import type { Product } from "../src/api";
 
 test("匿名购买、凭证领取与管理员库存管理", async ({ page, request }) => {

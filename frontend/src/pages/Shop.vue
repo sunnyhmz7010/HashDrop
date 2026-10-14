@@ -4,13 +4,29 @@
 import { t } from "../i18n";
 
 import { onMounted, ref } from "vue";
-import { NAlert, NButton, NEmpty, NSkeleton, NSpin, NTag } from "naive-ui";
+import {
+  NAlert,
+  NButton,
+  NEmpty,
+  NSkeleton,
+  NSpin,
+  NTag,
+  NTooltip,
+} from "naive-ui";
 import StoreLayout from "../components/StoreLayout.vue";
+import ProductIcon from "../components/ProductIcon.vue";
+import PurchaseDialog from "../components/PurchaseDialog.vue";
 import { api, errorText, kindNames, money, type Product } from "../api";
 const products = ref<Product[]>([]),
   loading = ref(true),
   error = ref(""),
-  notice = ref("");
+  notice = ref(""),
+  purchaseOpen = ref(false),
+  purchaseID = ref<string | null>(null);
+function openPurchase(id: string) {
+  purchaseID.value = id;
+  purchaseOpen.value = true;
+}
 async function load() {
   loading.value = true;
   error.value = "";
@@ -55,11 +71,7 @@ onMounted(load);
           aria-busy="true"
           :aria-label="t('shop.loading')"
         >
-          <div
-            v-for="row in 3"
-            :key="row"
-            class="panel loading-card"
-          >
+          <div v-for="row in 3" :key="row" class="panel loading-card">
             <n-skeleton text width="60%" />
             <n-skeleton text :repeat="3" />
             <n-skeleton text width="40%" />
@@ -91,19 +103,57 @@ onMounted(load);
             <div class="product-footer">
               <strong class="product-price">{{
                 money(product.price, product.currency)
-              }}</strong
-              ><router-link :to="`/products/${product.id}`"
-                ><n-button type="primary">{{
-                  t("shop.view")
-                }}</n-button></router-link
-              >
+              }}</strong>
+              <div class="product-actions">
+                <router-link
+                  :to="`/products/${product.id}`"
+                  custom
+                  v-slot="{ href, navigate }"
+                >
+                  <n-tooltip
+                    ><template #trigger
+                      ><n-button
+                        tag="a"
+                        :href="href"
+                        circle
+                        secondary
+                        size="large"
+                        :aria-label="t('shop.view')"
+                        @click="navigate"
+                        ><ProductIcon name="view" /></n-button></template
+                    >{{ t("shop.view") }}</n-tooltip
+                  >
+                </router-link>
+                <n-tooltip
+                  ><template #trigger
+                    ><n-button
+                      circle
+                      type="primary"
+                      size="large"
+                      :aria-label="t('shop.buy')"
+                      :disabled="
+                        ['card', 'account'].includes(product.kind) &&
+                        product.available === 0
+                      "
+                      @click="openPurchase(product.id)"
+                      ><ProductIcon name="buy" /></n-button></template
+                  >{{
+                    ["card", "account"].includes(product.kind) &&
+                    product.available === 0
+                      ? t("product.sold_out")
+                      : t("shop.buy")
+                  }}</n-tooltip
+                >
+              </div>
             </div>
           </article>
         </section>
         <div v-else-if="!loading && !error" class="panel empty-panel">
           <n-empty :description="t('shop.empty')" /></div
-      ></n-spin></main
-  ></StoreLayout>
+      ></n-spin>
+    </main>
+    <PurchaseDialog v-model:show="purchaseOpen" :productID="purchaseID" />
+  </StoreLayout>
 </template>
 
 <style scoped lang="scss">
@@ -181,6 +231,12 @@ onMounted(load);
   font-size: 18px;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.product-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 @media (max-width: 980px) {

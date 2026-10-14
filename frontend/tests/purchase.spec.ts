@@ -8,9 +8,10 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   await page.goto(base);
   await expect(page.locator(".product-card").first()).toBeVisible();
   const card = page.locator(".product-card").filter({ hasText: "卡密" });
-  await card.getByRole("button", { name: "查看商品" }).click();
+  await card.getByRole("link", { name: "查看商品" }).click();
+  await expect(page.locator(".product-summary")).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "创建订单", exact: true }),
+    page.getByRole("button", { name: "下单", exact: true }),
   ).toBeEnabled();
   await page.screenshot({
     path: "../.local/product-desktop.png",
@@ -36,7 +37,7 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   );
   await page.reload();
   await expect(
-    page.getByRole("button", { name: "创建订单", exact: true }),
+    page.getByRole("button", { name: "下单", exact: true }),
   ).toBeEnabled();
   expect(
     await page.evaluate(
@@ -51,6 +52,7 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   await page.unroute(`**/api/products/${productID}`);
   await page.reload();
   await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole("button", { name: "下单", exact: true }).click();
   await page.getByRole("button", { name: "创建订单", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "先保存领取链接" }),
@@ -266,6 +268,7 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
     }),
   ).toBeTruthy();
   await editor.locator("#description textarea").fill("短屏编辑内容");
+  await editor.locator("#description textarea").scrollIntoViewIfNeeded();
   await expect(editor.locator("#description textarea")).toBeInViewport();
   await expect(
     editor.getByRole("button", { name: "保存商品" }),
@@ -325,8 +328,10 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   await blocked
     .locator(".product-card")
     .filter({ hasText: "卡密" })
-    .getByRole("button", { name: "查看商品" })
+    .getByRole("link", { name: "查看商品" })
     .click();
+  await expect(blocked.locator(".product-summary")).toBeVisible();
+  await blocked.getByRole("button", { name: "下单", exact: true }).click();
   await blocked.getByRole("button", { name: "创建订单", exact: true }).click();
   await expect(
     blocked.getByRole("button", { name: "前往 HashPay 付款" }),

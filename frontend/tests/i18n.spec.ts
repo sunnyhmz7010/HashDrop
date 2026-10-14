@@ -42,7 +42,7 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(base);
   await expect(
-    page.getByRole("button", { name: "View product" }).first(),
+    page.getByRole("link", { name: "View product" }).first(),
   ).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("lang", "en-US");
   await expect(page.locator(".topbar a")).toHaveCount(2);
@@ -62,10 +62,12 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
   await page
     .locator(".product-card")
     .filter({ hasText: "Static text" })
-    .getByRole("button", { name: "View product" })
+    .getByRole("link", { name: "View product" })
     .click();
+  await expect(page.locator(".product-summary")).toBeVisible();
+  await page.getByRole("button", { name: "Place order", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Confirm purchase" }),
+    page.getByRole("dialog", { name: "Confirm order" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Create order", exact: true }).click();
   await expect(
@@ -253,11 +255,11 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
   });
   await blocked.goto(base);
   await expect(
-    blocked.getByRole("button", { name: "View product" }).first(),
+    blocked.getByRole("link", { name: "View product" }).first(),
   ).toBeVisible();
   await switchLanguage(blocked, "中文");
   await expect(
-    blocked.getByRole("button", { name: "查看商品" }).first(),
+    blocked.getByRole("link", { name: "查看商品" }).first(),
   ).toBeVisible();
   await blocked.close();
   expect(errors).toEqual([]);

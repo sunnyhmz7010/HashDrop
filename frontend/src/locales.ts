@@ -104,7 +104,16 @@ const zh = {
   "product.publication": "上架状态",
   "product.publish": "上架",
   "product.unpublish": "下架",
-  "product.description": "商品说明",
+  "product.description": "商品简介",
+  "product.details": "详情内容（Markdown）",
+  "product.details_title": "商品详情",
+  "product.edit_details": "编辑",
+  "product.preview_details": "预览",
+  "product.details_help":
+    "支持 Markdown；图片和视频使用 HTTPS 直链。视频可写为 ![视频说明](视频地址)，也可使用 video 标签。",
+  "product.details_placeholder":
+    "## 商品介绍\n\n填写详细说明，支持 **加粗**、列表和表格。\n\n![图片说明](https://example.com/image.jpg)\n\n![视频说明](https://example.com/video.mp4)",
+  "shop.buy": "下单",
   "product.static_content": "固定交付内容",
   "product.static_keep": "留空保留现有内容；新内容只影响后续订单",
   "product.static_placeholder": "填写付款后展示的内容",
@@ -180,7 +189,7 @@ const zh = {
   "product.price_label": "单价",
   "product.default_description": "支付后可通过专属领取链接查看商品内容。",
   "product.purchase": "购买商品",
-  "product.confirm": "确认购买",
+  "product.confirm": "确认下单",
   "product.back": "返回商城",
   "product.quantity": "购买数量",
   "product.total": "合计",
@@ -328,6 +337,7 @@ const zh = {
   "errors.response_json": "服务响应格式无效，请重试",
   "errors.invalid_json": "JSON 格式无效，请检查配置",
   "errors.product_retired": "商品交付类型已停止支持",
+  "errors.product_details_limit": "商品详情不能超过 65536 字符",
   "errors.payment_delivery": "付款查询或交付暂时失败",
   "errors.gateway_mismatch": "HashPay 金额/币种/商户或映射不一致",
   "errors.gateway_invalid": "HashPay 已将订单标记为失效，付款状态由网关决定",
@@ -436,7 +446,16 @@ const en: Record<MessageKey, string> = {
   "product.publication": "Publication status",
   "product.publish": "Publish",
   "product.unpublish": "Unpublish",
-  "product.description": "Product description",
+  "product.description": "Short description",
+  "product.details": "Details (Markdown)",
+  "product.details_title": "Product details",
+  "product.edit_details": "Edit",
+  "product.preview_details": "Preview",
+  "product.details_help":
+    "Supports Markdown. Use direct HTTPS image and video links. For videos, use ![Video description](video URL) or a video tag.",
+  "product.details_placeholder":
+    "## Product introduction\n\nAdd detailed information with **bold text**, lists and tables.\n\n![Image description](https://example.com/image.jpg)\n\n![Video description](https://example.com/video.mp4)",
+  "shop.buy": "Place order",
   "product.static_content": "Static delivery content",
   "product.static_keep":
     "Leave blank to keep existing content; changes apply to future orders",
@@ -526,7 +545,7 @@ const en: Record<MessageKey, string> = {
   "product.default_description":
     "After payment, use your private claim link to view the product content.",
   "product.purchase": "Purchase product",
-  "product.confirm": "Confirm purchase",
+  "product.confirm": "Confirm order",
   "product.back": "Back to store",
   "product.quantity": "Purchase quantity",
   "product.total": "Total",
@@ -692,6 +711,8 @@ const en: Record<MessageKey, string> = {
   "errors.response_json": "Invalid server response. Try again.",
   "errors.invalid_json": "Invalid JSON. Check the configuration.",
   "errors.product_retired": "This product delivery type is no longer supported",
+  "errors.product_details_limit":
+    "Product details must not exceed 65536 characters",
   "errors.payment_delivery":
     "Payment query or delivery is temporarily unavailable",
   "errors.gateway_mismatch":

@@ -511,6 +511,14 @@ func TestBrowserFixture(t *testing.T) {
 	t.Cleanup(freshServer.Close)
 	fresh.config.Listen = strings.TrimPrefix(freshServer.URL, "http://")
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /__test/media/clip.webm", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "video/webm")
+		http.ServeFile(w, r, "../frontend/tests/fixtures/test-1s.webm")
+	})
+	mux.HandleFunc("GET /__test/media/image.svg", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/svg+xml")
+		fmt.Fprint(w, `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="220" viewBox="0 0 640 220"><rect width="640" height="220" rx="16" fill="#eef8f1"/><rect x="28" y="28" width="64" height="164" rx="8" fill="#18a058"/><text x="120" y="110" font-family="sans-serif" font-size="32" fill="#111827">TinyFaka</text><text x="120" y="155" font-family="sans-serif" font-size="20" fill="#6b7280">Product media preview</text></svg>`)
+	})
 	mux.HandleFunc("GET /__test/setup-fixture", func(w http.ResponseWriter, r *http.Request) {
 		key, err := os.ReadFile(a.config.HashPay.PrivateKeyFile)
 		if err != nil {

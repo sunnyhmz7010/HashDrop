@@ -10,10 +10,13 @@ import {
   NSelect,
   NSpin,
   NSwitch,
+  NTabs,
+  NTabPane,
   useDialog,
   useMessage,
 } from "naive-ui";
 import FormDialog from "./FormDialog.vue";
+import MarkdownContent from "./MarkdownContent.vue";
 import {
   api,
   errorText,
@@ -35,6 +38,7 @@ const model = reactive({
   id: "",
   name: "",
   description: "",
+  details: "",
   price: "",
   currency: "CNY",
   kind: "card",
@@ -80,6 +84,7 @@ function edit(product?: Product) {
     product
       ? {
           ...product,
+          details: product.details ?? "",
           price: priceText(product.price, product.currency),
           static_content: "",
         }
@@ -87,6 +92,7 @@ function edit(product?: Product) {
           id: "",
           name: "",
           description: "",
+          details: "",
           price: "",
           currency: "CNY",
           kind: "card",
@@ -107,6 +113,7 @@ async function save() {
       body: {
         name: model.name,
         description: model.description,
+        details: model.details,
         price: toMinor(model.price, model.currency),
         currency: model.currency,
         kind: model.kind,
@@ -346,6 +353,42 @@ function removeStock(id: string) {
             type="textarea"
             :maxlength="4000"
           />
+        </div>
+        <div class="wide details-editor">
+          <label class="field-label" for="product-details-input">{{
+            t("product.details")
+          }}</label>
+          <n-tabs type="line" animated>
+            <n-tab-pane
+              name="edit"
+              :tab="t('product.edit_details')"
+              display-directive="show"
+            >
+              <n-input
+                id="details"
+                v-model:value="model.details"
+                type="textarea"
+                :maxlength="65536"
+                :autosize="{ minRows: 8, maxRows: 20 }"
+                :input-props="{ id: 'product-details-input' }"
+                :placeholder="t('product.details_placeholder')"
+              />
+              <p class="helper">{{ t("product.details_help") }}</p>
+            </n-tab-pane>
+            <n-tab-pane
+              name="preview"
+              :tab="t('product.preview_details')"
+              display-directive="if"
+            >
+              <MarkdownContent
+                v-if="model.details.trim()"
+                :content="model.details"
+              />
+              <p v-else class="pre-wrap">
+                {{ model.description || t("product.default_description") }}
+              </p>
+            </n-tab-pane>
+          </n-tabs>
         </div>
         <div v-if="model.kind === 'static'" class="wide">
           <label class="field-label" for="static-content">{{

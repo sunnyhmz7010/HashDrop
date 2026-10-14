@@ -52,6 +52,7 @@ export interface Product {
   id: string;
   name: string;
   description: string;
+  details: string;
   price: number;
   currency: string;
   kind: string;

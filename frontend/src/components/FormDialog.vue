@@ -3,13 +3,16 @@
 <script setup lang="ts">
 import { NCard, NModal } from "naive-ui";
 const show = defineModel<boolean>("show", { required: true });
-withDefaults(defineProps<{ title: string; busy?: boolean }>(), { busy: false });
+withDefaults(defineProps<{ title: string; busy?: boolean; width?: string }>(), {
+  busy: false,
+});
 </script>
 
 <template>
   <n-modal v-model:show="show" :mask-closable="!busy" :close-on-esc="!busy">
     <n-card
       class="form-modal order-modal"
+      :style="width ? { width } : undefined"
       role="dialog"
       aria-modal="true"
       :aria-label="title"

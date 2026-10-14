@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -122,23 +123,16 @@ func TestGatewayPaidDoesNotRequireConfirmationMetadata(t *testing.T) {
 	}
 }
 
-func TestVersionOneMigrationRetainsOrdersStockAndClaims(t *testing.T) {
+func TestLegacyMigrationRetainsOrdersStockAndClaims(t *testing.T) {
+	for _, version := range []int{1, 2} {
+		t.Run(fmt.Sprintf("version-%d", version), func(t *testing.T) {
+			testLegacyMigration(t, version)
+		})
+	}
+}
+
+func testLegacyMigration(t *testing.T, oldVersion int) {
 	a, gateway := newTestApp(t)
-	path := filepath.Join(t.TempDir(), "version-one.db")
-	old, err := sql.Open("sqlite", databaseURI(path)+"?_pragma=foreign_keys(1)")
-	if err != nil {
-		t.Fatal(err)
-	}
-	old.SetMaxOpenConns(1)
-	schema, err := tinyfaka.Assets.ReadFile("migrations/001_init.sql")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = old.Exec(string(schema)); err != nil {
-		t.Fatal(err)
-	}
-	a.db.Close()
-	a.db = old
 	product := insertProduct(t, a, "card", 3)
 	paid, _ := reserve(t, a, product, 1)
 	syncPaid(t, a, gateway, paid)
@@ -147,7 +141,56 @@ func TestVersionOneMigrationRetainsOrdersStockAndClaims(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	path := filepath.Join(t.TempDir(), "legacy.db")
+	old, err := sql.Open("sqlite", databaseURI(path)+"?_pragma=foreign_keys(1)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer old.Close()
+	old.SetMaxOpenConns(1)
+	for _, file := range []string{"migrations/001_init.sql", "migrations/002_gateway_orders.sql"}[:oldVersion] {
+		schema, err := tinyfaka.Assets.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = old.Exec(string(schema)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// 使用旧版本的真实列定义构造升级前数据，避免新业务代码依赖不存在的列。
+	if _, err = old.Exec("ATTACH DATABASE ? AS current_data", a.config.Database); err != nil {
+		t.Fatal(err)
+	}
+	for _, table := range []string{"products", "orders", "stock_items", "deliveries", "admin_sessions"} {
+		rows, err := old.Query("PRAGMA table_info(" + table + ")")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var columns []string
+		for rows.Next() {
+			var index, notNull, primaryKey int
+			var name, dataType string
+			var defaultValue any
+			if err = rows.Scan(&index, &name, &dataType, &notNull, &defaultValue, &primaryKey); err != nil {
+				rows.Close()
+				t.Fatal(err)
+			}
+			columns = append(columns, name)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		fields := strings.Join(columns, ",")
+		if _, err = old.Exec("INSERT INTO " + table + "(" + fields + ") SELECT " + fields + " FROM current_data." + table); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if err = old.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err = a.db.Close(); err != nil {
 		t.Fatal(err)
 	}
 	a.db, err = openDatabase(path)
@@ -163,8 +206,11 @@ func TestVersionOneMigrationRetainsOrdersStockAndClaims(t *testing.T) {
 	if err != nil || remaining.ReservationStatus != "reserved" {
 		t.Fatal("升级破坏了未完成订单")
 	}
+	if remaining.GatewayURL != "" || remaining.GatewayMerchantID != "" {
+		t.Fatal("升级错误推测了历史商户归属")
+	}
 	var version, foreignKeys, stock int
-	if err = a.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 2 {
+	if err = a.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 3 {
 		t.Fatal("数据库版本未升级")
 	}
 	if err = a.db.QueryRow("PRAGMA foreign_keys").Scan(&foreignKeys); err != nil || foreignKeys != 1 {

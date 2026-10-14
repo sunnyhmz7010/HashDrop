@@ -88,7 +88,7 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   expect(gateway).not.toContain(token);
   expect(gateway).not.toContain("#token=");
   // 仅替换读取响应检查展示边界；实际付款仍经过下方真实签名网关流程。
-  for (const paymentStatus of ["expired", "invalid"]) {
+  for (const paymentStatus of ["expired", "invalid", "closed"]) {
     await page.route(`**/api/orders/${orderID}`, (route) =>
       route.fulfill({
         json: {

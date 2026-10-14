@@ -36,6 +36,10 @@ type fakeGateway struct {
 	server         *httptest.Server
 	creates        int
 	failCreateOnce bool
+	queryStatus    int
+	queryType      string
+	queryBody      string
+	queries        int
 }
 
 func newTestApp(t *testing.T) (*App, *fakeGateway) {
@@ -108,6 +112,13 @@ func (g *fakeGateway) handler(w http.ResponseWriter, r *http.Request) {
 		reply(w, 200, map[string]any{"order": o, "checkoutUrl": g.server.URL + "/pay/" + o.ID, "reused": exists})
 		return
 	}
+	g.queries++
+	if g.queryStatus != 0 {
+		w.Header().Set("Content-Type", g.queryType)
+		w.WriteHeader(g.queryStatus)
+		fmt.Fprint(w, g.queryBody)
+		return
+	}
 	for _, o := range g.orders {
 		if strings.TrimPrefix(r.URL.Path, "/api/order/") == o.ID {
 			switch g.corrupt {
@@ -126,7 +137,7 @@ func (g *fakeGateway) handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	http.NotFound(w, r)
+	reply(w, http.StatusNotFound, map[string]any{"error": map[string]any{"key": "errors.order_not_found", "params": map[string]any{}}})
 }
 func (g *fakeGateway) set(id, status, by string) {
 	g.mu.Lock()

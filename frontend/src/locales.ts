@@ -274,6 +274,11 @@ const zh = {
   "errors.gateway_request": "HashPay 请求失败或超时",
   "errors.gateway_response_limit": "HashPay 响应读取失败或超限",
   "errors.gateway_response": "HashPay 响应格式无效",
+  "errors.gateway_identity": "HashPay 配置与订单原网关或商户不一致，需核查",
+  "errors.gateway_owner_unknown":
+    "HashPay 订单不存在，但尚未核验原商户归属，保留库存待核查",
+  "errors.gateway_order_missing": "HashPay 网关订单已不存在",
+  "errors.gateway_order_invalid": "HashPay 订单已失效",
   "errors.gateway_create": "HashPay 创建结果不匹配",
   "errors.gateway_amount": "HashPay 创建金额不匹配",
   "errors.gateway_checkout": "HashPay 支付地址无效",
@@ -663,6 +668,12 @@ const en: Record<MessageKey, string> = {
   "errors.gateway_response_limit":
     "Could not read the HashPay response or the response is too large",
   "errors.gateway_response": "Invalid HashPay response format",
+  "errors.gateway_identity":
+    "HashPay configuration differs from the order's original gateway or merchant. Check the configuration.",
+  "errors.gateway_owner_unknown":
+    "HashPay order was not found, but its original merchant has not been verified. Stock remains reserved for investigation.",
+  "errors.gateway_order_missing": "The HashPay gateway order no longer exists",
+  "errors.gateway_order_invalid": "The HashPay order is invalid",
   "errors.gateway_create": "HashPay order creation result does not match",
   "errors.gateway_amount": "HashPay order creation amount does not match",
   "errors.gateway_checkout": "Invalid HashPay payment URL",

@@ -46,6 +46,13 @@ type hashPayClient struct {
 	http   *http.Client
 }
 
+type hashPayHTTPError struct {
+	Status int
+	Key    string
+}
+
+func (e *hashPayHTTPError) Error() string { return fmt.Sprintf("HashPay HTTP %d", e.Status) }
+
 func newHashPay(config HashPayConfig) (*hashPayClient, error) {
 	if config.BaseURL == "" || config.MerchantID == "" || config.PrivateKeyFile == "" {
 		return nil, errors.New("HashPay 尚未配置")
@@ -103,12 +110,24 @@ func (c *hashPayClient) request(ctx context.Context, method, path string, body [
 		return errors.New("HashPay 请求失败或超时")
 	}
 	defer res.Body.Close()
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return fmt.Errorf("HashPay HTTP %d", res.StatusCode)
-	}
 	data, err := io.ReadAll(io.LimitReader(res.Body, 1024*1024+1))
 	if err != nil || len(data) > 1024*1024 {
 		return errors.New("HashPay 响应读取失败或超限")
+	}
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		failure := &hashPayHTTPError{Status: res.StatusCode}
+		// 只识别原生 API 的 JSON 错误码，代理的 HTML 404 不代表订单删除。
+		if strings.EqualFold(strings.TrimSpace(strings.SplitN(res.Header.Get("Content-Type"), ";", 2)[0]), "application/json") {
+			var payload struct {
+				Error struct {
+					Key string `json:"key"`
+				} `json:"error"`
+			}
+			if json.Unmarshal(data, &payload) == nil {
+				failure.Key = payload.Error.Key
+			}
+		}
+		return failure
 	}
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.UseNumber()

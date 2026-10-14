@@ -21,6 +21,8 @@ type Order struct {
 	Quantity          int    `json:"quantity"`
 	Total             int64  `json:"total"`
 	GatewayID         string `json:"gateway_id"`
+	GatewayURL        string `json:"-"`
+	GatewayMerchantID string `json:"-"`
 	CheckoutURL       string `json:"checkout_url"`
 	PaymentStatus     string `json:"payment_status"`
 	DeliveryStatus    string `json:"delivery_status"`
@@ -34,11 +36,11 @@ type Order struct {
 	LastError         string `json:"last_error"`
 }
 
-const orderSelect = `SELECT id,product_id,product_name,kind,unit_price,currency,quantity,total,COALESCE(gateway_id,''),checkout_url,payment_status,delivery_status,reservation_status,expires_at,created_at,content,config,token_hash,attempts,last_error FROM orders`
+const orderSelect = `SELECT id,product_id,product_name,kind,unit_price,currency,quantity,total,COALESCE(gateway_id,''),gateway_url,gateway_merchant_id,checkout_url,payment_status,delivery_status,reservation_status,expires_at,created_at,content,config,token_hash,attempts,last_error FROM orders`
 
 func scanOrder(row scanner) (Order, error) {
 	var o Order
-	err := row.Scan(&o.ID, &o.ProductID, &o.ProductName, &o.Kind, &o.UnitPrice, &o.Currency, &o.Quantity, &o.Total, &o.GatewayID, &o.CheckoutURL, &o.PaymentStatus, &o.DeliveryStatus, &o.ReservationStatus, &o.ExpiresAt, &o.CreatedAt, &o.Content, &o.Config, &o.TokenHash, &o.Attempts, &o.LastError)
+	err := row.Scan(&o.ID, &o.ProductID, &o.ProductName, &o.Kind, &o.UnitPrice, &o.Currency, &o.Quantity, &o.Total, &o.GatewayID, &o.GatewayURL, &o.GatewayMerchantID, &o.CheckoutURL, &o.PaymentStatus, &o.DeliveryStatus, &o.ReservationStatus, &o.ExpiresAt, &o.CreatedAt, &o.Content, &o.Config, &o.TokenHash, &o.Attempts, &o.LastError)
 	return o, err
 }
 func (a *App) loadOrder(ctx context.Context, id string) (Order, error) {
@@ -216,6 +218,10 @@ func (a *App) syncOrderLocked(ctx context.Context, id string) error {
 		return err
 	}
 	config := a.settings()
+	if (o.GatewayURL != "" || o.GatewayMerchantID != "") &&
+		(o.GatewayURL != strings.TrimRight(config.HashPay.BaseURL, "/") || o.GatewayMerchantID != config.HashPay.MerchantID) {
+		return errors.New("HashPay 配置与订单原网关或商户不一致，需核查")
+	}
 	client, err := newHashPay(config.HashPay)
 	if err != nil {
 		return err
@@ -239,6 +245,17 @@ func (a *App) syncOrderLocked(ctx context.Context, id string) error {
 	}
 	remote, err := client.query(ctx, o.GatewayID)
 	if err != nil {
+		var failure *hashPayHTTPError
+		if errors.As(err, &failure) && failure.Status == http.StatusNotFound && failure.Key == "errors.order_not_found" {
+			// 已核验付款不会因网关删除而丢失，未完成交付继续使用原预留。
+			if o.PaymentStatus == "paid" {
+				return a.deliverOrder(ctx, o)
+			}
+			if o.GatewayURL == "" || o.GatewayMerchantID == "" {
+				return errors.New("HashPay 订单不存在，但尚未核验原商户归属，保留库存待核查")
+			}
+			return a.terminateOrder(ctx, id, "closed", "HashPay 网关订单已不存在")
+		}
 		return err
 	}
 	amount, err := decimalMinor(remote.Amount.String(), o.Currency)
@@ -247,6 +264,12 @@ func (a *App) syncOrderLocked(ctx context.Context, id string) error {
 			return e
 		}
 		return errors.New("HashPay 查询结果不匹配")
+	}
+	// 仅在签名查询完整核验订单归属、金额和币种后保存映射；旧订单不盲目回填当前配置。
+	if o.GatewayURL == "" && o.GatewayMerchantID == "" {
+		if _, err = a.db.ExecContext(ctx, "UPDATE orders SET gateway_url=?,gateway_merchant_id=? WHERE id=?", strings.TrimRight(config.HashPay.BaseURL, "/"), config.HashPay.MerchantID, id); err != nil {
+			return err
+		}
 	}
 	if remote.Status == "paid" {
 		// 已完成签名查询和身份/金额核验，付款状态由 HashPay 决定。
@@ -260,7 +283,7 @@ func (a *App) syncOrderLocked(ctx context.Context, id string) error {
 		return a.deliverOrder(ctx, o)
 	}
 	if remote.Status == "invalid" {
-		return a.invalidateOrder(ctx, id)
+		return a.terminateOrder(ctx, id, "invalid", "HashPay 订单已失效")
 	}
 	if remote.Status != "pending" && remote.Status != "expired" {
 		return errors.New("HashPay 订单状态未知")
@@ -273,8 +296,8 @@ func (a *App) syncOrderLocked(ctx context.Context, id string) error {
 	return err
 }
 
-func (a *App) invalidateOrder(ctx context.Context, id string) error {
-	// 仅在已核验的 HashPay invalid 终态释放预留；已售库存不能重新出售。
+func (a *App) terminateOrder(ctx context.Context, id, status, reason string) error {
+	// 核验 invalid 或原商户的订单不存在响应后，只释放尚未交付的预留。
 	tx, err := a.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -283,16 +306,16 @@ func (a *App) invalidateOrder(ctx context.Context, id string) error {
 	if _, err = tx.ExecContext(ctx, "UPDATE stock_items SET status='available',order_id=NULL WHERE order_id=? AND status='reserved'", id); err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, "UPDATE deliveries SET stock_id=NULL,status='manual',last_error='HashPay 订单已失效',updated_at=? WHERE order_id=? AND status<>'done'", unixNow(), id); err != nil {
+	if _, err = tx.ExecContext(ctx, "UPDATE deliveries SET stock_id=NULL,status='manual',last_error=?,updated_at=? WHERE order_id=? AND status<>'done'", reason, unixNow(), id); err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, "UPDATE orders SET payment_status='invalid',reservation_status=CASE WHEN reservation_status='reserved' THEN 'released' ELSE reservation_status END,delivery_status=CASE WHEN delivery_status='done' THEN 'done' ELSE 'cancelled' END,last_error='',updated_at=? WHERE id=?", unixNow(), id); err != nil {
+	if _, err = tx.ExecContext(ctx, "UPDATE orders SET payment_status=?,reservation_status=CASE WHEN reservation_status='reserved' THEN 'released' ELSE reservation_status END,delivery_status=CASE WHEN delivery_status='done' THEN 'done' ELSE 'cancelled' END,last_error=?,updated_at=? WHERE id=?", status, reason, unixNow(), id); err != nil {
 		return err
 	}
 	if err = tx.Commit(); err != nil {
 		return err
 	}
-	audit("gateway_order_invalid", id)
+	audit("gateway_order_"+status, id)
 	return nil
 }
 func (a *App) markPaid(ctx context.Context, id string) error {

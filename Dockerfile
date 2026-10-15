@@ -17,11 +17,8 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -ldfl
 
 FROM alpine:3.24
 RUN apk add --no-cache ca-certificates \
-    && addgroup -S -g 10001 hashdrop \
-    && adduser -S -D -u 10001 -G hashdrop hashdrop \
-    && mkdir -p /data \
-    && chown hashdrop:hashdrop /data
+    && mkdir -p /data
 COPY --from=builder /hashdrop /app/hashdrop
-USER hashdrop
+USER root
 WORKDIR /app
 CMD ["/app/hashdrop", "-config", "/data/config.json", "-data-dir", "/data", "-listen", "0.0.0.0:8080"]

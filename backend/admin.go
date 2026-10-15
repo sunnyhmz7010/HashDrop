@@ -257,25 +257,28 @@ func (a *App) updateSettings(w http.ResponseWriter, r *http.Request) error {
 	if err := readJSON(w, r, &input); err != nil {
 		return err
 	}
-	// 同一把锁阻止补查与网关配置切换并发；未终止订单（包括已删除记录）仍使用原商户映射。
+	input.HashPayURL = strings.TrimRight(strings.TrimSpace(input.HashPayURL), "/")
+	input.MerchantID = strings.TrimSpace(input.MerchantID)
+	// 补查和配置切换共用锁；已完成交付或可靠终止的历史订单不再依赖原商户。
 	a.workerMu.Lock()
 	defer a.workerMu.Unlock()
 	a.configMu.Lock()
 	defer a.configMu.Unlock()
 	c := a.config
-	if strings.TrimRight(input.HashPayURL, "/") != strings.TrimRight(c.HashPay.BaseURL, "/") || input.MerchantID != c.HashPay.MerchantID {
+	if input.HashPayURL != strings.TrimRight(c.HashPay.BaseURL, "/") || input.MerchantID != c.HashPay.MerchantID {
 		var count int
-		if err := a.db.QueryRow("SELECT COUNT(*) FROM orders WHERE payment_status NOT IN ('closed','invalid')").Scan(&count); err != nil {
+		// 逻辑删除仍保留补查与交付责任，不能仅因后台列表隐藏就放行。
+		if err := a.db.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM orders WHERE payment_status NOT IN ('closed','invalid') AND NOT (payment_status='paid' AND delivery_status='done')").Scan(&count); err != nil {
 			return err
 		}
 		if count > 0 {
-			return bad("存在历史订单，不能通过后台更换支付网关或商户")
+			return bad("存在待核验付款或未完成交付的订单，暂不能更换支付网关或商户")
 		}
 	}
 	c.Title = strings.TrimSpace(input.Title)
 	c.Notice = input.Notice
-	c.HashPay.BaseURL = strings.TrimRight(input.HashPayURL, "/")
-	c.HashPay.MerchantID = strings.TrimSpace(input.MerchantID)
+	c.HashPay.BaseURL = input.HashPayURL
+	c.HashPay.MerchantID = input.MerchantID
 	if c.HashPay.BaseURL != "" || c.HashPay.MerchantID != "" || input.PrivateKey != "" {
 		if c.HashPay.BaseURL == "" || c.HashPay.MerchantID == "" || (c.HashPay.PrivateKeyFile == "" && input.PrivateKey == "") {
 			return bad("HashPay 地址、商户 ID 和私钥须完整填写")

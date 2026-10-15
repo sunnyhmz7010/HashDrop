@@ -78,7 +78,7 @@ func TestDeleteOrderPreservesLatePaymentAndClaim(t *testing.T) {
 	if err := a.db.QueryRow("SELECT status FROM stock_items WHERE product_id=?", product).Scan(&reservation); err != nil || reservation != "reserved" {
 		t.Fatal("删除提前释放了库存")
 	}
-	if result := request("PUT", "/api/admin/settings", `{"title":"TinyFaka","hashpay_url":"https://other.example","merchant_id":"other"}`); result.Code != 400 || !strings.Contains(result.Body.String(), "存在历史订单") {
+	if result := request("PUT", "/api/admin/settings", `{"title":"TinyFaka","hashpay_url":"https://other.example","merchant_id":"other"}`); result.Code != 400 || !strings.Contains(result.Body.String(), "待核验付款或未完成交付") {
 		t.Fatal("删除后仍待付款的订单未保护原支付商户映射")
 	}
 	gateway.set(order.ID, "paid", "admin")

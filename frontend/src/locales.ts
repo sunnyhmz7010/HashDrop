@@ -222,7 +222,8 @@ const zh = {
   "errors.page_range": "页码超限",
   "errors.invalid_status": "状态无效",
   "errors.order_not_paid": "订单尚未核实付款或库存已释放",
-  "errors.gateway_locked": "存在历史订单，不能通过后台更换支付网关或商户",
+  "errors.gateway_locked":
+    "存在待核验付款或未完成交付的订单，暂不能更换支付网关或商户",
   "errors.gateway_required": "HashPay 地址、商户 ID 和私钥须完整填写",
   "errors.sign_in": "请先登录",
   "errors.session_invalid": "会话已失效，请重新登录",
@@ -583,7 +584,7 @@ const en: Record<MessageKey, string> = {
   "errors.order_not_paid":
     "Payment has not been verified or reserved stock has been released",
   "errors.gateway_locked":
-    "Existing orders prevent changing the payment gateway or merchant in the dashboard",
+    "Orders awaiting payment verification or delivery prevent changing the payment gateway or merchant",
   "errors.gateway_required":
     "Enter the HashPay URL, merchant ID and private key together",
   "errors.sign_in": "Please sign in",

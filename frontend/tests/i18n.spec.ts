@@ -167,11 +167,16 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
   ).toBeVisible();
   await expect(page.locator("#site-title input")).toHaveValue("Unsaved title");
   await switchLanguage(page, "English");
-  await page
-    .getByRole("menuitem", { name: "Products and stock", exact: true })
-    .click();
+  await page.getByRole("menuitem", { name: "Products", exact: true }).click();
   await page.getByRole("button", { name: "Add product", exact: true }).click();
-  await page.locator("#product-kind").click();
+  await expect(page.locator("#product-inventory")).toBeVisible();
+  await expect(page.locator("#static-content textarea")).toHaveCount(0);
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Inventory", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Add inventory pool", exact: true })
+    .click();
+  await page.locator("#inventory-kind").click();
   await expect(page.locator(".n-base-select-option:visible")).toHaveCount(3);
   await expect(
     page

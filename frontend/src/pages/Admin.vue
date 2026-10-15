@@ -17,6 +17,7 @@ import { api, csrf, errorText } from "../api";
 import { version } from "../../package.json";
 import Overview from "../components/Overview.vue";
 import Products from "../components/Products.vue";
+import Inventories from "../components/Inventories.vue";
 import Orders from "../components/Orders.vue";
 import Promotions from "../components/Promotions.vue";
 import Settings from "../components/Settings.vue";
@@ -31,6 +32,7 @@ const section = computed(() => String(route.params.section ?? "overview"));
 const menuOptions = computed(() => [
   { key: "overview", label: t("nav.overview") },
   { key: "products", label: t("nav.products") },
+  { key: "inventories", label: t("nav.inventories") },
   { key: "orders", label: t("nav.orders") },
   { key: "promotions", label: t("nav.promotions") },
   { key: "donation", label: t("nav.donation") },
@@ -106,7 +108,8 @@ async function logout() {
           </div>
         </n-layout-sider>
         <n-layout-content class="workspace-content">
-          <Products v-if="section === 'products'" /><Orders
+          <Products v-if="section === 'products'" />
+          <Inventories v-else-if="section === 'inventories'" /><Orders
             v-else-if="section === 'orders'"
           />
           <Promotions v-else-if="section === 'promotions'" />

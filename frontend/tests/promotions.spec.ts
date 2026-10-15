@@ -1,4 +1,4 @@
-import { test, expect, type Locator } from "./fixture";
+import { test, expect, createInventory, type Locator } from "./fixture";
 import type { Promotion, Product } from "../src/api";
 import { placeTestOrder } from "./checkout";
 
@@ -21,6 +21,12 @@ test("优惠管理保存、叠加报价、价格变化确认与历史领取", as
     await page.request.get(`${base}/api/admin/session`)
   ).json();
   const headers = { Origin: base, "X-CSRF-Token": session.csrf };
+  const pool = await createInventory(
+    page,
+    "优惠验证交付库存",
+    "static",
+    "PROMOTION-CONTENT",
+  );
   async function createProduct(name: string, hidden: boolean) {
     const response = await page.request.post(`${base}/api/admin/products`, {
       headers,
@@ -30,10 +36,9 @@ test("优惠管理保存、叠加报价、价格变化确认与历史领取", as
         details: "",
         price: 10000,
         currency: "CNY",
-        kind: "static",
+        inventory_id: pool.id,
         active: true,
         hidden,
-        static_content: "PROMOTION-CONTENT",
       },
     });
     expect(response.ok()).toBeTruthy();

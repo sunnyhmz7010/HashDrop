@@ -16,7 +16,7 @@ func TestHiddenProductCanBePurchasedWithoutAppearingInCatalog(t *testing.T) {
 	admin := adminSessionRequest(t, a)
 	hiddenID := insertProduct(t, a, "card", 3)
 	visibleID := insertProduct(t, a, "static", 0)
-	input := map[string]any{"name": "链接商品", "price": 1234, "currency": "CNY", "kind": "card", "active": true, "hidden": true}
+	input := map[string]any{"name": "链接商品", "price": 1234, "currency": "CNY", "inventory_id": hiddenID, "active": true, "hidden": true}
 	save := func() Product {
 		t.Helper()
 		body, err := json.Marshal(input)

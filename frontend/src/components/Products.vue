@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { t } from "../i18n";
 
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import {
   NAlert,
   NButton,
@@ -24,11 +24,13 @@ import {
   money,
   priceText,
   toMinor,
+  type Inventory,
   type Product,
 } from "../api";
 const message = useMessage(),
   dialog = useDialog(),
   products = ref<Product[]>([]),
+  inventories = ref<Inventory[]>([]),
   loading = ref(false),
   error = ref(""),
   editor = ref(false),
@@ -42,10 +44,9 @@ const model = reactive({
   details: "",
   price: "",
   currency: "CNY",
-  kind: "card",
+  inventory_id: null as string | null,
   active: false,
   hidden: false,
-  static_content: "",
 });
 const currencies = [
   "CNY",
@@ -57,26 +58,30 @@ const currencies = [
   "USDT",
   "USDC",
 ].map((value) => ({ label: value, value }));
-const kinds = computed(() =>
-  Object.entries(kindNames.value).map(([value, label]) => ({
-    value,
-    label,
+const inventoryOptions = computed(() =>
+  inventories.value.map((item) => ({
+    value: item.id,
+    label: `${item.name} · ${kindNames.value[item.kind]} · ${item.id.slice(0, 6)}`,
   })),
 );
-const stockNames = computed<Record<string, string>>(() => ({
-  available: t("stock.available"),
-  reserved: t("stock.reserved"),
-  sold: t("stock.sold"),
-}));
+let loadGeneration = 0;
 async function load() {
+  const current = ++loadGeneration;
   loading.value = true;
   error.value = "";
   try {
-    products.value = await api("/admin/products");
+    const [items, pools] = await Promise.all([
+      api<Product[]>("/admin/products"),
+      api<Inventory[]>("/admin/inventories"),
+    ]);
+    if (current === loadGeneration) {
+      products.value = items;
+      inventories.value = pools;
+    }
   } catch (e) {
-    error.value = errorText(e);
+    if (current === loadGeneration) error.value = errorText(e);
   } finally {
-    loading.value = false;
+    if (current === loadGeneration) loading.value = false;
   }
 }
 onMounted(load);
@@ -85,11 +90,15 @@ function edit(product?: Product) {
     model,
     product
       ? {
-          ...product,
+          id: product.id,
+          name: product.name,
+          description: product.description,
+          currency: product.currency,
+          active: product.active,
           hidden: product.hidden ?? false,
           details: product.details ?? "",
           price: priceText(product.price, product.currency),
-          static_content: "",
+          inventory_id: product.inventory_id || null,
         }
       : {
           id: "",
@@ -98,10 +107,9 @@ function edit(product?: Product) {
           details: "",
           price: "",
           currency: "CNY",
-          kind: "card",
+          inventory_id: null,
           active: false,
           hidden: false,
-          static_content: "",
         },
   );
   formError.value = "";
@@ -120,10 +128,9 @@ async function save() {
         details: model.details,
         price: toMinor(model.price, model.currency),
         currency: model.currency,
-        kind: model.kind,
+        inventory_id: model.inventory_id ?? "",
         active: model.active,
         hidden: model.hidden,
-        static_content: model.static_content,
       },
     });
     editor.value = false;
@@ -172,102 +179,18 @@ function removeProduct(product: Product) {
     },
   });
 }
-const stockProduct = ref<Product>(),
-  importing = ref(false),
-  stockText = ref(""),
-  stockError = ref(""),
-  stockDialog = ref(false),
-  stockLoading = ref(false),
-  stockItems = ref<
-    { id: string; status: string; order_id: string; created_at: number }[]
-  >([]);
-function importFor(p: Product) {
-  stockProduct.value = p;
-  stockText.value = "";
-  stockError.value = "";
-  importing.value = true;
-}
-async function importItems() {
-  if (saving.value || !stockProduct.value) return;
-  saving.value = true;
-  stockError.value = "";
-  try {
-    const result = await api<{ added: number; duplicates: number }>(
-      `/admin/products/${stockProduct.value.id}/stock`,
-      { method: "POST", body: { content: stockText.value } },
-    );
-    importing.value = false;
-    stockText.value = "";
-    message.success(
-      t("stock.imported", {
-        added: result.added,
-        duplicates: result.duplicates,
-      }),
-    );
-    await load();
-  } catch (e) {
-    stockError.value = errorText(e);
-  } finally {
-    saving.value = false;
-  }
-}
-let stockGeneration = 0;
-let stockController: AbortController | undefined;
-function cancelStock() {
-  stockGeneration++;
-  stockController?.abort();
-  stockLoading.value = false;
-}
-watch(stockDialog, (value) => {
-  if (!value) cancelStock();
-});
-onUnmounted(cancelStock);
-async function viewStock(p: Product) {
-  cancelStock();
-  const current = stockGeneration;
-  stockController = new AbortController();
-  stockProduct.value = p;
-  stockItems.value = [];
-  stockError.value = "";
-  stockDialog.value = true;
-  stockLoading.value = true;
-  try {
-    const result = await api<typeof stockItems.value>(
-      `/admin/products/${p.id}/stock`,
-      { signal: stockController.signal },
-    );
-    if (current === stockGeneration) stockItems.value = result;
-  } catch (e) {
-    if (current === stockGeneration) stockError.value = errorText(e);
-  } finally {
-    if (current === stockGeneration) stockLoading.value = false;
-  }
-}
-function removeStock(id: string) {
-  const p = stockProduct.value;
-  if (!p) return;
-  dialog.warning({
-    title: t("stock.delete_title"),
-    content: t("stock.delete_warning"),
-    positiveText: t("common.delete"),
-    negativeText: t("common.cancel"),
-    onPositiveClick: async () => {
-      try {
-        await api(`/admin/products/${p.id}/stock/${id}`, { method: "DELETE" });
-        await viewStock(p);
-        await load();
-      } catch (e) {
-        message.error(errorText(e));
-        return false;
-      }
-    },
-  });
-}
 </script>
 <template>
   <div class="section-title space-bottom">
     <h2>{{ t("nav.products") }}</h2>
-    <n-button type="primary" @click="edit()">{{ t("product.add") }}</n-button>
+    <div class="row-actions">
+      <n-button :loading="loading" @click="load">{{
+        t("common.refresh")
+      }}</n-button>
+      <n-button type="primary" :disabled="loading || !!error" @click="edit()">{{
+        t("product.add")
+      }}</n-button>
+    </div>
   </div>
   <n-alert v-if="error" type="error" class="space-bottom"
     >{{ errorText(error) }}
@@ -280,7 +203,7 @@ function removeStock(id: string) {
           <thead>
             <tr>
               <th>{{ t("common.product") }}</th>
-              <th>{{ t("common.type") }}</th>
+              <th>{{ t("inventory.association") }}</th>
               <th>{{ t("common.price") }}</th>
               <th>{{ t("stock.summary") }}</th>
               <th>{{ t("common.status") }}</th>
@@ -295,13 +218,20 @@ function removeStock(id: string) {
                 }}</router-link>
                 <template v-else>{{ p.name }}</template>
               </td>
-              <td>{{ kindNames[p.kind] }}</td>
+              <td class="name-cell">
+                {{ p.inventory_name || t("inventory.unassigned") }}
+                <span v-if="p.kind" class="muted">
+                  · {{ kindNames[p.kind] }}</span
+                >
+              </td>
               <td>{{ money(p.price, p.currency) }}</td>
               <td>
                 {{
-                  ["card", "account"].includes(p.kind)
-                    ? `${p.available} / ${p.reserved} / ${p.sold}`
-                    : t("stock.not_consumed")
+                  !p.inventory_id
+                    ? "—"
+                    : ["card", "account"].includes(p.kind)
+                      ? `${p.available} / ${p.reserved} / ${p.sold}`
+                      : t("stock.not_consumed")
                 }}
               </td>
               <td>
@@ -317,18 +247,6 @@ function removeStock(id: string) {
                     :disabled="deleting === p.id"
                     @click="edit(p)"
                     >{{ t("common.edit") }}</n-button
-                  ><template v-if="['card', 'account'].includes(p.kind)"
-                    ><n-button
-                      size="small"
-                      :disabled="deleting === p.id"
-                      @click="importFor(p)"
-                      >{{ t("common.import") }}</n-button
-                    ><n-button
-                      size="small"
-                      :disabled="deleting === p.id"
-                      @click="viewStock(p)"
-                      >{{ t("stock.label") }}</n-button
-                    ></template
                   >
                   <n-button
                     size="small"
@@ -370,15 +288,22 @@ function removeStock(id: string) {
           />
         </div>
         <div>
-          <label class="field-label" for="product-kind">{{
-            t("product.delivery_type")
+          <label class="field-label" for="product-inventory">{{
+            t("inventory.association")
           }}</label
           ><n-select
-            id="product-kind"
-            v-model:value="model.kind"
-            :options="kinds"
-            :disabled="!!model.id"
+            id="product-inventory"
+            v-model:value="model.inventory_id"
+            :options="inventoryOptions"
+            :placeholder="t('inventory.select')"
+            filterable
+            clearable
+            :disabled="saving"
           />
+          <p class="helper">{{ t("inventory.association_help") }}</p>
+          <n-alert v-if="!inventories.length" type="info">{{
+            t("inventory.create_first")
+          }}</n-alert>
         </div>
         <div>
           <label class="field-label" for="currency">{{
@@ -459,21 +384,6 @@ function removeStock(id: string) {
             </n-tab-pane>
           </n-tabs>
         </div>
-        <div v-if="model.kind === 'static'" class="wide">
-          <label class="field-label" for="static-content">{{
-            t("product.static_content")
-          }}</label
-          ><n-input
-            id="static-content"
-            v-model:value="model.static_content"
-            type="textarea"
-            :placeholder="
-              model.id
-                ? t('product.static_keep')
-                : t('product.static_placeholder')
-            "
-          />
-        </div>
       </div>
       <n-alert v-if="formError" type="error" class="space-top">{{
         errorText(formError)
@@ -492,74 +402,6 @@ function removeStock(id: string) {
       >
     </template>
   </FormDialog>
-  <FormDialog
-    v-model:show="importing"
-    :title="t('stock.import_title', { name: stockProduct?.name ?? '' })"
-    :busy="saving"
-    ><p class="muted">{{ t("stock.import_help") }}</p>
-    <n-input
-      v-model:value="stockText"
-      type="textarea"
-      :autosize="{ minRows: 8, maxRows: 18 }"
-      :placeholder="t('stock.placeholder')"
-      :aria-label="t('stock.content')"
-    /><n-alert v-if="stockError" type="error" class="space-top">{{
-      errorText(stockError)
-    }}</n-alert>
-    <template #footer>
-      <n-button :disabled="saving" @click="importing = false">{{
-        t("common.cancel")
-      }}</n-button
-      ><n-button type="primary" :loading="saving" @click="importItems">{{
-        t("stock.import")
-      }}</n-button>
-    </template></FormDialog
-  >
-  <FormDialog
-    v-model:show="stockDialog"
-    :title="t('stock.title', { name: stockProduct?.name ?? '' })"
-    ><n-alert v-if="stockError" type="error"
-      >{{ errorText(stockError) }}
-      <n-button
-        text
-        :loading="stockLoading"
-        @click="stockProduct && viewStock(stockProduct)"
-        >{{ t("common.recheck") }}</n-button
-      ></n-alert
-    ><n-spin :show="stockLoading"
-      ><div class="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>{{ t("stock.id") }}</th>
-              <th>{{ t("common.status") }}</th>
-              <th>{{ t("common.actions") }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in stockItems" :key="item.id">
-              <td class="code-cell">{{ item.id }}</td>
-              <td>{{ stockNames[item.status] }}</td>
-              <td>
-                <n-button
-                  v-if="item.status === 'available'"
-                  size="small"
-                  type="error"
-                  secondary
-                  @click="removeStock(item.id)"
-                  >{{ t("common.delete") }}</n-button
-                >
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <n-empty
-        v-if="!stockItems.length && !stockLoading && !stockError"
-        :description="t('stock.empty')"
-    /></n-spin>
-    <p class="helper">{{ t("stock.list_help") }}</p></FormDialog
-  >
 </template>
 
 <style scoped lang="scss">

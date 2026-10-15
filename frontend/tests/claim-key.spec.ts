@@ -89,11 +89,20 @@ test("下单响应中断后重试复用订单并直接支付", async ({ page, re
   });
   expect(login.ok()).toBeTruthy();
   const headers = { Origin: base, "X-CSRF-Token": (await login.json()).csrf };
+  const inventoryResponse = await request.post(
+    `${base}/api/admin/inventories`,
+    {
+      headers,
+      data: { name: "密钥重试专用库存", kind: "card" },
+    },
+  );
+  expect(inventoryResponse.ok()).toBeTruthy();
+  const inventory = await inventoryResponse.json();
   const productInput = {
     name: "断网恢复专用商品",
     price: 1234,
     currency: "CNY",
-    kind: "card",
+    inventory_id: inventory.id,
     active: true,
     hidden: true,
   };
@@ -105,10 +114,13 @@ test("下单响应中断后重试复用订单并直接支付", async ({ page, re
   const product: Product = await created.json();
   expect(
     (
-      await request.post(`${base}/api/admin/products/${product.id}/stock`, {
-        headers,
-        data: { content: "RETRY-ONLY-CARD" },
-      })
+      await request.post(
+        `${base}/api/admin/inventories/${inventory.id}/stock`,
+        {
+          headers,
+          data: { content: "RETRY-ONLY-CARD" },
+        },
+      )
     ).ok(),
   ).toBeTruthy();
   await page.goto(`${base}/products/${product.id}`);

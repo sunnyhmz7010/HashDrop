@@ -9,42 +9,40 @@ import (
 )
 
 type Product struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Details     string `json:"details"`
-	Price       int64  `json:"price"`
-	SalePrice   *int64 `json:"sale_price,omitempty"`
-	OfferName   string `json:"offer_name,omitempty"`
-	Currency    string `json:"currency"`
-	Kind        string `json:"kind"`
-	Active      bool   `json:"active"`
-	Hidden      bool   `json:"hidden"`
-	Available   int    `json:"available"`
-	Reserved    int    `json:"reserved"`
-	Sold        int    `json:"sold"`
-	Content     string `json:"-"`
-	UpdatedAt   int64  `json:"updated_at"`
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Description   string `json:"description"`
+	Details       string `json:"details"`
+	Price         int64  `json:"price"`
+	SalePrice     *int64 `json:"sale_price,omitempty"`
+	OfferName     string `json:"offer_name,omitempty"`
+	Currency      string `json:"currency"`
+	InventoryID   string `json:"inventory_id,omitempty"`
+	InventoryName string `json:"inventory_name,omitempty"`
+	// Kind 来自关联库存池；商品本身不再保存交付类型和内容。
+	Kind       string `json:"kind"`
+	Active     bool   `json:"active"`
+	Hidden     bool   `json:"hidden"`
+	Available  int    `json:"available"`
+	Reserved   int    `json:"reserved"`
+	Sold       int    `json:"sold"`
+	Content    string `json:"-"`
+	ContentAAD string `json:"-"`
+	UpdatedAt  int64  `json:"updated_at"`
 }
 
-const productSelect = `SELECT p.id,p.name,p.description,p.details,p.price,p.currency,p.kind,p.active,p.hidden,p.content,p.updated_at,
- (SELECT COUNT(*) FROM stock_items s WHERE s.product_id=p.id AND s.status='available'),
- (SELECT COUNT(*) FROM stock_items s WHERE s.product_id=p.id AND s.status='reserved'),
- (SELECT COUNT(*) FROM stock_items s WHERE s.product_id=p.id AND s.status='sold') FROM products p`
-
-func validProductKind(kind string) bool {
-	switch kind {
-	case "card", "account", "static":
-		return true
-	}
-	return false
-}
+const productSelect = `SELECT p.id,p.name,p.description,p.details,p.price,p.currency,COALESCE(i.kind,''),p.active,p.hidden,COALESCE(i.content,''),p.updated_at,
+ (SELECT COUNT(*) FROM stock_items s WHERE s.inventory_id=i.id AND s.status='available'),
+ (SELECT COUNT(*) FROM stock_items s WHERE s.inventory_id=i.id AND s.status='reserved'),
+ (SELECT COUNT(*) FROM stock_items s WHERE s.inventory_id=i.id AND s.status='sold'),
+ COALESCE(i.id,''),COALESCE(i.name,''),COALESCE(i.content_aad,'')
+ FROM products p LEFT JOIN inventories i ON i.id=p.inventory_id AND i.deleted_at IS NULL`
 
 type scanner interface{ Scan(...any) error }
 
 func scanProduct(row scanner) (Product, error) {
 	var p Product
-	err := row.Scan(&p.ID, &p.Name, &p.Description, &p.Details, &p.Price, &p.Currency, &p.Kind, &p.Active, &p.Hidden, &p.Content, &p.UpdatedAt, &p.Available, &p.Reserved, &p.Sold)
+	err := row.Scan(&p.ID, &p.Name, &p.Description, &p.Details, &p.Price, &p.Currency, &p.Kind, &p.Active, &p.Hidden, &p.Content, &p.UpdatedAt, &p.Available, &p.Reserved, &p.Sold, &p.InventoryID, &p.InventoryName, &p.ContentAAD)
 	return p, err
 }
 func (a *App) products(active bool) ([]Product, error) {
@@ -69,6 +67,7 @@ func (a *App) products(active bool) ([]Product, error) {
 			p.Details = "" // 商城卡片只需简介，详细内容在打开商品时读取。
 			p.Reserved = 0
 			p.Sold = 0
+			p.InventoryID, p.InventoryName = "", ""
 		}
 		result = append(result, p)
 	}
@@ -124,6 +123,7 @@ func (a *App) productDetail(w http.ResponseWriter, r *http.Request) error {
 	}
 	p.Reserved = 0
 	p.Sold = 0
+	p.InventoryID, p.InventoryName = "", ""
 	if err = a.productOffer(r.Context(), &p); err != nil {
 		return err
 	}
@@ -132,15 +132,14 @@ func (a *App) productDetail(w http.ResponseWriter, r *http.Request) error {
 }
 
 type productInput struct {
-	Name          string  `json:"name"`
-	Description   string  `json:"description"`
-	Details       *string `json:"details"`
-	Price         int64   `json:"price"`
-	Currency      string  `json:"currency"`
-	Kind          string  `json:"kind"`
-	Active        bool    `json:"active"`
-	Hidden        *bool   `json:"hidden"`
-	StaticContent string  `json:"static_content"`
+	Name        string  `json:"name"`
+	Description string  `json:"description"`
+	Details     *string `json:"details"`
+	Price       int64   `json:"price"`
+	Currency    string  `json:"currency"`
+	InventoryID *string `json:"inventory_id"`
+	Active      bool    `json:"active"`
+	Hidden      *bool   `json:"hidden"`
 }
 
 func (a *App) saveProduct(w http.ResponseWriter, r *http.Request) error {
@@ -150,7 +149,7 @@ func (a *App) saveProduct(w http.ResponseWriter, r *http.Request) error {
 	}
 	input.Name = strings.TrimSpace(input.Name)
 	input.Currency = strings.ToUpper(input.Currency)
-	if len(input.Name) == 0 || len(input.Name) > 120 || len(input.Description) > 4000 || input.Price <= 0 || input.Price > 9_000_000_000_000 || len(input.StaticContent) > 65536 {
+	if len(input.Name) == 0 || len(input.Name) > 120 || len(input.Description) > 4000 || input.Price <= 0 || input.Price > 9_000_000_000_000 {
 		return bad("商品名称、价格或内容长度无效")
 	}
 	if _, err := currencyScale(input.Currency); err != nil {
@@ -159,24 +158,22 @@ func (a *App) saveProduct(w http.ResponseWriter, r *http.Request) error {
 	if input.Details != nil && utf8.RuneCountInString(*input.Details) > 65536 {
 		return bad("商品详情不能超过 65536 字符")
 	}
-	if !validProductKind(input.Kind) {
-		return bad("商品类型无效")
+	tx, err := a.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		return err
 	}
+	defer tx.Rollback()
 	id := r.PathValue("id")
-	content := ""
+	inventory := ""
 	details := ""
 	hidden := false
 	if id == "" {
 		id = newID()
 	} else {
-		var kind string
-		if err := a.db.QueryRow("SELECT kind,content,details,hidden FROM products WHERE id=? AND deleted_at IS NULL", id).Scan(&kind, &content, &details, &hidden); err == sql.ErrNoRows {
+		if err := tx.QueryRowContext(r.Context(), "SELECT COALESCE(inventory_id,''),details,hidden FROM products WHERE id=? AND deleted_at IS NULL", id).Scan(&inventory, &details, &hidden); err == sql.ErrNoRows {
 			return &apiError{404, "商品不存在"}
 		} else if err != nil {
 			return err
-		}
-		if kind != input.Kind {
-			return bad("已有商品不能改变交付类型，请新建商品")
 		}
 	}
 	if input.Details != nil {
@@ -185,21 +182,30 @@ func (a *App) saveProduct(w http.ResponseWriter, r *http.Request) error {
 	if input.Hidden != nil {
 		hidden = *input.Hidden
 	}
-	if input.Kind == "static" {
-		if input.StaticContent != "" {
-			var err error
-			content, err = a.vault.encrypt(input.StaticContent, "product:"+id)
-			if err != nil {
-				return err
-			}
+	if input.InventoryID != nil {
+		inventory = strings.TrimSpace(*input.InventoryID)
+	}
+	if inventory == "" && input.Active {
+		return bad("上架前请选择库存池")
+	}
+	if inventory != "" {
+		var kind, content string
+		if err := tx.QueryRowContext(r.Context(), "SELECT kind,content FROM inventories WHERE id=? AND deleted_at IS NULL", inventory).Scan(&kind, &content); err == sql.ErrNoRows {
+			return bad("库存池不存在或已删除")
+		} else if err != nil {
+			return err
 		}
-		if content == "" {
+		if input.Active && kind == "static" && content == "" {
 			return bad("固定内容不能为空")
 		}
 	}
 	now := unixNow()
-	result, err := a.db.Exec(`INSERT INTO products(id,name,description,details,price,currency,kind,active,hidden,content,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
- ON CONFLICT(id) DO UPDATE SET name=excluded.name,description=excluded.description,details=excluded.details,price=excluded.price,currency=excluded.currency,active=excluded.active,hidden=excluded.hidden,content=excluded.content,updated_at=excluded.updated_at WHERE products.deleted_at IS NULL`, id, input.Name, input.Description, details, input.Price, input.Currency, input.Kind, input.Active, hidden, content, now, now)
+	var inventoryID any
+	if inventory != "" {
+		inventoryID = inventory
+	}
+	result, err := tx.ExecContext(r.Context(), `INSERT INTO products(id,name,description,details,price,currency,inventory_id,active,hidden,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)
+ ON CONFLICT(id) DO UPDATE SET name=excluded.name,description=excluded.description,details=excluded.details,price=excluded.price,currency=excluded.currency,inventory_id=excluded.inventory_id,active=excluded.active,hidden=excluded.hidden,updated_at=excluded.updated_at WHERE products.deleted_at IS NULL`, id, input.Name, input.Description, details, input.Price, input.Currency, inventoryID, input.Active, hidden, now, now)
 	if err != nil {
 		return err
 	}
@@ -209,6 +215,9 @@ func (a *App) saveProduct(w http.ResponseWriter, r *http.Request) error {
 	}
 	if count == 0 {
 		return &apiError{404, "商品不存在"}
+	}
+	if err = tx.Commit(); err != nil {
+		return err
 	}
 	audit("product_saved", id)
 	p, err := scanProduct(a.db.QueryRow(productSelect+" WHERE p.id=?", id))

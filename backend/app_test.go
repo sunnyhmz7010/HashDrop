@@ -161,12 +161,15 @@ func insertProduct(t *testing.T, a *App, kind string, stock int) string {
 	content := ""
 	var err error
 	if kind == "static" {
-		content, err = a.vault.encrypt("购买时内容", "product:"+id)
+		content, err = a.vault.encrypt("购买时内容", "inventory:"+id)
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err = a.db.Exec("INSERT INTO products(id,name,price,currency,kind,active,content,created_at,updated_at) VALUES(?,?,?,?,?,1,?,?,?)", id, "测试商品", 1234, "CNY", kind, content, unixNow(), unixNow()); err != nil {
+	if _, err = a.db.Exec("INSERT INTO inventories(id,name,kind,content,content_aad,created_at,updated_at) VALUES(?,?,?,?,?,?,?)", id, "测试库存池", kind, content, "inventory:"+id, unixNow(), unixNow()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = a.db.Exec("INSERT INTO products(id,name,price,currency,inventory_id,active,created_at,updated_at) VALUES(?,?,?,?,?,1,?,?)", id, "测试商品", 1234, "CNY", id, unixNow(), unixNow()); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < stock; i++ {
@@ -176,7 +179,7 @@ func insertProduct(t *testing.T, a *App, kind string, stock int) string {
 		if e != nil {
 			t.Fatal(e)
 		}
-		if _, e = a.db.Exec("INSERT INTO stock_items(id,product_id,content,fingerprint,created_at) VALUES(?,?,?,?,?)", stockID, id, encrypted, a.vault.fingerprint(id, plain), unixNow()); e != nil {
+		if _, e = a.db.Exec("INSERT INTO stock_items(id,inventory_id,content,fingerprint,created_at) VALUES(?,?,?,?,?)", stockID, id, encrypted, a.vault.fingerprint(id, plain), unixNow()); e != nil {
 			t.Fatal(e)
 		}
 	}
@@ -311,11 +314,11 @@ func TestStaticSnapshotAndGatewayAdminPayment(t *testing.T) {
 	a, g := newTestApp(t)
 	id := insertProduct(t, a, "static", 0)
 	o, _ := reserve(t, a, id, 1)
-	changed, err := a.vault.encrypt("后来修改的内容", "product:"+id)
+	changed, err := a.vault.encrypt("后来修改的内容", "inventory:"+id)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = a.db.Exec("UPDATE products SET content=? WHERE id=?", changed, id); err != nil {
+	if _, err = a.db.Exec("UPDATE inventories SET content=? WHERE id=?", changed, id); err != nil {
 		t.Fatal(err)
 	}
 	if err = a.syncOrder(context.Background(), o.ID); err != nil {
@@ -645,7 +648,7 @@ func TestGatewayTerminalStatePreservesAllocation(t *testing.T) {
 		t.Fatal("释放后的迟到付款未转人工")
 	}
 	var assigned string
-	if err = a.db.QueryRow("SELECT order_id FROM stock_items WHERE product_id=?", product).Scan(&assigned); err != nil {
+	if err = a.db.QueryRow("SELECT order_id FROM stock_items WHERE inventory_id=?", product).Scan(&assigned); err != nil {
 		t.Fatal(err)
 	}
 	if assigned != next.ID {

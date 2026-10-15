@@ -1,4 +1,10 @@
-import { test, expect } from "./fixture";
+import {
+  test,
+  expect,
+  createInventory,
+  selectProductInventory,
+  importInventory,
+} from "./fixture";
 import { placeTestOrder } from "./checkout";
 
 test("隐藏商品通过链接购买，取消隐藏后恢复首页入口", async ({
@@ -13,11 +19,13 @@ test("隐藏商品通过链接购买，取消隐藏后恢复首页入口", async
   await page.goto(`${base}/admin/login`);
   await page.locator("#password input").fill("test-password-only");
   await page.getByRole("button", { name: "登录", exact: true }).click();
-  await page.getByRole("menuitem", { name: "商品与库存", exact: true }).click();
+  const pool = await createInventory(page, "链接专用库存");
+  await page.getByRole("menuitem", { name: "商品管理", exact: true }).click();
   await page.getByRole("button", { name: "新增商品", exact: true }).click();
   const editor = page.getByRole("dialog", { name: "新增商品", exact: true });
   await editor.locator("#product-name input").fill(name);
   await editor.locator("#price input").fill("6.20");
+  await selectProductInventory(page, pool);
   await editor.locator("#active").click();
   await editor.getByRole("switch", { name: "隐藏商品", exact: true }).click();
   const saved = page.waitForResponse(
@@ -31,11 +39,8 @@ test("隐藏商品通过链接购买，取消隐藏后恢复首页入口", async
   expect(product.active).toBe(true);
   const row = page.getByRole("row").filter({ hasText: name });
   await expect(row).toContainText("隐藏商品");
-  await row.getByRole("button", { name: "导入", exact: true }).click();
-  await page
-    .getByPlaceholder("每行一份库存")
-    .fill("HIDDEN-001\nHIDDEN-002\nHIDDEN-003");
-  await page.getByRole("button", { name: "导入库存", exact: true }).click();
+  await importInventory(page, pool, "HIDDEN-001\nHIDDEN-002\nHIDDEN-003");
+  await page.goto(`${base}/admin/products`);
   await expect(row).toContainText("3 / 0 / 0");
   await page.reload();
   await row.getByRole("button", { name: "编辑", exact: true }).click();

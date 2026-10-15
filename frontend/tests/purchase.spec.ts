@@ -1,4 +1,10 @@
-import { test, expect } from "./fixture";
+import {
+  test,
+  expect,
+  createInventory,
+  selectProductInventory,
+  importInventory,
+} from "./fixture";
 import type { Product } from "../src/api";
 import { placeTestOrder } from "./checkout";
 
@@ -147,10 +153,12 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   await expect(
     page.getByRole("heading", { name: "概览", exact: true }),
   ).toBeVisible();
-  await page.getByRole("menuitem", { name: "商品与库存", exact: true }).click();
+  const pool = await createInventory(page, "浏览器验证库存");
+  await page.getByRole("menuitem", { name: "商品管理", exact: true }).click();
   await page.getByRole("button", { name: "新增商品" }).click();
   await page.locator("#product-name input").fill("浏览器验证商品");
   await page.locator("#price input").fill("18.50");
+  await selectProductInventory(page, pool);
   await page.getByRole("button", { name: "保存商品" }).click();
   const row = page.getByRole("row").filter({ hasText: "浏览器验证商品" });
   await expect(row).toContainText("18.50 CNY");
@@ -159,21 +167,20 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
     "浏览器验证商品",
   );
   await page.getByRole("button", { name: "取消", exact: true }).click();
-  await row.getByRole("button", { name: "导入", exact: true }).click();
-  await page.getByPlaceholder("每行一份库存").fill("E2E-001\nE2E-002\nE2E-001");
-  await page.getByRole("button", { name: "导入库存", exact: true }).click();
-  await expect(row).toContainText("2 / 0 / 0");
-  await page.route("**/api/admin/products/*/stock", (route) =>
+  await importInventory(page, pool, "E2E-001\nE2E-002\nE2E-001");
+  const inventoryRow = page.getByRole("row").filter({ hasText: pool.id });
+  await expect(inventoryRow).toContainText("2 / 0 / 0");
+  await page.route("**/api/admin/inventories/*/stock", (route) =>
     route.fulfill({ status: 503, json: { error: "库存查询暂时失败" } }),
   );
-  await row.getByRole("button", { name: "库存", exact: true }).click();
+  await inventoryRow.getByRole("button", { name: "库存", exact: true }).click();
   const inventoryDialog = page.getByRole("dialog", {
-    name: "库存 · 浏览器验证商品",
+    name: "库存 · 浏览器验证库存",
     exact: true,
   });
   await expect(inventoryDialog.getByText("库存查询暂时失败")).toBeVisible();
   await expect(inventoryDialog.getByText("暂无库存")).toHaveCount(0);
-  await page.unroute("**/api/admin/products/*/stock");
+  await page.unroute("**/api/admin/inventories/*/stock");
   await inventoryDialog.getByRole("button", { name: "重新查询" }).click();
   await expect(
     inventoryDialog.getByRole("cell", { name: "可用", exact: true }),
@@ -253,7 +260,7 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
       ).toHaveCount(0);
       await page.getByRole("button", { name: "打开管理菜单" }).click();
       await page
-        .getByRole("menuitem", { name: "商品与库存", exact: true })
+        .getByRole("menuitem", { name: "商品管理", exact: true })
         .click();
       await expect(
         page.getByRole("button", { name: "新增商品" }),

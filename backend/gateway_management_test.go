@@ -75,7 +75,7 @@ func TestDeleteOrderPreservesLatePaymentAndClaim(t *testing.T) {
 		t.Fatal("已删除订单仍能从后台详情打开")
 	}
 	var reservation string
-	if err := a.db.QueryRow("SELECT status FROM stock_items WHERE product_id=?", product).Scan(&reservation); err != nil || reservation != "reserved" {
+	if err := a.db.QueryRow("SELECT status FROM stock_items WHERE inventory_id=?", product).Scan(&reservation); err != nil || reservation != "reserved" {
 		t.Fatal("删除提前释放了库存")
 	}
 	if result := request("PUT", "/api/admin/settings", `{"title":"TinyFaka","hashpay_url":"https://other.example","merchant_id":"other"}`); result.Code != 400 || !strings.Contains(result.Body.String(), "待核验付款或未完成交付") {
@@ -186,6 +186,14 @@ func testLegacyMigration(t *testing.T, oldVersion int) {
 		values := append([]string(nil), columns...)
 		for i, name := range columns {
 			switch name {
+			case "kind", "content":
+				if table == "products" {
+					values[i] = "(SELECT " + name + " FROM current_data.inventories WHERE id=products.inventory_id)"
+				}
+			case "product_id":
+				if table == "stock_items" {
+					values[i] = "inventory_id"
+				}
 			case "config":
 				values[i] = "'{}'"
 			case "idempotency_key":
@@ -243,7 +251,7 @@ func testLegacyMigration(t *testing.T, oldVersion int) {
 	if err != nil || len(legacyResults) != 1 || legacyResults[0].Content != "历史交付结果" {
 		t.Fatal("旧开通订单的领取内容丢失")
 	}
-	if _, err = a.db.Exec("INSERT INTO products(id,name,price,currency,kind,created_at,updated_at) VALUES('unsupported','unsupported',1,'CNY','api',0,0)"); err == nil {
+	if _, err = a.db.Exec("INSERT INTO inventories(id,name,kind,created_at,updated_at) VALUES('unsupported','unsupported','api',0,0)"); err == nil {
 		t.Fatal("升级后仍允许新增已删除的商品类型")
 	}
 	after, err := a.deliveryResults(context.Background(), paid.ID)
@@ -258,13 +266,13 @@ func testLegacyMigration(t *testing.T, oldVersion int) {
 		t.Fatal("升级错误推测了历史商户归属")
 	}
 	var version, foreignKeys, stock int
-	if err = a.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 9 {
+	if err = a.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 10 {
 		t.Fatal("数据库版本未升级")
 	}
 	if err = a.db.QueryRow("PRAGMA foreign_keys").Scan(&foreignKeys); err != nil || foreignKeys != 1 {
 		t.Fatal("升级后未恢复外键约束")
 	}
-	if err = a.db.QueryRow("SELECT COUNT(*) FROM stock_items WHERE product_id=?", product).Scan(&stock); err != nil || stock != 3 {
+	if err = a.db.QueryRow("SELECT COUNT(*) FROM stock_items WHERE inventory_id=?", product).Scan(&stock); err != nil || stock != 3 {
 		t.Fatal("升级丢失库存")
 	}
 	if _, err = a.db.Exec("DELETE FROM orders WHERE id=?", paid.ID); err == nil {

@@ -1,4 +1,10 @@
-import { test, expect, type Locator } from "./fixture";
+import {
+  test,
+  expect,
+  createInventory,
+  selectProductInventory,
+  type Locator,
+} from "./fixture";
 import { placeTestOrder } from "./checkout";
 
 async function verifyRichContent(content: Locator) {
@@ -117,22 +123,23 @@ test("Markdown 详情保存、图片视频展示与首页直接下单", async ({
   await page.goto(`${base}/admin/login`);
   await page.locator("#password input").fill("test-password-only");
   await page.getByRole("button", { name: "登录", exact: true }).click();
-  await page.getByRole("menuitem", { name: "商品与库存", exact: true }).click();
+  const pool = await createInventory(
+    page,
+    "Markdown 交付库存",
+    "static",
+    "测试交付内容",
+  );
+  await page.getByRole("menuitem", { name: "商品管理", exact: true }).click();
   await page.getByRole("button", { name: "新增商品" }).click();
   const editor = page.getByRole("dialog", { name: "新增商品", exact: true });
   await editor.locator("#product-name input").fill(name);
-  await editor.locator("#product-kind").click();
-  await page
-    .locator(".n-base-select-option")
-    .getByText("固定文本", { exact: true })
-    .click();
+  await selectProductInventory(page, pool);
   await editor.locator("#price input").fill("12.34");
   await editor.locator("#active").click();
   await editor
     .locator("#description textarea")
     .fill("商品介绍在首页和详情顶部显示");
   await editor.locator("#product-details-input").fill(details);
-  await editor.locator("#static-content textarea").fill("测试交付内容");
   await editor
     .locator(".n-tabs-tab")
     .getByText("预览", { exact: true })
@@ -315,7 +322,7 @@ test("Markdown 详情保存、图片视频展示与首页直接下单", async ({
         details: product.details,
         price: product.price,
         currency: product.currency,
-        kind: product.kind,
+        inventory_id: pool.id,
         active: false,
       },
     },

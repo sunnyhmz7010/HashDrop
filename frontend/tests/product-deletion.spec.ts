@@ -1,4 +1,10 @@
-import { test, expect } from "./fixture";
+import {
+  test,
+  expect,
+  createInventory,
+  selectProductInventory,
+  importInventory,
+} from "./fixture";
 import { placeTestOrder } from "./checkout";
 
 test("删除商品保留订单和领取，失败可重试", async ({ page, request }) => {
@@ -10,10 +16,12 @@ test("删除商品保留订单和领取，失败可重试", async ({ page, reque
   await page.goto(`${base}/admin/login`);
   await page.locator("#password input").fill("test-password-only");
   await page.getByRole("button", { name: "登录", exact: true }).click();
-  await page.getByRole("menuitem", { name: "商品与库存", exact: true }).click();
+  const pool = await createInventory(page, "删除验证库存");
+  await page.getByRole("menuitem", { name: "商品管理", exact: true }).click();
   await page.getByRole("button", { name: "新增商品", exact: true }).click();
   await page.locator("#product-name input").fill(name);
   await page.locator("#price input").fill("7.50");
+  await selectProductInventory(page, pool);
   await page.locator("#active").click();
   const saved = page.waitForResponse(
     (response) =>
@@ -23,11 +31,12 @@ test("删除商品保留订单和领取，失败可重试", async ({ page, reque
   await page.getByRole("button", { name: "保存商品", exact: true }).click();
   const product = await (await saved).json();
   const row = page.getByRole("row").filter({ hasText: name });
-  await row.getByRole("button", { name: "导入", exact: true }).click();
-  await page
-    .getByPlaceholder("每行一份库存")
-    .fill("DELETE-001\nDELETE-002\nDELETE-003\nDELETE-004");
-  await page.getByRole("button", { name: "导入库存", exact: true }).click();
+  await importInventory(
+    page,
+    pool,
+    "DELETE-001\nDELETE-002\nDELETE-003\nDELETE-004",
+  );
+  await page.goto(`${base}/admin/products`);
   await expect(row).toContainText("4 / 0 / 0");
 
   const receipts: { url: string; id: string }[] = [];

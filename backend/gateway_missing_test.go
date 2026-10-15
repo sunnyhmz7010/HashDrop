@@ -65,7 +65,7 @@ func TestMissingGatewayOrderReleasesOnlyItsReservation(t *testing.T) {
 		t.Fatal("释放后的迟到付款没有转人工")
 	}
 	var assigned, state string
-	if err = a.db.QueryRow("SELECT order_id,status FROM stock_items WHERE product_id=?", product).Scan(&assigned, &state); err != nil || assigned != next.ID || state != "reserved" {
+	if err = a.db.QueryRow("SELECT order_id,status FROM stock_items WHERE inventory_id=?", product).Scan(&assigned, &state); err != nil || assigned != next.ID || state != "reserved" {
 		t.Fatal("删除或迟到付款破坏了后续订单库存")
 	}
 }

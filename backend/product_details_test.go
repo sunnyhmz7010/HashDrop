@@ -11,8 +11,9 @@ import (
 func TestProductDetailsPersistAndDoNotBloatCatalog(t *testing.T) {
 	a, _ := newTestApp(t)
 	request := adminSessionRequest(t, a)
+	inventory := createInventoryViaAPI(t, a, "card", "")
 	details := "## 商品介绍\n\n**加粗内容**\n\n![图片](https://example.com/image.png)\n\n![视频](https://example.com/video.webm)"
-	input := map[string]any{"name": "详情商品", "description": "卡片简介 <保留原文>", "details": details, "price": 1234, "currency": "CNY", "kind": "card", "active": true}
+	input := map[string]any{"name": "详情商品", "description": "卡片简介 <保留原文>", "details": details, "price": 1234, "currency": "CNY", "inventory_id": inventory.ID, "active": true}
 	body, _ := json.Marshal(input)
 	created := request("POST", "/api/admin/products", string(body))
 	if created.Code != http.StatusOK {

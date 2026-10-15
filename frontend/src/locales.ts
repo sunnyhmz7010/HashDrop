@@ -143,7 +143,48 @@ const zh = {
   "stock.delete_title": "删除这份库存？",
   "stock.delete_warning": "删除后无法恢复，仅允许删除尚未预留的库存。",
   "common.delete": "删除",
-  "nav.products": "商品与库存",
+  "nav.products": "商品管理",
+  "nav.inventories": "库存管理",
+  "inventory.add": "新增库存池",
+  "inventory.edit": "编辑库存池",
+  "inventory.name": "库存池名称",
+  "inventory.delivery_type": "交付类型",
+  "inventory.association": "关联库存池",
+  "inventory.select": "选择库存池",
+  "inventory.unassigned": "未关联库存池",
+  "inventory.association_help":
+    "多个商品可共享同一库存池。更换关联仅影响新订单，上架前须选择库存池。",
+  "inventory.create_first":
+    "请先到库存管理创建库存池；未关联的商品可以保存为下架草稿。",
+  "inventory.help":
+    "库存池独立管理交付类型和内容，可供多个商品共享。删除商品不会删除库存。",
+  "inventory.kind_help":
+    "交付类型属于库存池；如需更换类型，请新建库存池并调整商品关联。",
+  "inventory.products": "关联商品",
+  "inventory.shared_count": "{count} 个商品",
+  "inventory.content_missing": "待填写固定内容",
+  "inventory.empty": "还没有库存池",
+  "inventory.save": "保存库存池",
+  "inventory.saved": "库存池已保存",
+  "inventory.deleted": "库存池已删除",
+  "inventory.delete_title": "删除库存池？",
+  "inventory.delete_warning":
+    "删除“{name}”后停止使用该库存池，库存与历史订单记录保留。须先解除商品关联，且不能有订单预留。",
+  "inventory.delete_blocked":
+    "须先解除商品关联并等待订单预留结束，才能删除库存池。",
+  "inventory.static_content": "固定交付内容",
+  "inventory.static_keep": "留空保留现有内容；新内容仅影响后续订单",
+  "inventory.static_placeholder": "填写付款后展示的内容",
+  "errors.inventory_fields": "库存池名称、交付类型或内容长度无效",
+  "errors.inventory_static_only": "只有固定文本库存池可以设置固定内容",
+  "errors.inventory_missing": "库存池不存在或已删除",
+  "errors.inventory_kind_locked":
+    "已有库存池不能改变交付类型，请新建库存池后关联商品",
+  "errors.inventory_linked": "库存池仍有关联商品，请先解除关联",
+  "errors.inventory_reserved": "库存池仍有订单预留，暂不能删除",
+  "errors.inventory_no_items": "固定文本库存池不使用逐条库存",
+  "errors.inventory_required": "上架前请选择库存池",
+  "errors.inventory_unassigned": "商品尚未关联可用库存池",
   "product.add": "新增商品",
   "common.product": "商品",
   "common.type": "类型",
@@ -160,7 +201,6 @@ const zh = {
   "product.empty": "还没有商品",
   "product.edit": "编辑商品",
   "product.name": "商品名称",
-  "product.delivery_type": "交付类型",
   "common.currency": "币种",
   "product.price": "售价",
   "product.price_placeholder": "例如 10.00",
@@ -174,9 +214,6 @@ const zh = {
   "product.edit_details": "编辑",
   "product.preview_details": "预览",
   "shop.buy": "下单",
-  "product.static_content": "固定交付内容",
-  "product.static_keep": "留空保留现有内容；新内容只影响后续订单",
-  "product.static_placeholder": "填写付款后展示的内容",
   "product.save": "保存商品",
   "stock.import_help":
     "每行一份卡密或账号。重复内容会自动跳过；账号与密码请放在同一行。",
@@ -379,8 +416,6 @@ const zh = {
   "errors.claim_credential": "请输入有效的领取凭证",
   "errors.order_credential": "订单或凭证无效",
   "errors.product_fields": "商品名称、价格或内容长度无效",
-  "errors.product_kind": "商品类型无效",
-  "errors.product_kind_locked": "已有商品不能改变交付类型，请新建商品",
   "errors.static_required": "固定内容不能为空",
   "errors.cipher_format": "密文格式无效",
   "errors.key_missing": "密钥版本缺失",
@@ -641,7 +676,54 @@ const en: Record<MessageKey, string> = {
   "stock.delete_warning":
     "Deletion cannot be undone. Only unreserved stock can be deleted.",
   "common.delete": "Delete",
-  "nav.products": "Products and stock",
+  "nav.products": "Products",
+  "nav.inventories": "Inventory",
+  "inventory.add": "Add inventory pool",
+  "inventory.edit": "Edit inventory pool",
+  "inventory.name": "Inventory pool name",
+  "inventory.delivery_type": "Delivery type",
+  "inventory.association": "Inventory pool",
+  "inventory.select": "Select an inventory pool",
+  "inventory.unassigned": "No inventory pool",
+  "inventory.association_help":
+    "Products can share one pool. Changing the pool affects new orders only. Select a pool before publishing.",
+  "inventory.create_first":
+    "Create a pool in Inventory first. Products without a pool can be saved as unpublished drafts.",
+  "inventory.help":
+    "Pools manage delivery types and content independently and can be shared by multiple products. Deleting a product preserves its inventory.",
+  "inventory.kind_help":
+    "The delivery type belongs to the pool. To change it, create a new pool and update the product association.",
+  "inventory.products": "Linked products",
+  "inventory.shared_count": "{count} products",
+  "inventory.content_missing": "Content required",
+  "inventory.empty": "No inventory pools yet",
+  "inventory.save": "Save inventory pool",
+  "inventory.saved": "Inventory pool saved",
+  "inventory.deleted": "Inventory pool deleted",
+  "inventory.delete_title": "Delete inventory pool?",
+  "inventory.delete_warning":
+    "Deleting “{name}” stops new uses and preserves stock and historical orders. Unlink all products and wait for reservations to finish first.",
+  "inventory.delete_blocked":
+    "Unlink all products and wait for order reservations to finish before deleting the pool.",
+  "inventory.static_content": "Fixed delivery content",
+  "inventory.static_keep":
+    "Leave blank to keep current content; changes affect new orders only",
+  "inventory.static_placeholder": "Enter the content shown after payment",
+  "errors.inventory_fields":
+    "Invalid inventory pool name, delivery type or content length",
+  "errors.inventory_static_only":
+    "Only fixed-content pools accept fixed content",
+  "errors.inventory_missing": "Inventory pool not found or deleted",
+  "errors.inventory_kind_locked":
+    "An existing pool cannot change delivery type. Create another pool and link the product to it.",
+  "errors.inventory_linked":
+    "This pool still has linked products. Unlink them first.",
+  "errors.inventory_reserved":
+    "This pool still has reserved stock and cannot be deleted yet",
+  "errors.inventory_no_items":
+    "Fixed-content pools do not use individual stock items",
+  "errors.inventory_required": "Select an inventory pool before publishing",
+  "errors.inventory_unassigned": "This product has no available inventory pool",
   "product.add": "Add product",
   "common.product": "Product",
   "common.type": "Type",
@@ -658,7 +740,6 @@ const en: Record<MessageKey, string> = {
   "product.empty": "No products yet",
   "product.edit": "Edit product",
   "product.name": "Product name",
-  "product.delivery_type": "Delivery type",
   "common.currency": "Currency",
   "product.price": "Selling price",
   "product.price_placeholder": "e.g. 10.00",
@@ -673,10 +754,6 @@ const en: Record<MessageKey, string> = {
   "product.edit_details": "Edit",
   "product.preview_details": "Preview",
   "shop.buy": "Place order",
-  "product.static_content": "Static delivery content",
-  "product.static_keep":
-    "Leave blank to keep existing content; changes apply to future orders",
-  "product.static_placeholder": "Enter the content shown after payment",
   "product.save": "Save product",
   "stock.import_help":
     "One license key or account per line. Duplicates are skipped. Keep the account name and password on the same line.",
@@ -907,9 +984,6 @@ const en: Record<MessageKey, string> = {
   "errors.claim_credential": "Enter a valid claim credential",
   "errors.order_credential": "Invalid order or claim credential",
   "errors.product_fields": "Invalid product name, price or content length",
-  "errors.product_kind": "Invalid product type",
-  "errors.product_kind_locked":
-    "Existing products cannot change delivery type. Create a new product.",
   "errors.static_required": "Static delivery content cannot be empty",
   "errors.cipher_format": "Invalid ciphertext format",
   "errors.key_missing": "Key version is missing",

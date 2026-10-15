@@ -62,22 +62,23 @@ func TestDeleteProductPreservesOrdersAndClaims(t *testing.T) {
 			if response := public("/api/products/"+product, ""); response.Code != 404 {
 				t.Fatal("已删除商品仍可通过旧链接访问")
 			}
-			stale := `{"name":"旧编辑窗口","price":1234,"currency":"CNY","kind":"` + kind + `","active":true}`
+			stale := `{"name":"旧编辑窗口","price":1234,"currency":"CNY","inventory_id":"` + product + `","active":true}`
 			if response := admin("PUT", "/api/admin/products/"+product, stale); response.Code != 404 {
 				t.Fatal("旧编辑窗口可以重新保存已删除商品")
 			}
-			if response := admin("POST", "/api/admin/products/"+product+"/stock", `{"content":"不能再导入"}`); response.Code != 404 {
-				t.Fatal("已删除商品仍能导入库存")
-			}
-			if response := admin("GET", "/api/admin/products/"+product+"/stock"); response.Code != 404 {
-				t.Fatal("已删除商品仍能打开库存管理")
+			if response := admin("GET", "/api/admin/inventories/"+product+"/stock"); response.Code != 200 {
+				t.Fatal("删除商品破坏了独立库存管理")
 			}
 			if response := admin("POST", "/api/orders", `{"product_id":"`+product+`","quantity":1}`); response.Code != 400 {
 				t.Fatal("已删除商品仍能创建新订单")
 			}
 			var overview map[string]int
+			expectedStock := 0
+			if kind == "card" {
+				expectedStock = 2
+			}
 			response := admin("GET", "/api/admin/overview")
-			if json.Unmarshal(response.Body.Bytes(), &overview) != nil || overview["products"] != 1 || overview["stock"] != 0 || overview["orders"] != 2 || overview["paid"] != 1 {
+			if json.Unmarshal(response.Body.Bytes(), &overview) != nil || overview["products"] != 1 || overview["stock"] != expectedStock || overview["orders"] != 2 || overview["paid"] != 1 {
 				t.Fatal("删除后的商品、库存或历史订单统计不正确")
 			}
 			remaining, err := a.loadOrder(context.Background(), pending.ID)

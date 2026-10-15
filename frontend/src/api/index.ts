@@ -63,12 +63,24 @@ export interface Product {
   sale_price?: number;
   offer_name?: string;
   currency: string;
+  inventory_id?: string;
+  inventory_name?: string;
   kind: string;
   active: boolean;
   hidden: boolean;
   available: number;
   reserved: number;
   sold: number;
+}
+export interface Inventory {
+  id: string;
+  name: string;
+  kind: string;
+  has_content: boolean;
+  available: number;
+  reserved: number;
+  sold: number;
+  product_count: number;
 }
 export interface Order {
   id: string;

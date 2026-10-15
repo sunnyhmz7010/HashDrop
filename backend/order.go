@@ -14,6 +14,7 @@ type Order struct {
 	ID                string          `json:"id"`
 	ProductID         string          `json:"product_id"`
 	ProductName       string          `json:"product_name"`
+	InventoryID       string          `json:"-"`
 	Kind              string          `json:"kind"`
 	UnitPrice         int64           `json:"unit_price"`
 	Currency          string          `json:"currency"`
@@ -37,12 +38,12 @@ type Order struct {
 	LastError         string          `json:"last_error"`
 }
 
-const orderSelect = `SELECT id,product_id,product_name,kind,unit_price,currency,quantity,total,COALESCE(gateway_id,''),gateway_url,gateway_merchant_id,checkout_url,payment_status,delivery_status,reservation_status,expires_at,created_at,content,token_hash,attempts,last_error,discounts FROM orders`
+const orderSelect = `SELECT id,product_id,product_name,kind,unit_price,currency,quantity,total,COALESCE(gateway_id,''),gateway_url,gateway_merchant_id,checkout_url,payment_status,delivery_status,reservation_status,expires_at,created_at,content,token_hash,attempts,last_error,discounts,COALESCE(inventory_id,'') FROM orders`
 
 func scanOrder(row scanner) (Order, error) {
 	var o Order
 	var discounts string
-	err := row.Scan(&o.ID, &o.ProductID, &o.ProductName, &o.Kind, &o.UnitPrice, &o.Currency, &o.Quantity, &o.Total, &o.GatewayID, &o.GatewayURL, &o.GatewayMerchantID, &o.CheckoutURL, &o.PaymentStatus, &o.DeliveryStatus, &o.ReservationStatus, &o.ExpiresAt, &o.CreatedAt, &o.Content, &o.TokenHash, &o.Attempts, &o.LastError, &discounts)
+	err := row.Scan(&o.ID, &o.ProductID, &o.ProductName, &o.Kind, &o.UnitPrice, &o.Currency, &o.Quantity, &o.Total, &o.GatewayID, &o.GatewayURL, &o.GatewayMerchantID, &o.CheckoutURL, &o.PaymentStatus, &o.DeliveryStatus, &o.ReservationStatus, &o.ExpiresAt, &o.CreatedAt, &o.Content, &o.TokenHash, &o.Attempts, &o.LastError, &discounts, &o.InventoryID)
 	if err == nil {
 		err = json.Unmarshal([]byte(discounts), &o.Discounts)
 	}
@@ -173,9 +174,16 @@ func (a *App) reservePricedOrder(ctx context.Context, input orderInput) (Order, 
 	if input.QuotedTotal != nil && (*input.QuotedTotal != quote.Total || input.QuotedCurrency != quote.Currency) {
 		return Order{}, "", &apiError{409, "优惠或价格已变化，请重新确认金额"}
 	}
+	if p.InventoryID == "" || !validDeliveryKind(p.Kind) {
+		return Order{}, "", bad("商品尚未关联可用库存池")
+	}
 	content := ""
 	if p.Kind == "static" {
-		plain, e := a.vault.decrypt(p.Content, "product:"+p.ID)
+		// 兼容迁移前的前缀，但认证上下文始终必须属于当前库存池，防止跨记录替换。
+		if p.ContentAAD != "inventory:"+p.InventoryID && p.ContentAAD != "product:"+p.InventoryID {
+			return Order{}, "", errors.New("库存池密文认证上下文无效")
+		}
+		plain, e := a.vault.decrypt(p.Content, p.ContentAAD)
 		if e != nil {
 			return Order{}, "", e
 		}
@@ -184,13 +192,13 @@ func (a *App) reservePricedOrder(ctx context.Context, input orderInput) (Order, 
 			return Order{}, "", e
 		}
 	}
-	o := Order{ID: id, ProductID: p.ID, ProductName: p.Name, Kind: p.Kind, UnitPrice: p.Price, Currency: p.Currency, Quantity: quantity, Total: p.Price * int64(quantity), TokenHash: tokenHash(token), Content: content, PaymentStatus: "creating", DeliveryStatus: "pending", ReservationStatus: "reserved", CreatedAt: unixNow()}
+	o := Order{ID: id, ProductID: p.ID, ProductName: p.Name, InventoryID: p.InventoryID, Kind: p.Kind, UnitPrice: p.Price, Currency: p.Currency, Quantity: quantity, Total: p.Price * int64(quantity), TokenHash: tokenHash(token), Content: content, PaymentStatus: "creating", DeliveryStatus: "pending", ReservationStatus: "reserved", CreatedAt: unixNow()}
 	o.Total, o.OriginalTotal, o.DiscountTotal, o.Discounts = quote.Total, quote.OriginalTotal, quote.DiscountTotal, quote.Discounts
 	snapshot, err := json.Marshal(o.Discounts)
 	if err != nil {
 		return Order{}, "", err
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO orders(id,product_id,product_name,kind,unit_price,currency,quantity,total,content,token_hash,payment_status,created_at,updated_at,discounts) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, o.ID, o.ProductID, o.ProductName, o.Kind, o.UnitPrice, o.Currency, o.Quantity, o.Total, o.Content, o.TokenHash, o.PaymentStatus, o.CreatedAt, o.CreatedAt, string(snapshot)); err != nil {
+	if _, err = tx.ExecContext(ctx, `INSERT INTO orders(id,product_id,product_name,kind,unit_price,currency,quantity,total,content,token_hash,payment_status,created_at,updated_at,discounts,inventory_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, o.ID, o.ProductID, o.ProductName, o.Kind, o.UnitPrice, o.Currency, o.Quantity, o.Total, o.Content, o.TokenHash, o.PaymentStatus, o.CreatedAt, o.CreatedAt, string(snapshot), o.InventoryID); err != nil {
 		return Order{}, "", err
 	}
 	// 与库存预留同一写事务占用优惠次数；只有可靠终止且未付款的订单才归还名额。
@@ -201,7 +209,7 @@ func (a *App) reservePricedOrder(ctx context.Context, input orderInput) (Order, 
 	}
 	stockIDs := []string{}
 	if p.Kind == "card" || p.Kind == "account" {
-		rows, e := tx.QueryContext(ctx, "SELECT id FROM stock_items WHERE product_id=? AND status='available' ORDER BY created_at,id LIMIT ?", p.ID, quantity)
+		rows, e := tx.QueryContext(ctx, "SELECT id FROM stock_items WHERE inventory_id=? AND status='available' ORDER BY created_at,id LIMIT ?", p.InventoryID, quantity)
 		if e != nil {
 			return Order{}, "", e
 		}

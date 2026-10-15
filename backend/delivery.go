@@ -52,7 +52,7 @@ func (a *App) deliverOrder(ctx context.Context, o Order) error {
 	}
 	defer tx.Rollback()
 	// 历史订单保留领取记录；已停止支持的类型不能进入库存分配。
-	if !validProductKind(o.Kind) {
+	if !validDeliveryKind(o.Kind) {
 		if _, err = tx.ExecContext(ctx, "UPDATE deliveries SET status='manual',last_error='商品交付类型已停止支持',updated_at=? WHERE order_id=? AND status<>'done'", unixNow(), o.ID); err != nil {
 			return err
 		}
@@ -61,15 +61,15 @@ func (a *App) deliverOrder(ctx context.Context, o Order) error {
 		}
 		return tx.Commit()
 	}
-	rows, err := tx.QueryContext(ctx, "SELECT d.id,COALESCE(d.stock_id,''),COALESCE(s.content,''),COALESCE(s.status,''),COALESCE(s.order_id,'') FROM deliveries d LEFT JOIN stock_items s ON s.id=d.stock_id WHERE d.order_id=? AND d.status='pending' ORDER BY d.ordinal", o.ID)
+	rows, err := tx.QueryContext(ctx, "SELECT d.id,COALESCE(d.stock_id,''),COALESCE(s.content,''),COALESCE(s.status,''),COALESCE(s.order_id,''),COALESCE(s.inventory_id,'') FROM deliveries d LEFT JOIN stock_items s ON s.id=d.stock_id WHERE d.order_id=? AND d.status='pending' ORDER BY d.ordinal", o.ID)
 	if err != nil {
 		return err
 	}
-	type item struct{ id, stock, content, status, order string }
+	type item struct{ id, stock, content, status, order, inventory string }
 	items := []item{}
 	for rows.Next() {
 		var i item
-		if err = rows.Scan(&i.id, &i.stock, &i.content, &i.status, &i.order); err != nil {
+		if err = rows.Scan(&i.id, &i.stock, &i.content, &i.status, &i.order, &i.inventory); err != nil {
 			rows.Close()
 			return err
 		}
@@ -85,7 +85,7 @@ func (a *App) deliverOrder(ctx context.Context, o Order) error {
 		if o.Kind == "static" {
 			plain, err = a.vault.decrypt(o.Content, "order:"+o.ID)
 		} else {
-			if i.status != "reserved" || i.order != o.ID {
+			if i.status != "reserved" || i.order != o.ID || i.inventory != o.InventoryID {
 				return errors.New("库存预留状态不一致")
 			}
 			plain, err = a.vault.decrypt(i.content, "stock:"+i.stock)

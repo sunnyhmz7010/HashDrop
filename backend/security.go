@@ -79,9 +79,9 @@ func (v *vault) decrypt(value, aad string) (string, error) {
 	plain, err := gcm.Open(nil, data[:gcm.NonceSize()], data[gcm.NonceSize():], []byte(aad))
 	return string(plain), err
 }
-func (v *vault) fingerprint(product, content string) string {
+func (v *vault) fingerprint(inventory, content string) string {
 	h := hmac.New(sha256.New, v.dedup)
-	h.Write([]byte(product + "\x00" + content))
+	h.Write([]byte(inventory + "\x00" + content))
 	return hex.EncodeToString(h.Sum(nil))
 }
 func passwordHash(password string) string {

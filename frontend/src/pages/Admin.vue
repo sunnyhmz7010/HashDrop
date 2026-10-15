@@ -18,6 +18,7 @@ import { version } from "../../package.json";
 import Overview from "../components/Overview.vue";
 import Products from "../components/Products.vue";
 import Orders from "../components/Orders.vue";
+import Promotions from "../components/Promotions.vue";
 import Settings from "../components/Settings.vue";
 import AppHeader from "../components/AppHeader.vue";
 const route = useRoute(),
@@ -30,6 +31,7 @@ const menuOptions = computed(() => [
   { key: "overview", label: t("nav.overview") },
   { key: "products", label: t("nav.products") },
   { key: "orders", label: t("nav.orders") },
+  { key: "promotions", label: t("nav.promotions") },
   { key: "settings", label: t("nav.settings") },
 ]);
 function openPage(key: string) {
@@ -105,6 +107,7 @@ async function logout() {
           <Products v-if="section === 'products'" /><Orders
             v-else-if="section === 'orders'"
           />
+          <Promotions v-else-if="section === 'promotions'" />
           <Settings v-else-if="section === 'settings'" /><Overview v-else />
         </n-layout-content>
       </n-layout>

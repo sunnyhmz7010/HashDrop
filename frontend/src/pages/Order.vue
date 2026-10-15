@@ -198,6 +198,19 @@ const statusType = computed(() => {
             }}</strong>
           </div>
           <dl class="checkout-receipt-meta">
+            <div v-if="detail.order.discount_total > 0">
+              <dt>{{ t("promotion.original_total") }}</dt>
+              <dd>
+                {{ money(detail.order.original_total, detail.order.currency) }}
+              </dd>
+            </div>
+            <div v-for="discount in detail.order.discounts" :key="discount.id">
+              <dt>
+                {{ discount.name
+                }}<small v-if="discount.code"> · {{ discount.code }}</small>
+              </dt>
+              <dd>−{{ money(discount.amount, detail.order.currency) }}</dd>
+            </div>
             <div>
               <dt>{{ t("orders.id") }}</dt>
               <dd>

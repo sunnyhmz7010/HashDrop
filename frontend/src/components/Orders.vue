@@ -359,6 +359,26 @@ async function copy(value: string) {
         <section class="order-modal-section">
           <h3>{{ t("orders.payment_info") }}</h3>
           <div class="detail-grid">
+            <div v-if="selected.order.discount_total > 0" class="detail-item">
+              <span>{{ t("promotion.original_total") }}</span
+              ><strong>{{
+                money(selected.order.original_total, selected.order.currency)
+              }}</strong>
+            </div>
+            <div
+              v-for="discount in selected.order.discounts"
+              :key="discount.id"
+              class="detail-item"
+            >
+              <span
+                >{{ discount.name
+                }}<small v-if="discount.code">
+                  · {{ discount.code }}</small
+                ></span
+              ><strong
+                >−{{ money(discount.amount, selected.order.currency) }}</strong
+              >
+            </div>
             <div class="detail-item">
               <span>{{ t("orders.amount") }}</span>
               <strong>{{

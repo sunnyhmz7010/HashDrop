@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"net/http"
 	"strings"
@@ -13,6 +14,8 @@ type Product struct {
 	Description string `json:"description"`
 	Details     string `json:"details"`
 	Price       int64  `json:"price"`
+	SalePrice   *int64 `json:"sale_price,omitempty"`
+	OfferName   string `json:"offer_name,omitempty"`
 	Currency    string `json:"currency"`
 	Kind        string `json:"kind"`
 	Active      bool   `json:"active"`
@@ -69,7 +72,31 @@ func (a *App) products(active bool) ([]Product, error) {
 		}
 		result = append(result, p)
 	}
-	return result, rows.Err()
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	if active {
+		for i := range result {
+			if err = a.productOffer(context.Background(), &result[i]); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return result, nil
+}
+
+func (a *App) productOffer(ctx context.Context, p *Product) error {
+	quote, err := quoteOrder(ctx, a.db, *p, 1, "", unixNow())
+	if err != nil {
+		return err
+	}
+	if quote.DiscountTotal > 0 {
+		p.SalePrice = &quote.Total
+		p.OfferName = quote.Discounts[0].Name
+	}
+	return nil
 }
 func (a *App) listProducts(w http.ResponseWriter, r *http.Request) error {
 	ps, err := a.products(true)
@@ -97,6 +124,9 @@ func (a *App) productDetail(w http.ResponseWriter, r *http.Request) error {
 	}
 	p.Reserved = 0
 	p.Sold = 0
+	if err = a.productOffer(r.Context(), &p); err != nil {
+		return err
+	}
 	reply(w, 200, p)
 	return nil
 }

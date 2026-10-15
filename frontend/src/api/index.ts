@@ -54,6 +54,8 @@ export interface Product {
   description: string;
   details: string;
   price: number;
+  sale_price?: number;
+  offer_name?: string;
   currency: string;
   kind: string;
   active: boolean;
@@ -71,6 +73,9 @@ export interface Order {
   currency: string;
   quantity: number;
   total: number;
+  original_total: number;
+  discount_total: number;
+  discounts: OrderDiscount[];
   gateway_id: string;
   checkout_url: string;
   payment_status: string;
@@ -79,6 +84,38 @@ export interface Order {
   expires_at: number;
   created_at: number;
   last_error: string;
+}
+export interface OrderDiscount {
+  id: string;
+  name: string;
+  code: string;
+  amount: number;
+}
+export interface OrderQuote {
+  original_total: number;
+  discount_total: number;
+  total: number;
+  currency: string;
+  discounts: OrderDiscount[];
+}
+export interface Promotion {
+  id: string;
+  name: string;
+  kind: "automatic" | "code";
+  code: string;
+  discount_type: "percentage" | "fixed";
+  value: number;
+  currency: string;
+  min_total: number;
+  min_quantity: number;
+  scope: "all" | "selected";
+  product_ids: string[];
+  stackable: boolean;
+  enabled: boolean;
+  starts_at: number;
+  ends_at: number;
+  usage_limit: number;
+  used: number;
 }
 export interface Delivery {
   id: string;

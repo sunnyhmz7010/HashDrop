@@ -36,9 +36,15 @@ withDefaults(
       </p>
     </div>
     <div class="product-footer">
-      <strong class="product-price">{{
-        money(product.price, product.currency)
-      }}</strong>
+      <div class="product-pricing">
+        <strong class="product-price">{{
+          money(product.sale_price ?? product.price, product.currency)
+        }}</strong>
+        <del v-if="product.sale_price !== undefined">{{
+          money(product.price, product.currency)
+        }}</del>
+        <small v-if="product.offer_name">{{ product.offer_name }}</small>
+      </div>
       <div class="product-actions"><slot name="actions" /></div>
     </div>
   </div>
@@ -95,6 +101,19 @@ withDefaults(
   line-height: 1.4;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+.product-pricing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  min-width: 0;
+  del,
+  small {
+    color: #6b7280;
+    font-size: 13px;
+    overflow-wrap: anywhere;
+  }
 }
 .product-actions {
   display: flex;

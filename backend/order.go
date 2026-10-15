@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -10,36 +11,54 @@ import (
 )
 
 type Order struct {
-	ID                string `json:"id"`
-	ProductID         string `json:"product_id"`
-	ProductName       string `json:"product_name"`
-	Kind              string `json:"kind"`
-	UnitPrice         int64  `json:"unit_price"`
-	Currency          string `json:"currency"`
-	Quantity          int    `json:"quantity"`
-	Total             int64  `json:"total"`
-	GatewayID         string `json:"gateway_id"`
-	GatewayURL        string `json:"-"`
-	GatewayMerchantID string `json:"-"`
-	CheckoutURL       string `json:"checkout_url"`
-	PaymentStatus     string `json:"payment_status"`
-	DeliveryStatus    string `json:"delivery_status"`
-	ReservationStatus string `json:"reservation_status"`
-	ExpiresAt         int64  `json:"expires_at"`
-	CreatedAt         int64  `json:"created_at"`
-	Content           string `json:"-"`
-	TokenHash         string `json:"-"`
-	Attempts          int    `json:"attempts"`
-	LastError         string `json:"last_error"`
+	ID                string          `json:"id"`
+	ProductID         string          `json:"product_id"`
+	ProductName       string          `json:"product_name"`
+	Kind              string          `json:"kind"`
+	UnitPrice         int64           `json:"unit_price"`
+	Currency          string          `json:"currency"`
+	Quantity          int             `json:"quantity"`
+	Total             int64           `json:"total"`
+	OriginalTotal     int64           `json:"original_total"`
+	DiscountTotal     int64           `json:"discount_total"`
+	Discounts         []OrderDiscount `json:"discounts"`
+	GatewayID         string          `json:"gateway_id"`
+	GatewayURL        string          `json:"-"`
+	GatewayMerchantID string          `json:"-"`
+	CheckoutURL       string          `json:"checkout_url"`
+	PaymentStatus     string          `json:"payment_status"`
+	DeliveryStatus    string          `json:"delivery_status"`
+	ReservationStatus string          `json:"reservation_status"`
+	ExpiresAt         int64           `json:"expires_at"`
+	CreatedAt         int64           `json:"created_at"`
+	Content           string          `json:"-"`
+	TokenHash         string          `json:"-"`
+	Attempts          int             `json:"attempts"`
+	LastError         string          `json:"last_error"`
 }
 
-const orderSelect = `SELECT id,product_id,product_name,kind,unit_price,currency,quantity,total,COALESCE(gateway_id,''),gateway_url,gateway_merchant_id,checkout_url,payment_status,delivery_status,reservation_status,expires_at,created_at,content,token_hash,attempts,last_error FROM orders`
+const orderSelect = `SELECT id,product_id,product_name,kind,unit_price,currency,quantity,total,COALESCE(gateway_id,''),gateway_url,gateway_merchant_id,checkout_url,payment_status,delivery_status,reservation_status,expires_at,created_at,content,token_hash,attempts,last_error,discounts FROM orders`
 
 func scanOrder(row scanner) (Order, error) {
 	var o Order
-	err := row.Scan(&o.ID, &o.ProductID, &o.ProductName, &o.Kind, &o.UnitPrice, &o.Currency, &o.Quantity, &o.Total, &o.GatewayID, &o.GatewayURL, &o.GatewayMerchantID, &o.CheckoutURL, &o.PaymentStatus, &o.DeliveryStatus, &o.ReservationStatus, &o.ExpiresAt, &o.CreatedAt, &o.Content, &o.TokenHash, &o.Attempts, &o.LastError)
+	var discounts string
+	err := row.Scan(&o.ID, &o.ProductID, &o.ProductName, &o.Kind, &o.UnitPrice, &o.Currency, &o.Quantity, &o.Total, &o.GatewayID, &o.GatewayURL, &o.GatewayMerchantID, &o.CheckoutURL, &o.PaymentStatus, &o.DeliveryStatus, &o.ReservationStatus, &o.ExpiresAt, &o.CreatedAt, &o.Content, &o.TokenHash, &o.Attempts, &o.LastError, &discounts)
+	if err == nil {
+		err = json.Unmarshal([]byte(discounts), &o.Discounts)
+	}
+	o.OriginalTotal = o.UnitPrice * int64(o.Quantity)
+	o.DiscountTotal = o.OriginalTotal - o.Total
 	return o, err
 }
+
+type orderInput struct {
+	ProductID      string `json:"product_id"`
+	Quantity       int    `json:"quantity"`
+	CouponCode     string `json:"coupon_code"`
+	QuotedTotal    *int64 `json:"quoted_total"`
+	QuotedCurrency string `json:"quoted_currency"`
+}
+
 func (a *App) loadOrder(ctx context.Context, id string) (Order, error) {
 	return scanOrder(a.db.QueryRowContext(ctx, orderSelect+" WHERE id=?", id))
 }
@@ -51,17 +70,14 @@ func (a *App) createOrder(w http.ResponseWriter, r *http.Request) error {
 	if _, err := newHashPay(a.settings().HashPay); err != nil {
 		return &apiError{503, "支付服务尚未配置，请联系店主"}
 	}
-	var input struct {
-		ProductID string `json:"product_id"`
-		Quantity  int    `json:"quantity"`
-	}
+	var input orderInput
 	if err := readJSON(w, r, &input); err != nil {
 		return err
 	}
 	if input.Quantity < 1 || input.Quantity > 100 {
 		return bad("数量须为 1–100")
 	}
-	o, token, err := a.reserveOrder(r.Context(), input.ProductID, input.Quantity)
+	o, token, err := a.reservePricedOrder(r.Context(), input)
 	if err != nil {
 		return err
 	}
@@ -75,6 +91,10 @@ func (a *App) createOrder(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 func (a *App) reserveOrder(ctx context.Context, productID string, quantity int) (Order, string, error) {
+	return a.reservePricedOrder(ctx, orderInput{ProductID: productID, Quantity: quantity})
+}
+func (a *App) reservePricedOrder(ctx context.Context, input orderInput) (Order, string, error) {
+	productID, quantity := input.ProductID, input.Quantity
 	tx, err := a.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Order{}, "", err
@@ -87,8 +107,12 @@ func (a *App) reserveOrder(ctx context.Context, productID string, quantity int) 
 	if err != nil {
 		return Order{}, "", err
 	}
-	if quantity < 1 || quantity > 100 || p.Price > 9_000_000_000_000/int64(quantity) {
-		return Order{}, "", bad("数量或总金额超限")
+	quote, err := quoteOrder(ctx, tx, p, quantity, input.CouponCode, unixNow())
+	if err != nil {
+		return Order{}, "", err
+	}
+	if input.QuotedTotal != nil && (*input.QuotedTotal != quote.Total || input.QuotedCurrency != quote.Currency) {
+		return Order{}, "", &apiError{409, "优惠或价格已变化，请重新确认金额"}
 	}
 	token, id := randomToken(), newID()
 	content := ""
@@ -103,8 +127,19 @@ func (a *App) reserveOrder(ctx context.Context, productID string, quantity int) 
 		}
 	}
 	o := Order{ID: id, ProductID: p.ID, ProductName: p.Name, Kind: p.Kind, UnitPrice: p.Price, Currency: p.Currency, Quantity: quantity, Total: p.Price * int64(quantity), TokenHash: tokenHash(token), Content: content, PaymentStatus: "creating", DeliveryStatus: "pending", ReservationStatus: "reserved", CreatedAt: unixNow()}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO orders(id,product_id,product_name,kind,unit_price,currency,quantity,total,content,token_hash,payment_status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`, o.ID, o.ProductID, o.ProductName, o.Kind, o.UnitPrice, o.Currency, o.Quantity, o.Total, o.Content, o.TokenHash, o.PaymentStatus, o.CreatedAt, o.CreatedAt); err != nil {
+	o.Total, o.OriginalTotal, o.DiscountTotal, o.Discounts = quote.Total, quote.OriginalTotal, quote.DiscountTotal, quote.Discounts
+	snapshot, err := json.Marshal(o.Discounts)
+	if err != nil {
 		return Order{}, "", err
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO orders(id,product_id,product_name,kind,unit_price,currency,quantity,total,content,token_hash,payment_status,created_at,updated_at,discounts) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, o.ID, o.ProductID, o.ProductName, o.Kind, o.UnitPrice, o.Currency, o.Quantity, o.Total, o.Content, o.TokenHash, o.PaymentStatus, o.CreatedAt, o.CreatedAt, string(snapshot)); err != nil {
+		return Order{}, "", err
+	}
+	// 与库存预留同一写事务占用优惠次数；只有可靠终止且未付款的订单才归还名额。
+	for _, discount := range o.Discounts {
+		if _, err = tx.ExecContext(ctx, "INSERT INTO order_promotions(order_id,promotion_id) VALUES(?,?)", id, discount.ID); err != nil {
+			return Order{}, "", err
+		}
 	}
 	stockIDs := []string{}
 	if p.Kind == "card" || p.Kind == "account" {

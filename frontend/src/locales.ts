@@ -77,6 +77,10 @@ const zh = {
   "stock.reserved": "已预留",
   "stock.sold": "已售出",
   "product.saved": "商品已保存",
+  "product.deleted": "商品已删除",
+  "product.delete_title": "删除商品？",
+  "product.delete_warning":
+    "删除“{name}”后，商品将从商城和后台移除，已有订单及领取结果保留。",
   "stock.delete_title": "删除这份库存？",
   "stock.delete_warning": "删除后无法恢复，仅允许删除尚未预留的库存。",
   "common.delete": "删除",
@@ -416,6 +420,10 @@ const en: Record<MessageKey, string> = {
   "stock.reserved": "Reserved",
   "stock.sold": "Sold",
   "product.saved": "Product saved",
+  "product.deleted": "Product deleted",
+  "product.delete_title": "Delete product?",
+  "product.delete_warning":
+    'Deleting "{name}" removes it from the storefront and administration. Existing orders and delivery results are retained.',
   "stock.delete_title": "Delete this stock item?",
   "stock.delete_warning":
     "Deletion cannot be undone. Only unreserved stock can be deleted.",

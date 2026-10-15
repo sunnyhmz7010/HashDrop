@@ -110,7 +110,7 @@ func (a *App) overview(w http.ResponseWriter, r *http.Request) error {
 	for _, q := range []struct {
 		query  string
 		target *int
-	}{{"SELECT COUNT(*) FROM products", &products}, {"SELECT COUNT(*) FROM stock_items WHERE status='available'", &stock}, {"SELECT COUNT(*) FROM orders WHERE deleted_at IS NULL", &orders}, {"SELECT COUNT(*) FROM orders WHERE deleted_at IS NULL AND payment_status='paid'", &paid}, {"SELECT COUNT(*) FROM orders WHERE deleted_at IS NULL AND (payment_status='review' OR delivery_status='manual')", &manual}} {
+	}{{"SELECT COUNT(*) FROM products WHERE deleted_at IS NULL", &products}, {"SELECT COUNT(*) FROM stock_items WHERE status='available' AND product_id IN (SELECT id FROM products WHERE deleted_at IS NULL)", &stock}, {"SELECT COUNT(*) FROM orders WHERE deleted_at IS NULL", &orders}, {"SELECT COUNT(*) FROM orders WHERE deleted_at IS NULL AND payment_status='paid'", &paid}, {"SELECT COUNT(*) FROM orders WHERE deleted_at IS NULL AND (payment_status='review' OR delivery_status='manual')", &manual}} {
 		if err = a.db.QueryRowContext(r.Context(), q.query).Scan(q.target); err != nil {
 			return err
 		}

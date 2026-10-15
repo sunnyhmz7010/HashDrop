@@ -45,10 +45,10 @@ func scanProduct(row scanner) (Product, error) {
 	return p, err
 }
 func (a *App) products(active bool) ([]Product, error) {
-	q := productSelect
+	q := productSelect + " WHERE p.deleted_at IS NULL"
 	if active {
 		// 隐藏仅控制商城列表，直接访问详情和下单仍按上架状态判断。
-		q += " WHERE p.active=1 AND p.hidden=0"
+		q += " AND p.active=1 AND p.hidden=0"
 	}
 	q += " ORDER BY p.created_at DESC"
 	rows, err := a.db.Query(q)
@@ -88,7 +88,7 @@ func (a *App) adminProducts(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 func (a *App) productDetail(w http.ResponseWriter, r *http.Request) error {
-	p, err := scanProduct(a.db.QueryRow(productSelect+" WHERE p.id=? AND p.active=1", r.PathValue("id")))
+	p, err := scanProduct(a.db.QueryRow(productSelect+" WHERE p.id=? AND p.active=1 AND p.deleted_at IS NULL", r.PathValue("id")))
 	if err == sql.ErrNoRows {
 		return &apiError{404, "商品不存在或已下架"}
 	}
@@ -140,7 +140,7 @@ func (a *App) saveProduct(w http.ResponseWriter, r *http.Request) error {
 		id = newID()
 	} else {
 		var kind string
-		if err := a.db.QueryRow("SELECT kind,content,details,hidden FROM products WHERE id=?", id).Scan(&kind, &content, &details, &hidden); err == sql.ErrNoRows {
+		if err := a.db.QueryRow("SELECT kind,content,details,hidden FROM products WHERE id=? AND deleted_at IS NULL", id).Scan(&kind, &content, &details, &hidden); err == sql.ErrNoRows {
 			return &apiError{404, "商品不存在"}
 		} else if err != nil {
 			return err
@@ -168,10 +168,17 @@ func (a *App) saveProduct(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	now := unixNow()
-	_, err := a.db.Exec(`INSERT INTO products(id,name,description,details,price,currency,kind,active,hidden,content,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
- ON CONFLICT(id) DO UPDATE SET name=excluded.name,description=excluded.description,details=excluded.details,price=excluded.price,currency=excluded.currency,active=excluded.active,hidden=excluded.hidden,content=excluded.content,updated_at=excluded.updated_at`, id, input.Name, input.Description, details, input.Price, input.Currency, input.Kind, input.Active, hidden, content, now, now)
+	result, err := a.db.Exec(`INSERT INTO products(id,name,description,details,price,currency,kind,active,hidden,content,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+ ON CONFLICT(id) DO UPDATE SET name=excluded.name,description=excluded.description,details=excluded.details,price=excluded.price,currency=excluded.currency,active=excluded.active,hidden=excluded.hidden,content=excluded.content,updated_at=excluded.updated_at WHERE products.deleted_at IS NULL`, id, input.Name, input.Description, details, input.Price, input.Currency, input.Kind, input.Active, hidden, content, now, now)
 	if err != nil {
 		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return &apiError{404, "商品不存在"}
 	}
 	audit("product_saved", id)
 	p, err := scanProduct(a.db.QueryRow(productSelect+" WHERE p.id=?", id))
@@ -179,5 +186,23 @@ func (a *App) saveProduct(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	reply(w, 200, p)
+	return nil
+}
+
+func (a *App) deleteProduct(w http.ResponseWriter, r *http.Request) error {
+	// 保留订单外键、库存预留及交付密文，原订单继续核验付款和领取。
+	result, err := a.db.ExecContext(r.Context(), "UPDATE products SET active=0,deleted_at=COALESCE(deleted_at,?),updated_at=? WHERE id=?", unixNow(), unixNow(), r.PathValue("id"))
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return &apiError{404, "商品不存在"}
+	}
+	audit("product_deleted", r.PathValue("id"))
+	reply(w, 200, map[string]bool{"ok": true})
 	return nil
 }

@@ -80,7 +80,7 @@ func (a *App) reserveOrder(ctx context.Context, productID string, quantity int) 
 		return Order{}, "", err
 	}
 	defer tx.Rollback()
-	p, err := scanProduct(tx.QueryRowContext(ctx, productSelect+" WHERE p.id=? AND p.active=1", productID))
+	p, err := scanProduct(tx.QueryRowContext(ctx, productSelect+" WHERE p.id=? AND p.active=1 AND p.deleted_at IS NULL", productID))
 	if err == sql.ErrNoRows {
 		return Order{}, "", bad("商品不存在或已下架")
 	}

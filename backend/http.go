@@ -75,6 +75,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /api/admin/products", wrap(a.admin(a.adminProducts)))
 	mux.HandleFunc("POST /api/admin/products", wrap(a.admin(a.saveProduct)))
 	mux.HandleFunc("PUT /api/admin/products/{id}", wrap(a.admin(a.saveProduct)))
+	mux.HandleFunc("DELETE /api/admin/products/{id}", wrap(a.admin(a.deleteProduct)))
 	mux.HandleFunc("POST /api/admin/products/{id}/stock", wrap(a.admin(a.importStock)))
 	mux.HandleFunc("GET /api/admin/products/{id}/stock", wrap(a.admin(a.listStock)))
 	mux.HandleFunc("DELETE /api/admin/products/{id}/stock/{stock}", wrap(a.admin(a.deleteStock)))

@@ -33,6 +33,7 @@ const message = useMessage(),
   error = ref(""),
   editor = ref(false),
   saving = ref(false),
+  deleting = ref(""),
   formError = ref("");
 const model = reactive({
   id: "",
@@ -133,6 +134,43 @@ async function save() {
   } finally {
     saving.value = false;
   }
+}
+function removeProduct(product: Product) {
+  if (deleting.value) return;
+  const confirmation = dialog.warning({
+    title: t("product.delete_title"),
+    content: t("product.delete_warning", { name: product.name }),
+    positiveText: t("common.delete"),
+    negativeText: t("common.cancel"),
+    onPositiveClick: async () => {
+      if (deleting.value) return false;
+      deleting.value = product.id;
+      confirmation.loading = true;
+      confirmation.negativeButtonProps = { disabled: true };
+      confirmation.closable = false;
+      confirmation.maskClosable = false;
+      confirmation.closeOnEsc = false;
+      try {
+        await api(`/admin/products/${product.id}`, { method: "DELETE" });
+        products.value = products.value.filter(
+          (item) => item.id !== product.id,
+        );
+        message.success(t("product.deleted"));
+        await load();
+        return true;
+      } catch (e) {
+        message.error(errorText(e));
+        return false;
+      } finally {
+        deleting.value = "";
+        confirmation.loading = false;
+        confirmation.negativeButtonProps = { disabled: false };
+        confirmation.closable = true;
+        confirmation.maskClosable = true;
+        confirmation.closeOnEsc = true;
+      }
+    },
+  });
 }
 const stockProduct = ref<Product>(),
   importing = ref(false),
@@ -274,16 +312,31 @@ function removeStock(id: string) {
               </td>
               <td>
                 <div class="row-actions">
-                  <n-button size="small" @click="edit(p)">{{
-                    t("common.edit")
-                  }}</n-button
+                  <n-button
+                    size="small"
+                    :disabled="deleting === p.id"
+                    @click="edit(p)"
+                    >{{ t("common.edit") }}</n-button
                   ><template v-if="['card', 'account'].includes(p.kind)"
-                    ><n-button size="small" @click="importFor(p)">{{
-                      t("common.import")
-                    }}</n-button
-                    ><n-button size="small" @click="viewStock(p)">{{
-                      t("stock.label")
-                    }}</n-button></template
+                    ><n-button
+                      size="small"
+                      :disabled="deleting === p.id"
+                      @click="importFor(p)"
+                      >{{ t("common.import") }}</n-button
+                    ><n-button
+                      size="small"
+                      :disabled="deleting === p.id"
+                      @click="viewStock(p)"
+                      >{{ t("stock.label") }}</n-button
+                    ></template
+                  >
+                  <n-button
+                    size="small"
+                    type="error"
+                    secondary
+                    :loading="deleting === p.id"
+                    @click="removeProduct(p)"
+                    >{{ t("common.delete") }}</n-button
                   >
                 </div>
               </td>
@@ -349,11 +402,13 @@ function removeStock(id: string) {
         <div>
           <label class="field-label" for="active">{{
             t("product.publication")
-          }}</label
-          ><n-switch id="active" v-model:value="model.active" />
-          <span class="muted">{{
-            model.active ? t("product.publish") : t("product.unpublish")
-          }}</span>
+          }}</label>
+          <div class="publication-state">
+            <n-switch id="active" v-model:value="model.active" />
+            <span class="muted">{{
+              model.active ? t("product.publish") : t("product.unpublish")
+            }}</span>
+          </div>
         </div>
         <div class="wide">
           <label class="field-label" for="hidden">{{
@@ -562,6 +617,12 @@ function removeStock(id: string) {
 
 .name-cell a {
   color: #18a058;
+}
+
+.publication-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .form-grid .field-label {

@@ -14,15 +14,6 @@ func (a *App) importStock(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	id := r.PathValue("id")
-	var kind string
-	if err := a.db.QueryRow("SELECT kind FROM products WHERE id=?", id).Scan(&kind); err == sql.ErrNoRows {
-		return &apiError{404, "商品不存在"}
-	} else if err != nil {
-		return err
-	}
-	if kind != "card" && kind != "account" {
-		return bad("该商品不使用库存")
-	}
 	lines := strings.Split(strings.ReplaceAll(input.Content, "\r\n", "\n"), "\n")
 	if len(lines) > 5000 {
 		return bad("一次最多导入 5000 行")
@@ -32,6 +23,15 @@ func (a *App) importStock(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	defer tx.Rollback()
+	var kind string
+	if err := tx.QueryRowContext(r.Context(), "SELECT kind FROM products WHERE id=? AND deleted_at IS NULL", id).Scan(&kind); err == sql.ErrNoRows {
+		return &apiError{404, "商品不存在"}
+	} else if err != nil {
+		return err
+	}
+	if kind != "card" && kind != "account" {
+		return bad("该商品不使用库存")
+	}
 	added, duplicates := 0, 0
 	for _, line := range lines {
 		content := strings.TrimSpace(line)
@@ -71,6 +71,12 @@ func (a *App) importStock(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 func (a *App) listStock(w http.ResponseWriter, r *http.Request) error {
+	var product string
+	if err := a.db.QueryRowContext(r.Context(), "SELECT id FROM products WHERE id=? AND deleted_at IS NULL", r.PathValue("id")).Scan(&product); err == sql.ErrNoRows {
+		return &apiError{404, "商品不存在"}
+	} else if err != nil {
+		return err
+	}
 	rows, err := a.db.Query("SELECT id,status,COALESCE(order_id,''),created_at FROM stock_items WHERE product_id=? ORDER BY created_at DESC,id LIMIT 200", r.PathValue("id"))
 	if err != nil {
 		return err
@@ -92,7 +98,7 @@ func (a *App) listStock(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 func (a *App) deleteStock(w http.ResponseWriter, r *http.Request) error {
-	result, err := a.db.Exec("DELETE FROM stock_items WHERE id=? AND product_id=? AND status='available'", r.PathValue("stock"), r.PathValue("id"))
+	result, err := a.db.Exec("DELETE FROM stock_items WHERE id=? AND product_id=? AND status='available' AND product_id IN (SELECT id FROM products WHERE deleted_at IS NULL)", r.PathValue("stock"), r.PathValue("id"))
 	if err != nil {
 		return err
 	}

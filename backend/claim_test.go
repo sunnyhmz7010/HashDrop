@@ -66,6 +66,46 @@ func TestClaimKeyLookupAndPayment(t *testing.T) {
 	}
 }
 
+func TestOrderDetailAcceptsClaimKeys(t *testing.T) {
+	for _, key := range []string{strings.Repeat("a1", 12), strings.Repeat("b2", 13), strings.Repeat("c", 43), "a", strings.Repeat("钥", 128)} {
+		t.Run(key, func(t *testing.T) {
+			a, g := newTestApp(t)
+			product := insertProduct(t, a, "card", 1)
+			o, err := a.reserveOrder(context.Background(), product, 1, key, newID())
+			if err != nil {
+				t.Fatal(err)
+			}
+			get := func(auth string) *httptest.ResponseRecorder {
+				r := httptest.NewRequest("GET", "/api/orders/"+o.ID, nil)
+				r.Header.Set("Authorization", auth)
+				w := httptest.NewRecorder()
+				a.routes().ServeHTTP(w, r)
+				return w
+			}
+			if w := get("Bearer " + key); w.Code != 200 || strings.Contains(w.Body.String(), "卡密-0") {
+				t.Fatalf("付款前查询失败或泄漏交付: %d %s", w.Code, w.Body)
+			}
+			syncPaid(t, a, g, o)
+			if w := get("Bearer " + key); w.Code != 200 || !strings.Contains(w.Body.String(), "卡密-0") {
+				t.Fatalf("领取链接未返回交付: %d %s", w.Code, w.Body)
+			}
+			for _, auth := range []string{"Bearer wrong", "Bearer " + strings.ToUpper(key)} {
+				if auth == "Bearer "+key {
+					continue
+				}
+				if w := get(auth); w.Code != 404 || strings.Contains(w.Body.String(), "卡密-0") {
+					t.Fatalf("错误密钥未被拒绝: %d", w.Code)
+				}
+			}
+			for _, auth := range []string{"", key, "Basic " + key, "Bearer ", "Bearer   ", "Bearer " + strings.Repeat("a", 129)} {
+				if w := get(auth); w.Code != 401 {
+					t.Fatalf("无效凭证未被拒绝: %d", w.Code)
+				}
+			}
+		})
+	}
+}
+
 func TestClaimKeyConflictIsAtomic(t *testing.T) {
 	a, _ := newTestApp(t)
 	product := insertProduct(t, a, "card", 5)

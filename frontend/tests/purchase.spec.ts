@@ -56,7 +56,7 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
     key: token,
     orderID,
     receipt,
-  } = await placeTestOrder(page, "browser-receipt-" + "a".repeat(27));
+  } = await placeTestOrder(page);
   await page.goto(receipt);
   await expect(page.getByRole("heading", { name: "订单状态" })).toBeVisible();
   // 公网普通 HTTP 没有 Clipboard API，使用浏览器复制后仍能保存领取链接。
@@ -65,7 +65,6 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   );
   await page.getByRole("button", { name: "复制链接", exact: true }).click();
   await expect(page.getByText("已复制", { exact: true })).toBeVisible();
-  expect(token).toHaveLength(43);
   await expect(
     page.getByRole("button", { name: "前往 HashPay 付款" }),
   ).toBeVisible({ timeout: 15_000 });

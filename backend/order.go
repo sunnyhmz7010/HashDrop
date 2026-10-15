@@ -258,7 +258,7 @@ func (a *App) orderDetail(w http.ResponseWriter, r *http.Request) error {
 		return &apiError{429, "密钥尝试过于频繁，请稍后再试"}
 	}
 	token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-	if len(token) != 43 || !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
+	if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") || validateClaimKey(token) != nil {
 		return &apiError{401, "请输入有效的领取凭证"}
 	}
 	o, err := a.loadOrder(r.Context(), r.PathValue("id"))

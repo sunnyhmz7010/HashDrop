@@ -1,4 +1,3 @@
-# 静态前端资源与目标 CPU 架构无关，只在构建机架构上打包一次。
 FROM --platform=$BUILDPLATFORM node:24-alpine AS frontend
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./
@@ -6,7 +5,6 @@ RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
-# 在构建机架构上运行 Go 编译器，避免 QEMU 模拟编译。
 FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS builder
 ARG TARGETOS
 ARG TARGETARCH

@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, useId } from "vue";
 import createDOMPurify from "dompurify";
 import MarkdownIt, { type Delimiter, type RendererRule } from "markdown-it";
 import container from "markdown-it-container";
 import { t } from "../i18n";
 
 const props = defineProps<{ content: string }>();
+const contentRoot = ref<HTMLElement>();
+const instanceID = useId();
+let nextTabsID = 0;
 const parser = new MarkdownIt({
   html: true,
   linkify: true,
@@ -209,72 +212,226 @@ purifier.addHook("afterSanitizeAttributes", (node) => {
   }
 });
 const html = computed(() =>
-  purifier.sanitize(parser.render(props.content), {
-    ALLOWED_TAGS: [
-      "p",
-      "br",
-      "h1",
-      "h2",
-      "h3",
-      "h4",
-      "h5",
-      "h6",
-      "strong",
-      "em",
-      "del",
-      "s",
-      "blockquote",
-      "ul",
-      "ol",
-      "li",
-      "hr",
-      "pre",
-      "code",
-      "a",
-      "img",
-      "video",
-      "source",
-      "table",
-      "thead",
-      "tbody",
-      "tr",
-      "th",
-      "td",
-      "input",
-      "div",
-      "details",
-      "summary",
-    ],
-    ALLOWED_ATTR: [
-      "href",
-      "src",
-      "alt",
-      "title",
-      "poster",
-      "controls",
-      "preload",
-      "type",
-      "checked",
-      "disabled",
-      "start",
-      "colspan",
-      "rowspan",
-      "aria-label",
-      "loading",
-      "decoding",
-      "referrerpolicy",
-      "target",
-      "rel",
-      "class",
-      "open",
-    ],
-    ALLOW_DATA_ATTR: false,
-    ALLOW_ARIA_ATTR: false,
-  }),
+  renderTabs(
+    String(
+      purifier.sanitize(parser.render(props.content), {
+        ALLOWED_TAGS: [
+          "p",
+          "br",
+          "h1",
+          "h2",
+          "h3",
+          "h4",
+          "h5",
+          "h6",
+          "strong",
+          "em",
+          "del",
+          "s",
+          "blockquote",
+          "ul",
+          "ol",
+          "li",
+          "hr",
+          "pre",
+          "code",
+          "a",
+          "img",
+          "video",
+          "source",
+          "table",
+          "thead",
+          "tbody",
+          "tr",
+          "th",
+          "td",
+          "input",
+          "div",
+          "details",
+          "summary",
+        ],
+        ALLOWED_ATTR: [
+          "href",
+          "src",
+          "alt",
+          "title",
+          "poster",
+          "controls",
+          "preload",
+          "type",
+          "checked",
+          "disabled",
+          "start",
+          "colspan",
+          "rowspan",
+          "aria-label",
+          "loading",
+          "decoding",
+          "referrerpolicy",
+          "target",
+          "rel",
+          "class",
+          "open",
+        ],
+        ALLOW_DATA_ATTR: false,
+        ALLOW_ARIA_ATTR: false,
+      }),
+    ),
+  ),
 );
+
+function renderTabs(safeHTML: string): string {
+  // 先清理用户内容，再用 DOM API 生成交互元素，不放行用户自带的事件和 ID。
+  const document = new DOMParser().parseFromString(safeHTML, "text/html");
+  const groups = Array.from(
+    document.body.querySelectorAll<HTMLElement>(".markdown-container-tabs"),
+  );
+  for (const group of groups) {
+    const items = Array.from(group.children).filter(
+      (child): child is HTMLElement =>
+        child instanceof HTMLElement &&
+        child.classList.contains("markdown-container-tab-item"),
+    );
+    if (!items.length) continue;
+
+    const groupID = `markdown-tabs-${instanceID}-${nextTabsID++}`;
+    const list = document.createElement("div");
+    list.className = "markdown-tabs-list";
+    list.setAttribute("role", "tablist");
+    const panels = document.createElement("div");
+    panels.className = "markdown-tabs-panels";
+
+    group.classList.remove("markdown-container", "markdown-container-tabs");
+    group.classList.add("markdown-tabs");
+
+    items.forEach((item, index) => {
+      const itemTitle = Array.from(item.children).find((child) =>
+        child.classList.contains("markdown-container-title"),
+      );
+      const label = itemTitle?.textContent?.trim() || String(index + 1);
+      itemTitle?.remove();
+
+      const tabID = `${groupID}-tab-${index}`;
+      const panelID = `${groupID}-panel-${index}`;
+      const button = document.createElement("button");
+      button.className = "markdown-tab";
+      button.type = "button";
+      button.id = tabID;
+      button.setAttribute("role", "tab");
+      button.setAttribute("aria-controls", panelID);
+      button.setAttribute("aria-selected", String(index === 0));
+      button.tabIndex = index === 0 ? 0 : -1;
+      button.textContent = label;
+      list.append(button);
+
+      item.classList.remove(
+        "markdown-container",
+        "markdown-container-tab-item",
+      );
+      item.classList.add("markdown-tab-panel");
+      item.id = panelID;
+      item.setAttribute("role", "tabpanel");
+      item.setAttribute("aria-labelledby", tabID);
+      item.tabIndex = 0;
+      item.hidden = index !== 0;
+      panels.append(item);
+    });
+
+    group.append(list, panels);
+  }
+  return document.body.innerHTML;
+}
+
+function tabButtons(button: HTMLButtonElement):
+  | {
+      buttons: HTMLButtonElement[];
+      panels: HTMLElement[];
+    }
+  | undefined {
+  const group = button.closest<HTMLElement>(".markdown-tabs");
+  const list = button.closest<HTMLElement>(".markdown-tabs-list");
+  if (
+    !group ||
+    !contentRoot.value?.contains(group) ||
+    list?.parentElement !== group
+  )
+    return;
+  return {
+    buttons: Array.from(
+      list.querySelectorAll<HTMLButtonElement>('[role="tab"]'),
+    ),
+    panels: Array.from(
+      group.querySelectorAll<HTMLElement>('[role="tabpanel"]'),
+      // 嵌套分页的显示状态只由它自己的标签栏控制。
+    ).filter((panel) => panel.closest(".markdown-tabs") === group),
+  };
+}
+
+function activateTab(button: HTMLButtonElement, focus = false): void {
+  const tabs = tabButtons(button);
+  if (!tabs) return;
+  for (const tab of tabs.buttons) {
+    const selected = tab === button;
+    tab.setAttribute("aria-selected", String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+    const panelID = tab.getAttribute("aria-controls");
+    const panel = tabs.panels.find((item) => item.id === panelID);
+    if (panel) panel.hidden = !selected;
+  }
+  if (focus) button.focus();
+}
+
+function handleTabClick(event: MouseEvent): void {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  const button = target.closest<HTMLButtonElement>(
+    ".markdown-tabs-list button[role='tab']",
+  );
+  if (button) activateTab(button);
+}
+
+function handleTabKeydown(event: KeyboardEvent): void {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  const button = target.closest<HTMLButtonElement>(
+    ".markdown-tabs-list button[role='tab']",
+  );
+  if (!button) return;
+  const tabs = tabButtons(button);
+  if (!tabs || tabs.buttons.length < 2) return;
+
+  const index = tabs.buttons.indexOf(button);
+  let nextIndex: number;
+  switch (event.key) {
+    case "ArrowRight":
+      nextIndex = (index + 1) % tabs.buttons.length;
+      break;
+    case "ArrowLeft":
+      nextIndex = (index - 1 + tabs.buttons.length) % tabs.buttons.length;
+      break;
+    case "Home":
+      nextIndex = 0;
+      break;
+    case "End":
+      nextIndex = tabs.buttons.length - 1;
+      break;
+    default:
+      return;
+  }
+  event.preventDefault();
+  activateTab(tabs.buttons[nextIndex], true);
+}
 </script>
 
-<template><div class="markdown-content" v-html="html"></div></template>
+<template>
+  <div
+    ref="contentRoot"
+    class="markdown-content"
+    v-html="html"
+    @click="handleTabClick"
+    @keydown="handleTabKeydown"
+  ></div>
+</template>
 
 <style scoped lang="scss">
 .markdown-content {
@@ -416,5 +573,52 @@ const html = computed(() =>
 }
 .markdown-content :deep(summary:active) {
   color: #0c7a43;
+}
+.markdown-content :deep(.markdown-tabs) {
+  min-width: 0;
+  margin: 16px 0;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+.markdown-content :deep(.markdown-tabs-list) {
+  display: flex;
+  overflow-x: auto;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+}
+.markdown-content :deep(.markdown-tab) {
+  flex: 0 0 auto;
+  margin-bottom: -1px;
+  padding: 10px 14px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  font: inherit;
+  white-space: nowrap;
+}
+.markdown-content :deep(.markdown-tab[aria-selected="true"]) {
+  border-bottom-color: #18a058;
+  color: #18a058;
+  font-weight: 600;
+}
+.markdown-content :deep(.markdown-tab:focus-visible) {
+  outline: 2px solid #18a058;
+  outline-offset: -2px;
+}
+.markdown-content :deep(.markdown-tabs-panels) {
+  min-width: 0;
+  padding: 16px;
+}
+.markdown-content :deep(.markdown-tab-panel[hidden]) {
+  display: none;
+}
+.markdown-content :deep(.markdown-tab-panel > :first-child) {
+  margin-top: 0;
+}
+.markdown-content :deep(.markdown-tab-panel > :last-child) {
+  margin-bottom: 0;
 }
 </style>

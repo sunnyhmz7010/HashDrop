@@ -114,10 +114,6 @@ const zh = {
   "product.details": "商品详情（Markdown）",
   "product.edit_details": "编辑",
   "product.preview_details": "预览",
-  "product.details_help":
-    "支持 Markdown 和 ::: 容器（tip、info、warning、danger、details 等）；图片和视频使用 HTTPS 直链，视频可写为 ![视频说明](视频地址) 或 video 标签。",
-  "product.details_placeholder":
-    "## 商品介绍\n\n填写详细说明，支持 **加粗**、列表和表格。\n\n![图片说明](https://example.com/image.jpg)\n\n![视频说明](https://example.com/video.mp4)",
   "shop.buy": "下单",
   "product.static_content": "固定交付内容",
   "product.static_keep": "留空保留现有内容；新内容只影响后续订单",
@@ -549,10 +545,6 @@ const en: Record<MessageKey, string> = {
   "product.details": "Details (Markdown)",
   "product.edit_details": "Edit",
   "product.preview_details": "Preview",
-  "product.details_help":
-    "Supports Markdown and ::: containers (tip, info, warning, danger, details and more). Use direct HTTPS media links. For videos, use ![Video description](video URL) or a video tag.",
-  "product.details_placeholder":
-    "## Product introduction\n\nAdd detailed information with **bold text**, lists and tables.\n\n![Image description](https://example.com/image.jpg)\n\n![Video description](https://example.com/video.mp4)",
   "shop.buy": "Place order",
   "product.static_content": "Static delivery content",
   "product.static_keep":

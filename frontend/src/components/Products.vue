@@ -447,11 +447,8 @@ function removeStock(id: string) {
                 v-model:value="model.details"
                 type="textarea"
                 :maxlength="65536"
-                :autosize="{ minRows: 8, maxRows: 20 }"
                 :input-props="{ id: 'product-details-input' }"
-                :placeholder="t('product.details_placeholder')"
               />
-              <p class="helper">{{ t("product.details_help") }}</p>
             </n-tab-pane>
             <n-tab-pane
               name="preview"

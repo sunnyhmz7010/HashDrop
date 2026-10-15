@@ -17,7 +17,11 @@ async function verifyRichContent(content: Locator) {
     content.locator("script, iframe, object, svg, form, style"),
   ).toHaveCount(0);
   await expect(
-    content.locator("[onerror], [onclick], [onload], [style], [id], [name]"),
+    content.locator("[onerror], [onclick], [onload], [style], [name]"),
+  ).toHaveCount(0);
+  // 标签页的 ID 由渲染器生成，用户内容中的 id 必须继续被清理。
+  await expect(
+    content.locator('[id]:not([role="tab"]):not([role="tabpanel"])'),
   ).toHaveCount(0);
   await expect(
     content.locator(
@@ -54,6 +58,23 @@ async function verifyRichContent(content: Locator) {
   await fold.locator("summary").click();
   await expect(fold.getByText("折叠正文", { exact: true })).toBeVisible();
   await fold.locator("summary").click();
+  const firstTab = content.getByRole("tab", {
+    name: "💻基本信息",
+    exact: true,
+  });
+  const secondTab = content.getByRole("tab", { name: "🎬IP质量", exact: true });
+  await expect(firstTab).toHaveAttribute("aria-selected", "true");
+  await expect(
+    content.getByText("硬件报告正文", { exact: true }),
+  ).toBeVisible();
+  await expect(content.getByText("IP 报告正文", { exact: true })).toBeHidden();
+  await secondTab.click();
+  await expect(secondTab).toHaveAttribute("aria-selected", "true");
+  await expect(content.getByText("IP 报告正文", { exact: true })).toBeVisible();
+  await expect(content.getByText("硬件报告正文", { exact: true })).toBeHidden();
+  await secondTab.press("ArrowLeft");
+  await expect(firstTab).toBeFocused();
+  await expect(firstTab).toHaveAttribute("aria-selected", "true");
 }
 
 test("Markdown 详情保存、图片视频展示与首页直接下单", async ({ page }) => {
@@ -78,6 +99,7 @@ test("Markdown 详情保存、图片视频展示与首页直接下单", async ({
     "### 演示视频",
     `::: info 视频预览\n![商品视频](${video})\n:::`,
     "::: details 更多说明\n**折叠正文**\n:::",
+    ":::: tabs\n::: tab-item 💻基本信息\n```ansi\n硬件报告正文\n```\n:::\n::: tab-item 🎬IP质量\n**IP 报告正文**\n:::\n::::",
     "> 购买前请查看商品说明。",
     "- [x] 支持图片与视频",
     "- [x] 已完成清单\n\n[x]: https://example.com",

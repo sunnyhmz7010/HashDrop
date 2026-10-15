@@ -150,6 +150,26 @@ docker run -d \
 
 商城入口为 `/`，订单查询入口为 `/claim`，赞赏页（启用后）为 `/donate`。
 
+### 🔒 HTTPS 与访问控制
+
+- 生产环境建议通过 Nginx、1Panel OpenResty 等反向代理提供 HTTPS，并限制对 `8080` 后端端口的直接访问
+- 如反向代理部署在同一台主机，可将 Compose 的端口映射由 `8080:8080` 改成 `127.0.0.1:8080:8080`；使用 `docker run` 时则改为 `-p 127.0.0.1:8080:8080`
+- 请使用实际的 HTTPS 商城域名完成初始化与 HashPay 回调配置
+
+### 💾 数据持久化与备份
+
+- Docker 数据卷 `hashdrop_data` 挂载到 `/data`，保存 SQLite 数据库、站点配置、加密密钥、HashPay 私钥及备份文件；更新容器时务必保留该数据卷
+- 服务运行期间约每 24 小时自动创建一次数据库备份，并执行完整性校验；备份位于 `/data/backups/`
+- 如需手动备份数据库，可执行：
+
+```bash
+docker exec hashdrop /app/hashdrop \
+  -config /data/config.json \
+  -backup "/data/backups/manual-$(date +%Y%m%d-%H%M%S).db"
+```
+
+恢复时不能只保存数据库文件，还需要配套保留 `config.json` 和 HashPay 私钥文件。自动备份与原数据位于同一数据卷，建议另行将重要文件加密备份至其他存储位置，并自行管理历史备份数量。
+
 ## 🧠 功能细节
 
 ### 🧾 匿名下单与领取
@@ -179,39 +199,6 @@ docker run -d \
 - 集中维护商品、库存、订单、优惠规则及 HashPay 配置
 - 使用 SQLite 持久化数据，支持数据库备份与校验
 - 可按需启用独立赞赏页面，同样通过 HashPay 收款
-
-## 🛡️ 部署与数据安全
-
-### 🔒 HTTPS 与访问控制
-
-- 生产环境建议通过 Nginx、1Panel OpenResty 等反向代理提供 HTTPS，并限制对 `8080` 后端端口的直接访问
-- 如反向代理部署在同一台主机，可将 Compose 的端口映射由 `8080:8080` 改成 `127.0.0.1:8080:8080`；使用 `docker run` 时则改为 `-p 127.0.0.1:8080:8080`
-- 请使用实际的 HTTPS 商城域名完成初始化与 HashPay 回调配置
-
-### 💾 数据持久化与备份
-
-- Docker 数据卷 `hashdrop_data` 挂载到 `/data`，保存 SQLite 数据库、站点配置、加密密钥、HashPay 私钥及备份文件；更新容器时务必保留该数据卷
-- 服务运行期间约每 24 小时自动创建一次数据库备份，并执行完整性校验；备份位于 `/data/backups/`
-- 如需手动备份数据库，可执行：
-
-```bash
-docker exec hashdrop /app/hashdrop \
-  -config /data/config.json \
-  -backup "/data/backups/manual-$(date +%Y%m%d-%H%M%S).db"
-```
-
-恢复时不能只保存数据库文件，还需要配套保留 `config.json` 和 HashPay 私钥文件。自动备份与原数据位于同一数据卷，建议另行将重要文件加密备份至其他存储位置，并自行管理历史备份数量。
-
-### 🔄 更新版本
-
-Docker 示例使用固定版本标签。发布新版本后，在 `compose.yaml` 中修改镜像版本号，再执行：
-
-```bash
-docker compose pull
-docker compose up -d
-```
-
-更新前请先备份数据。当前后端支持的数据库结构版本为 `1`；若后续版本涉及数据库结构变更，应先阅读该版本的迁移或兼容说明，不要直接替换现有数据库。
 
 ## 🧱 技术栈
 

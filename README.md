@@ -48,14 +48,14 @@ HashPay 已经提供了加密货币收款能力，但要真正销售数字商品
 - 通过网页完成首次初始化，单管理员后台管理
 - 管理商品、库存、订单、优惠及站点和支付配置
 - 可启用独立赞赏页面，通过 HashPay 接收赞赏
-- 使用 SQLite 保存数据，提供在线备份与校验
+- 使用 SQLite 保存数据，内置定时备份与完整性校验
 
 ## ⚡ 快速开始
 
 ### 📋 前置要求
 
-- 一台安装了 Docker Engine 和 Docker Compose V2 的 Linux VPS
-- 支付网关：[HashPay](https://github.com/tgdash/HashPay)
+- 一台安装了 Docker Engine 的 Linux VPS（使用 Compose 部署时，还需 Docker Compose V2）
+- 支付网关：[HashPay](https://github.com/tgdash/HashPay)（可在初始化后配置，正式收款前需要接入）
 
 ### 📦 Docker Compose（推荐）
 
@@ -88,6 +88,8 @@ docker compose up -d
 docker compose logs -f
 ```
 
+> 上面的 `8080:8080` 会将宿主机端口对外监听。生产环境建议先配置 HTTPS 反向代理，并将端口映射改为 `127.0.0.1:8080:8080`，避免直接向公网暴露管理与初始化页面。
+
 ### 🖥️ 命令行方式
 
 ```bash
@@ -117,7 +119,14 @@ docker run -d \
 
 如果使用 Docker Compose，把 `compose.yaml` 里的 `image: ghcr.io/...` 换成 `build: .`，然后执行：`docker compose up -d --build`。
 
-启动后访问 `http://localhost:8080`。
+### 🔧 首次初始化
+
+1. 服务启动后，访问商城的 `/setup` 页面。在服务器本机可打开 `http://localhost:8080/setup`；远程生产环境请先配置 HTTPS 域名，例如 `https://shop.example.com/setup`。
+2. 填写站点名称、站点地址以及管理员账号和密码。站点地址应与实际访问地址一致。
+3. 配置 HashPay 网关地址（HTTPS）、商户 ID 与 RSA 私钥。三项可以全部留空，稍后在后台的「系统设置」中补充。
+4. 初始化完成后进入 `/admin`，创建库存池、上架商品，即可开始使用。
+
+使用 HTTPS 站点时，后台会显示 HashPay 回调地址 `https://你的商城域名/api/webhooks/hashpay`；HTTP 站点仅通过签名查询补查付款，不接受支付回调。**不要通过公网明文 HTTP 提交管理员密码或商户私钥。**
 
 ## 📖 使用说明
 
@@ -171,6 +180,39 @@ docker run -d \
 - 使用 SQLite 持久化数据，支持数据库备份与校验
 - 可按需启用独立赞赏页面，同样通过 HashPay 收款
 
+## 🛡️ 部署与数据安全
+
+### 🔒 HTTPS 与访问控制
+
+- 生产环境建议通过 Nginx、1Panel OpenResty 等反向代理提供 HTTPS，并限制对 `8080` 后端端口的直接访问
+- 如反向代理部署在同一台主机，可将 Compose 的端口映射由 `8080:8080` 改成 `127.0.0.1:8080:8080`；使用 `docker run` 时则改为 `-p 127.0.0.1:8080:8080`
+- 请使用实际的 HTTPS 商城域名完成初始化与 HashPay 回调配置
+
+### 💾 数据持久化与备份
+
+- Docker 数据卷 `hashdrop_data` 挂载到 `/data`，保存 SQLite 数据库、站点配置、加密密钥、HashPay 私钥及备份文件；更新容器时务必保留该数据卷
+- 服务运行期间约每 24 小时自动创建一次数据库备份，并执行完整性校验；备份位于 `/data/backups/`
+- 如需手动备份数据库，可执行：
+
+```bash
+docker exec hashdrop /app/hashdrop \
+  -config /data/config.json \
+  -backup "/data/backups/manual-$(date +%Y%m%d-%H%M%S).db"
+```
+
+恢复时不能只保存数据库文件，还需要配套保留 `config.json` 和 HashPay 私钥文件。自动备份与原数据位于同一数据卷，建议另行将重要文件加密备份至其他存储位置，并自行管理历史备份数量。
+
+### 🔄 更新版本
+
+Docker 示例使用固定版本标签。发布新版本后，在 `compose.yaml` 中修改镜像版本号，再执行：
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+更新前请先备份数据。当前后端支持的数据库结构版本为 `1`；若后续版本涉及数据库结构变更，应先阅读该版本的迁移或兼容说明，不要直接替换现有数据库。
+
 ## 🧱 技术栈
 
 - 后端：Go、SQLite
@@ -187,14 +229,14 @@ HashDrop/
 │   ├── src/pages/        # 商城、订单、登录与后台入口
 │   ├── src/components/   # 管理页面组件
 │   └── tests/            # 核心购买与管理流程浏览器验证
-├── schema.sql            # v1.0.0 完整数据库初始化结构
+├── schema.sql            # SQLite 数据库初始化结构
 ├── .github/
 │   ├── ISSUE_TEMPLATE/   # 中英双语缺陷反馈与功能建议模板
 │   └── workflows/        # 推送 v* 标签时构建并发布 GHCR 多架构镜像
 ├── Dockerfile            # 前端和 Go 多阶段构建，运行镜像无 Node.js
 ├── compose.yaml          # VPS 直接拉取镜像部署
 ├── deploy/               # systemd 服务示例
-├── docs/images/          # README 界面截图
+├── images/               # README 界面截图
 ├── assets.go
 └── go.mod
 ```
@@ -211,6 +253,7 @@ HashDrop/
 ```sh
 go test ./...
 go vet ./...
+npm ci --prefix frontend
 npm --prefix frontend run check
 npm --prefix frontend run build
 cd frontend

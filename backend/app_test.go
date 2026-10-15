@@ -33,6 +33,7 @@ type fakeGateway struct {
 	orders         map[string]GatewayOrder
 	returnURLs     []string
 	corrupt        string
+	corruptCreate  string
 	server         *httptest.Server
 	creates        int
 	failCreateOnce bool
@@ -109,7 +110,14 @@ func (g *fakeGateway) handler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "temporary", 503)
 			return
 		}
-		reply(w, 200, map[string]any{"order": o, "checkoutUrl": g.server.URL + "/pay/" + o.ID, "reused": exists})
+		// 对齐 HashPay 原生创建摘要：身份字段只有查单接口返回。
+		created := map[string]any{"id": o.ID, "amount": o.Amount, "currency": o.Currency, "status": o.Status, "expiresAt": o.ExpiresAt}
+		if g.corruptCreate == "merchant" {
+			created["merchantId"] = "other"
+		} else if g.corruptCreate == "number" {
+			created["merchantNo"] = "other"
+		}
+		reply(w, 200, map[string]any{"order": created, "checkoutUrl": g.server.URL + "/pay/" + o.ID, "reused": exists})
 		return
 	}
 	g.queries++
@@ -538,6 +546,14 @@ func TestBrowserFixture(t *testing.T) {
 	mux.HandleFunc("POST /__test/pay/{id}", func(w http.ResponseWriter, r *http.Request) {
 		g.set(r.PathValue("id"), "paid", "system")
 		if err := a.syncOrder(r.Context(), r.PathValue("id")); err != nil {
+			http.Error(w, "payment", 500)
+			return
+		}
+		reply(w, 200, map[string]bool{"ok": true})
+	})
+	mux.HandleFunc("POST /__test/pay-donation/{id}", func(w http.ResponseWriter, r *http.Request) {
+		g.set(r.PathValue("id"), "paid", "system")
+		if err := a.syncDonation(r.Context(), r.PathValue("id")); err != nil {
 			http.Error(w, "payment", 500)
 			return
 		}

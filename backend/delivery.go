@@ -182,6 +182,7 @@ func (a *App) runPending(ctx context.Context) {
 			slog.Warn("订单补偿暂未完成", "order_id", id, "reason", safeGatewayError(err))
 		}
 	}
+	a.runPendingDonations(ctx)
 	if _, err = a.db.ExecContext(ctx, "DELETE FROM admin_sessions WHERE expires_at<=?", unixNow()); err != nil {
 		slog.Error("会话清理失败", "error", err)
 	}

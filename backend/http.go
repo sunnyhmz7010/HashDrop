@@ -61,6 +61,9 @@ func readJSON(w http.ResponseWriter, r *http.Request, dst any) error {
 func (a *App) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/site", wrap(a.siteInfo))
+	mux.HandleFunc("GET /api/donation", wrap(a.publicDonationSettings))
+	mux.HandleFunc("POST /api/donations", wrap(a.createDonation))
+	mux.HandleFunc("GET /api/donations/{id}", wrap(a.donationDetail))
 	mux.HandleFunc("GET /api/setup/status", wrap(a.setupStatus))
 	mux.HandleFunc("POST /api/setup", wrap(a.setup))
 	mux.HandleFunc("GET /api/products", wrap(a.listProducts))
@@ -91,6 +94,10 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /api/admin/orders/{id}/recheck", wrap(a.admin(a.recheckOrder)))
 	mux.HandleFunc("POST /api/admin/orders/{id}/retry", wrap(a.admin(a.retryOrder)))
 	mux.HandleFunc("GET /api/admin/settings", wrap(a.admin(a.getSettings)))
+	mux.HandleFunc("GET /api/admin/donation", wrap(a.admin(a.getDonationSettings)))
+	mux.HandleFunc("PUT /api/admin/donation", wrap(a.admin(a.updateDonationSettings)))
+	mux.HandleFunc("GET /api/admin/donations", wrap(a.admin(a.adminDonations)))
+	mux.HandleFunc("POST /api/admin/donations/{id}/recheck", wrap(a.admin(a.recheckDonation)))
 	mux.HandleFunc("PUT /api/admin/settings", wrap(a.admin(a.updateSettings)))
 	mux.Handle("/", a.staticHandler())
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

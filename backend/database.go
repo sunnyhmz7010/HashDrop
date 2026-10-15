@@ -42,11 +42,11 @@ func openDatabase(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, err
 	}
-	if version > 8 {
+	if version > 9 {
 		db.Close()
 		return nil, fmt.Errorf("数据库版本 %d 高于程序支持的版本", version)
 	}
-	if version < 8 {
+	if version < 9 {
 		if err = migrateDatabase(db, version); err != nil {
 			db.Close()
 			return nil, err
@@ -65,7 +65,7 @@ func migrateDatabase(db *sql.DB, version int) error {
 	if _, err = conn.ExecContext(context.Background(), "PRAGMA foreign_keys=OFF"); err != nil {
 		return err
 	}
-	for _, file := range []string{"migrations/001_init.sql", "migrations/002_gateway_orders.sql", "migrations/003_gateway_identity.sql", "migrations/004_remove_service_products.sql", "migrations/005_product_details.sql", "migrations/006_hidden_products.sql", "migrations/007_deleted_products.sql", "migrations/008_promotions.sql"}[version:] {
+	for _, file := range []string{"migrations/001_init.sql", "migrations/002_gateway_orders.sql", "migrations/003_gateway_identity.sql", "migrations/004_remove_service_products.sql", "migrations/005_product_details.sql", "migrations/006_hidden_products.sql", "migrations/007_deleted_products.sql", "migrations/008_promotions.sql", "migrations/009_donations.sql"}[version:] {
 		schema, readErr := tinyfaka.Assets.ReadFile(file)
 		if readErr != nil {
 			return readErr

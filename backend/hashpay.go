@@ -10,6 +10,7 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
@@ -140,7 +141,22 @@ func (c *hashPayClient) request(ctx context.Context, method, path string, body [
 	return nil
 }
 func (c *hashPayClient) create(ctx context.Context, o Order, returnURL string) (GatewayOrder, string, error) {
-	payload := map[string]any{"merchantNo": o.ID, "amount": json.Number(minorDecimal(o.Total, o.Currency)), "currency": o.Currency, "description": o.ProductName, "return_url": returnURL}
+	return c.createPayment(ctx, paymentRequest{o.ID, o.ProductName, o.Currency, o.Total}, returnURL)
+}
+
+// 商品订单和赞赏仅共用网关协议，库存、优惠和交付仍归各自业务处理。
+type paymentRequest struct {
+	ID, Description, Currency string
+	Amount                    int64
+}
+
+func (c *hashPayClient) matchesPayment(remote GatewayOrder, id, gatewayID, currency string, amount int64) bool {
+	minor, err := decimalMinor(remote.Amount.String(), currency)
+	return err == nil && remote.ID == gatewayID && remote.MerchantID == c.config.MerchantID && remote.MerchantNo == id && remote.Currency == currency && minor == amount
+}
+
+func (c *hashPayClient) createPayment(ctx context.Context, p paymentRequest, returnURL string) (GatewayOrder, string, error) {
+	payload := map[string]any{"merchantNo": p.ID, "amount": json.Number(minorDecimal(p.Amount, p.Currency)), "currency": p.Currency, "description": p.Description, "return_url": returnURL}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return GatewayOrder{}, "", err
@@ -152,11 +168,14 @@ func (c *hashPayClient) create(ctx context.Context, o Order, returnURL string) (
 	if err = c.request(ctx, "POST", "/api/merchant/new", body, &result); err != nil {
 		return GatewayOrder{}, "", err
 	}
-	if result.Order.ID == "" || result.Order.Currency != o.Currency {
+	// 原生创建接口仅返回摘要；完整归属在后续签名查询中核验。
+	if result.Order.ID == "" || result.Order.Currency != p.Currency ||
+		(result.Order.MerchantID != "" && result.Order.MerchantID != c.config.MerchantID) ||
+		(result.Order.MerchantNo != "" && result.Order.MerchantNo != p.ID) {
 		return GatewayOrder{}, "", errors.New("HashPay 创建结果不匹配")
 	}
-	amount, err := decimalMinor(result.Order.Amount.String(), o.Currency)
-	if err != nil || amount != o.Total {
+	amount, err := decimalMinor(result.Order.Amount.String(), p.Currency)
+	if err != nil || amount != p.Amount {
 		return GatewayOrder{}, "", errors.New("HashPay 创建金额不匹配")
 	}
 	gateway, err := url.Parse(c.config.BaseURL)
@@ -252,6 +271,23 @@ func (a *App) webhook(w http.ResponseWriter, r *http.Request) error {
 	plain, err := client.decryptCallback(envelope)
 	if err != nil || !recentTimestamp(plain.Timestamp) || plain.Timestamp != ts {
 		return bad("通知解密或时间校验失败")
+	}
+	// 优先查赞赏映射；历史商品订单的随机 ID 也可能碰巧带有同一前缀。
+	if strings.HasPrefix(plain.Payload.MerchantNo, "don_") {
+		d, err := a.loadDonation(r.Context(), plain.Payload.MerchantNo)
+		if err != nil && err != sql.ErrNoRows {
+			return err
+		}
+		if err == nil {
+			if d.GatewayID == "" || d.GatewayID != plain.Payload.OrderID {
+				return bad("通知订单映射不匹配")
+			}
+			if err = a.syncDonation(r.Context(), d.ID); err != nil {
+				return &apiError{503, "付款暂未核实，请重试"}
+			}
+			reply(w, 200, map[string]bool{"ok": true})
+			return nil
+		}
 	}
 	o, err := a.loadOrder(r.Context(), plain.Payload.MerchantNo)
 	if err != nil {

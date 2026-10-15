@@ -6,6 +6,65 @@ export type Locale = "zh-CN" | "en-US";
 export type I18nParams = Record<string, string | number | null | undefined>;
 
 const zh = {
+  "nav.donation": "赞赏页",
+  "donation.unavailable": "赞赏页暂未开启。",
+  "donation.amount": "自定义赞赏金额",
+  "donation.range": "金额范围：{min} – {max}",
+  "donation.payment_help": "通过 HashPay 付款，付款结果以服务端核验为准。",
+  "donation.submit": "确认金额并赞赏",
+  "donation.view_record": "查看赞赏记录",
+  "donation.receipt_title": "赞赏付款详情",
+  "donation.thanks": "感谢你的赞赏",
+  "donation.paid_help": "已核验收到你的赞赏，感谢支持。",
+  "donation.creating_help": "正在创建支付单，页面会自动更新。",
+  "donation.closed_help":
+    "该笔赞赏已关闭或失效。如需继续支持，请返回赞赏页重新选择金额。",
+  "donation.expired_help": "支付单已过期，仍会补查可能迟到的付款。",
+  "donation.review_help":
+    "付款信息核验异常，服务端会继续补查，请稍后刷新或联系店主。",
+  "donation.waiting_help":
+    "页面会自动查询付款状态，过期记录仍会补查可能迟到的付款。",
+  "donation.paid_at": "到账时间",
+  "donation.receipt_link": "赞赏查询链接",
+  "donation.private_help":
+    "请保存完整链接。链接包含私密查询凭证，不会发送给 HashPay。",
+  "donation.missing_token": "缺少查询凭证，请使用已保存的完整赞赏查询链接。",
+  "donation.storage_help":
+    "浏览器无法保存查询凭证。请先复制或手动保存完整查询链接，再前往付款。",
+  "donation.saved_receipt": "我已保存完整查询链接",
+  "donation.pay": "前往 HashPay 付款",
+  "donation.back": "返回赞赏页",
+  "donation.open_page": "打开赞赏页",
+  "donation.copy_page": "复制页面链接",
+  "donation.configuration": "页面设置",
+  "donation.enabled": "启用赞赏页",
+  "donation.title": "页面标题",
+  "donation.description": "赞赏说明（Markdown）",
+  "donation.currency": "赞赏币种",
+  "donation.presets": "预设金额",
+  "donation.presets_help": "最多 8 个，用逗号分隔；留空时仅提供自定义金额。",
+  "donation.min": "最低金额",
+  "donation.max": "最高金额",
+  "donation.gateway_help":
+    "复用现有 HashPay 配置。停用页面后，历史记录和付款补查继续保留。",
+  "donation.records": "赞赏记录",
+  "donation.verified_total": "已核验收款",
+  "donation.count": "{count} 笔",
+  "donation.no_records": "暂无赞赏记录",
+  "donation.settings_saved": "赞赏页设置已保存",
+  "errors.donation_fields":
+    "赞赏标题不能为空或超过 120 字符，说明不能超过 65536 字符",
+  "errors.donation_range": "赞赏金额范围无效，预设金额最多 8 个",
+  "errors.donation_presets": "预设赞赏金额须在范围内且不能重复",
+  "errors.donation_disabled": "赞赏页尚未开启",
+  "errors.donation_changed": "赞赏设置已变化，请刷新后重新选择金额",
+  "errors.donation_amount": "赞赏金额不在允许范围内",
+  "errors.donation_token": "请输入有效的查询凭证",
+  "errors.donation_missing": "赞赏记录或凭证无效",
+  "errors.donation_gateway_protected":
+    "存在待核验付款的赞赏，暂不能更换支付网关或商户",
+  "errors.donation_gateway_identity":
+    "HashPay 配置与赞赏原网关或商户不一致，需核查",
   "errors.request_failed": "请求失败",
   "errors.price_format": "价格格式或小数位数不正确",
   "errors.price_range": "价格超出范围",
@@ -434,6 +493,74 @@ const zh = {
 
 export type MessageKey = keyof typeof zh;
 const en: Record<MessageKey, string> = {
+  "nav.donation": "Donation page",
+  "donation.unavailable": "Donations are currently unavailable.",
+  "donation.amount": "Donation amount",
+  "donation.range": "Amount range: {min} – {max}",
+  "donation.payment_help":
+    "Pay with HashPay. Payment is confirmed by the server.",
+  "donation.submit": "Confirm and donate",
+  "donation.view_record": "View donation",
+  "donation.receipt_title": "Donation payment",
+  "donation.thanks": "Thank you for your support",
+  "donation.paid_help":
+    "Your donation has been verified. Thank you for your support.",
+  "donation.creating_help":
+    "Preparing your payment. This page updates automatically.",
+  "donation.closed_help":
+    "This donation is closed or invalid. Return to the donation page to start a new payment.",
+  "donation.expired_help":
+    "This payment has expired. Late payments are still checked.",
+  "donation.review_help":
+    "Payment details could not be verified. Checks will continue; refresh later or contact the owner.",
+  "donation.waiting_help":
+    "Payment status updates automatically. Expired payments are still checked for late arrivals.",
+  "donation.paid_at": "Payment received",
+  "donation.receipt_link": "Private donation link",
+  "donation.private_help":
+    "Save the full link. It contains a private query token that is never sent to HashPay.",
+  "donation.missing_token":
+    "Missing query token. Open the full donation link you saved.",
+  "donation.storage_help":
+    "Your browser cannot store the query token. Copy or save the full link before paying.",
+  "donation.saved_receipt": "I have saved the full donation link",
+  "donation.pay": "Pay with HashPay",
+  "donation.back": "Back to donations",
+  "donation.open_page": "Open donation page",
+  "donation.copy_page": "Copy page link",
+  "donation.configuration": "Page settings",
+  "donation.enabled": "Enable donations",
+  "donation.title": "Page title",
+  "donation.description": "Description (Markdown)",
+  "donation.currency": "Donation currency",
+  "donation.presets": "Preset amounts",
+  "donation.presets_help":
+    "Up to 8 amounts, separated by commas. Leave blank for custom amounts only.",
+  "donation.min": "Minimum amount",
+  "donation.max": "Maximum amount",
+  "donation.gateway_help":
+    "Uses the existing HashPay configuration. Disabling donations preserves historical records and payment checks.",
+  "donation.records": "Donation records",
+  "donation.verified_total": "Verified donations",
+  "donation.count": "{count} donations",
+  "donation.no_records": "No donations yet",
+  "donation.settings_saved": "Donation settings saved",
+  "errors.donation_fields":
+    "The donation title is required (up to 120 characters) and the description must not exceed 65536 characters",
+  "errors.donation_range":
+    "Invalid donation amount range. Use up to 8 preset amounts",
+  "errors.donation_presets":
+    "Preset donation amounts must be unique and within the allowed range",
+  "errors.donation_disabled": "Donations are not enabled",
+  "errors.donation_changed":
+    "Donation settings changed. Refresh and choose the amount again",
+  "errors.donation_amount": "The donation amount is outside the allowed range",
+  "errors.donation_token": "Enter a valid query token",
+  "errors.donation_missing": "Donation record or query token is invalid",
+  "errors.donation_gateway_protected":
+    "Pending donations must be verified before changing the payment gateway or merchant",
+  "errors.donation_gateway_identity":
+    "HashPay configuration does not match this donation's original gateway or merchant",
   "errors.request_failed": "Request failed",
   "errors.price_format": "Invalid price format or decimal places",
   "errors.price_range": "Price is out of range",

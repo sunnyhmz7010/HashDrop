@@ -274,6 +274,12 @@ func (a *App) updateSettings(w http.ResponseWriter, r *http.Request) error {
 		if count > 0 {
 			return bad("存在待核验付款或未完成交付的订单，暂不能更换支付网关或商户")
 		}
+		if err := a.db.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM donations WHERE payment_status NOT IN ('paid','closed','invalid')").Scan(&count); err != nil {
+			return err
+		}
+		if count > 0 {
+			return bad("存在待核验付款的赞赏，暂不能更换支付网关或商户")
+		}
 	}
 	c.Title = strings.TrimSpace(input.Title)
 	c.Notice = input.Notice

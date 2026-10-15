@@ -141,6 +141,34 @@ export interface Settings {
   merchant_id: string;
   key_configured: boolean;
 }
+export interface DonationSettings {
+  enabled: boolean;
+  title: string;
+  description: string;
+  currency: string;
+  amounts: number[];
+  min_amount: number;
+  max_amount: number;
+}
+export interface Donation {
+  id: string;
+  title: string;
+  amount: number;
+  currency: string;
+  gateway_id: string;
+  checkout_url: string;
+  payment_status: string;
+  expires_at: number;
+  paid_at: number;
+  created_at: number;
+  last_error: string;
+}
+export interface DonationList {
+  items: Donation[];
+  page: number;
+  has_more: boolean;
+  totals: { currency: string; count: number; amount: number }[];
+}
 const scales: Record<string, number> = {
   CNY: 2,
   USD: 2,

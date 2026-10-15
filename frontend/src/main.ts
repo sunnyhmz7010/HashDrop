@@ -10,6 +10,11 @@ const router = createRouter({
   routes: [
     { path: "/setup", component: () => import("./pages/Setup.vue") },
     { path: "/", component: Shop },
+    { path: "/donate", component: () => import("./pages/Donate.vue") },
+    {
+      path: "/donate/orders/:id",
+      component: () => import("./pages/DonationOrder.vue"),
+    },
     { path: "/products/:id", component: () => import("./pages/Product.vue") },
     { path: "/orders/:id", component: () => import("./pages/Order.vue") },
     { path: "/claim", component: () => import("./pages/Order.vue") },

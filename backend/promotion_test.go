@@ -379,7 +379,7 @@ func TestPromotionMigrationKeepsVersionSevenOrders(t *testing.T) {
 		t.Fatalf("迁移破坏原订单: %+v %v", order, err)
 	}
 	var version int
-	if err = db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 8 {
+	if err = db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 9 {
 		t.Fatal("未完成优惠迁移")
 	}
 }

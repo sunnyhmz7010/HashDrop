@@ -344,8 +344,7 @@ func (a *App) syncOrderLocked(ctx context.Context, id string) error {
 		}
 		return err
 	}
-	amount, err := decimalMinor(remote.Amount.String(), o.Currency)
-	if err != nil || remote.ID != o.GatewayID || remote.MerchantID != config.HashPay.MerchantID || remote.MerchantNo != o.ID || remote.Currency != o.Currency || amount != o.Total {
+	if !client.matchesPayment(remote, o.ID, o.GatewayID, o.Currency, o.Total) {
 		if _, e := a.db.ExecContext(ctx, "UPDATE orders SET payment_status='review',last_error='支付订单身份、金额或币种不匹配',next_check=?,updated_at=? WHERE id=? AND payment_status<>'paid'", unixNow()+900, unixNow(), id); e != nil {
 			return e
 		}

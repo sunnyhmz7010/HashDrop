@@ -1,5 +1,6 @@
 import { test, expect, type Locator } from "./fixture";
 import type { Promotion, Product } from "../src/api";
+import { placeTestOrder } from "./checkout";
 
 test("优惠管理保存、叠加报价、价格变化确认与历史领取", async ({
   page,
@@ -148,11 +149,12 @@ test("优惠管理保存、叠加报价、价格变化确认与历史领取", as
   await expect(page.locator(".product-pricing")).toContainText("80.00 CNY");
   await page.getByRole("button", { name: "下单", exact: true }).click();
   const purchase = page.getByRole("dialog", { name: "确认下单", exact: true });
+  await purchase.getByRole("button", { name: "生成", exact: true }).click();
   await expect(purchase.locator(".purchase-total")).toContainText("80.00 CNY");
   await purchase.locator("#purchase-coupon input").fill("INVALID");
   await expect(purchase.getByRole("alert")).toContainText("优惠码不可用");
   await expect(
-    purchase.getByRole("button", { name: "创建订单", exact: true }),
+    purchase.getByRole("button", { name: "前往支付", exact: true }),
   ).toBeDisabled();
   await purchase.locator("#purchase-coupon input").fill("save10");
   await expect(purchase.locator(".purchase-total")).toContainText("72.00 CNY");
@@ -168,7 +170,7 @@ test("优惠管理保存、叠加报价、价格变化确认与历史领取", as
   });
   await page.setViewportSize({ width: 390, height: 900 });
   await expect(
-    purchase.getByRole("button", { name: "创建订单", exact: true }),
+    purchase.getByRole("button", { name: "前往支付", exact: true }),
   ).toBeInViewport();
   await expect(purchase.getByText(/库存/)).toHaveCount(0);
   await page.screenshot({
@@ -176,6 +178,34 @@ test("优惠管理保存、叠加报价、价格变化确认与历史领取", as
     animations: "disabled",
   });
   const { id: _id, used: _used, ...changedCoupon } = coupon;
+  const checkoutKey = await purchase.locator("#purchase-key").inputValue();
+  expect(
+    (
+      await page.request.put(`${base}/api/admin/promotions/${couponID}`, {
+        headers,
+        data: { ...changedCoupon, enabled: false },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  await purchase.getByRole("button", { name: "前往支付", exact: true }).click();
+  await expect(purchase.getByRole("alert")).toContainText("优惠码不可用");
+  await expect(
+    purchase.getByRole("button", { name: "前往支付", exact: true }),
+  ).toBeDisabled();
+  await expect(purchase.locator("#purchase-key")).toHaveValue(checkoutKey);
+  await expect(purchase.locator("#purchase-coupon input")).toHaveValue(
+    "save10",
+  );
+  expect(
+    (
+      await page.request.put(`${base}/api/admin/promotions/${couponID}`, {
+        headers,
+        data: changedCoupon,
+      })
+    ).ok(),
+  ).toBeTruthy();
+  await purchase.getByRole("button", { name: "重新加载", exact: true }).click();
+  await expect(purchase.locator(".purchase-total")).toContainText("72.00 CNY");
   expect(
     (
       await page.request.put(`${base}/api/admin/promotions/${couponID}`, {
@@ -184,16 +214,15 @@ test("优惠管理保存、叠加报价、价格变化确认与历史领取", as
       })
     ).ok(),
   ).toBeTruthy();
-  await purchase.getByRole("button", { name: "创建订单", exact: true }).click();
+  await purchase.getByRole("button", { name: "前往支付", exact: true }).click();
   await expect(purchase.getByRole("alert")).toContainText("重新确认金额");
   await expect(purchase.locator(".purchase-total")).toContainText("64.00 CNY");
   await expect(purchase.locator("#purchase-coupon input")).toHaveValue(
     "save10",
   );
-  await purchase.getByRole("button", { name: "创建订单", exact: true }).click();
-  await expect(page).toHaveURL(/\/orders\/[^/]+#token=/);
-  const receipt = page.url(),
-    orderID = new URL(receipt).pathname.split("/").pop()!;
+  const { orderID } = await placeTestOrder(page);
+  const receipt = `${base}/claim`;
+  await page.goto(receipt);
   await expect(page.locator(".checkout-amount-block")).toContainText(
     "64.00 CNY",
   );

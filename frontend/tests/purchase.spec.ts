@@ -1,5 +1,6 @@
 import { test, expect } from "./fixture";
 import type { Product } from "../src/api";
+import { placeTestOrder } from "./checkout";
 
 test("匿名购买、凭证领取与管理员库存管理", async ({ page, request }) => {
   const base = process.env.TINYFAKA_TEST_URL!;
@@ -60,20 +61,19 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   await page.reload();
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole("button", { name: "下单", exact: true }).click();
-  await page.getByRole("button", { name: "创建订单", exact: true }).click();
-  await expect(
-    page.getByRole("heading", { name: "先保存领取链接" }),
-  ).toBeVisible();
+  const {
+    key: token,
+    orderID,
+    receipt,
+  } = await placeTestOrder(page, "browser-legacy-" + "a".repeat(28));
+  await page.goto(receipt);
+  await expect(page.getByRole("heading", { name: "订单状态" })).toBeVisible();
   // 公网普通 HTTP 没有 Clipboard API，使用浏览器复制后仍能保存领取链接。
   await page.evaluate(() =>
     Object.defineProperty(window, "isSecureContext", { value: false }),
   );
   await page.getByRole("button", { name: "复制链接", exact: true }).click();
   await expect(page.getByText("已复制", { exact: true })).toBeVisible();
-  const receipt = page.url();
-  const url = new URL(receipt),
-    token = new URLSearchParams(url.hash.slice(1)).get("token")!,
-    orderID = url.pathname.split("/").pop()!;
   expect(token).toHaveLength(43);
   await expect(
     page.getByRole("button", { name: "前往 HashPay 付款" }),
@@ -128,13 +128,14 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
     fullPage: true,
   });
   await page.goto(`${base}/claim`);
+  await page.getByRole("button", { name: "查询其他订单", exact: true }).click();
   await page.screenshot({
     path: "../.local/claim-desktop.png",
     fullPage: true,
   });
-  await page.locator("#claim-link input").fill(receipt);
+  await page.locator("#claim-key").fill(token);
   await page.getByRole("button", { name: "查看订单", exact: true }).click();
-  await expect(page).toHaveURL(receipt);
+  await expect(page).toHaveURL(`${base}/claim`);
   await expect(page.locator(".delivery-item pre")).toContainText("卡密-");
   await page.goto(`${base}/admin/login`);
   await page.screenshot({
@@ -339,11 +340,31 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
     .click();
   await expect(blocked.locator(".product-summary")).toBeVisible();
   await blocked.getByRole("button", { name: "下单", exact: true }).click();
-  await blocked.getByRole("button", { name: "创建订单", exact: true }).click();
+  await blocked.getByRole("button", { name: "生成", exact: true }).click();
+  await blocked.getByRole("button", { name: "前往支付", exact: true }).click();
+  await expect(
+    blocked.getByRole("button", { name: "前往支付", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    blocked.getByText("我已手动保存领取密钥", { exact: true }),
+  ).toBeVisible();
+  await expect(blocked).toHaveURL(`${base}/products/${cardProduct.id}`);
+  // 复制成功后即可付款，不要求重复确认同一备份动作。
+  await blocked.evaluate(() =>
+    Object.defineProperty(window, "isSecureContext", { value: false }),
+  );
+  await blocked.getByRole("button", { name: "复制", exact: true }).click();
+  const blockedOrder = await placeTestOrder(blocked);
+  await blocked.goto(`${base}/claim`);
+  await blocked.locator("#claim-key").fill(blockedOrder.key);
+  await blocked.getByRole("button", { name: "查看订单", exact: true }).click();
   await expect(
     blocked.getByRole("button", { name: "前往 HashPay 付款" }),
-  ).toBeDisabled({ timeout: 15_000 });
-  await blocked.getByText("我已手动保存领取链接", { exact: true }).click();
+  ).toBeDisabled();
+  await blocked.evaluate(() =>
+    Object.defineProperty(window, "isSecureContext", { value: false }),
+  );
+  await blocked.getByRole("button", { name: "复制密钥", exact: true }).click();
   await expect(
     blocked.getByRole("button", { name: "前往 HashPay 付款" }),
   ).toBeEnabled();

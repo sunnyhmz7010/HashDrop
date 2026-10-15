@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "./fixture";
 import type { Product } from "../src/api";
+import { placeTestOrder } from "./checkout";
 
 test.use({ locale: "en-US" });
 
@@ -46,7 +47,9 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
     page.getByRole("link", { name: "Details" }).first(),
   ).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("lang", "en-US");
-  await expect(page.locator(".topbar a")).toHaveCount(2);
+  await expect(
+    page.locator(".topbar").getByRole("link", { name: "Find / Claim" }),
+  ).toBeVisible();
   const adminEntry = page
     .locator(".topbar")
     .getByRole("button", { name: "Admin panel", exact: true });
@@ -79,15 +82,12 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
   await expect(
     page.getByRole("dialog", { name: "Confirm order" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Create order", exact: true }).click();
+  const { key: token, orderID } = await placeTestOrder(page);
+  await page.goto(`${base}/claim`);
   await expect(
     page.getByRole("button", { name: "Pay with HashPay" }),
   ).toBeVisible({ timeout: 15_000 });
   const receipt = page.url();
-  const orderID = new URL(receipt).pathname.split("/").pop()!;
-  const token = new URLSearchParams(new URL(receipt).hash.slice(1)).get(
-    "token",
-  )!;
   await switchLanguage(page, "中文");
   await expect(
     page.getByRole("button", { name: "前往 HashPay 付款" }),
@@ -107,8 +107,8 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
     page.getByText("Payment confirmed", { exact: true }),
   ).toBeVisible();
   const order = await (
-    await request.get(`${base}/api/orders/${orderID}`, {
-      headers: { Authorization: `Bearer ${token}` },
+    await request.post(`${base}/api/orders/lookup`, {
+      data: { key: token },
     })
   ).json();
   await expect(page.locator(".delivery-item pre")).toHaveText(
@@ -187,19 +187,20 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
   await page.locator(".topbar .brand").click();
   await expect(page).toHaveURL(`${base}/`);
   await page.goto(`${base}/claim`);
-  await page.locator("#claim-link input").fill("test");
+  await page
+    .getByRole("button", { name: "Find another order", exact: true })
+    .click();
+  await page.locator("#claim-key").fill("test");
   await page.getByRole("button", { name: "View order", exact: true }).click();
   await expect(
-    page.getByText("Enter a complete claim link from this site", {
+    page.getByText("Invalid order or claim credential", {
       exact: true,
     }),
   ).toBeVisible();
   await switchLanguage(page, "中文");
-  await expect(page.locator("#claim-link input")).toHaveValue("test");
+  await expect(page.locator("#claim-key")).toHaveValue("test");
   await page.getByRole("button", { name: "查看订单", exact: true }).click();
-  await expect(
-    page.getByText("请填写本站完整领取链接", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText("订单或凭证无效", { exact: true })).toBeVisible();
   await switchLanguage(page, "English");
 
   for (const width of [320, 390]) {

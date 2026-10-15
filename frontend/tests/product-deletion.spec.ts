@@ -1,4 +1,5 @@
 import { test, expect } from "./fixture";
+import { placeTestOrder } from "./checkout";
 
 test("删除商品保留订单和领取，失败可重试", async ({ page, request }) => {
   const base = process.env.TINYFAKA_TEST_URL!;
@@ -33,14 +34,17 @@ test("删除商品保留订单和领取，失败可重试", async ({ page, reque
   for (let index = 0; index < 2; index++) {
     await page.goto(`${base}/products/${product.id}`);
     await page.getByRole("button", { name: "下单", exact: true }).click();
-    await page.getByRole("button", { name: "创建订单", exact: true }).click();
-    await expect(page).toHaveURL(/\/orders\/[^/]+#token=/);
+    const placed = await placeTestOrder(
+      page,
+      `delete-${index}-`.padEnd(43, "k"),
+    );
+    await page.goto(placed.receipt);
     await expect(
       page.getByRole("button", { name: "前往 HashPay 付款" }),
     ).toBeVisible({ timeout: 15_000 });
     const receipt = {
-      url: page.url(),
-      id: new URL(page.url()).pathname.split("/").pop()!,
+      url: placed.receipt,
+      id: placed.orderID,
     };
     receipts.push(receipt);
     if (index === 0) {

@@ -8,6 +8,8 @@ export class APIError extends Error {
   constructor(
     public status: number,
     message: string,
+    public code = "",
+    public suggestions: string[] = [],
   ) {
     super(message);
   }
@@ -44,6 +46,10 @@ export async function api<T>(
     throw new APIError(
       response.status,
       value.error ?? t("errors.request_failed"),
+      typeof value.code === "string" ? value.code : "",
+      Array.isArray(value.suggestions)
+        ? value.suggestions.filter((item: unknown) => typeof item === "string")
+        : [],
     );
   }
   return value as T;

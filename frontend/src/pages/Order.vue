@@ -3,18 +3,9 @@
      支付状态直接展示网关核验结果，付款渠道和链上信息由 HashPay 页面提供。 -->
 <script setup lang="ts">
 import { formatTime, t } from "../i18n";
-
 import { computed, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import {
-  NAlert,
-  NButton,
-  NCheckbox,
-  NInput,
-  NSkeleton,
-  NTag,
-  useMessage,
-} from "naive-ui";
+import { NAlert, NButton, NCheckbox, NInput, NTag, useMessage } from "naive-ui";
 import StoreLayout from "../components/StoreLayout.vue";
 import {
   api,
@@ -25,24 +16,34 @@ import {
   paymentNames,
   type OrderDetail,
 } from "../api";
+import {
+  forgetClaimKey,
+  forgetPurchase,
+  rememberClaimKey,
+  restoreClaimKey,
+} from "../claim";
+
 const route = useRoute(),
   router = useRouter(),
-  message = useMessage(),
-  detail = ref<OrderDetail>(),
+  message = useMessage();
+const detail = ref<OrderDetail>(),
   error = ref(""),
   busy = ref(false),
   token = ref(""),
   orderID = ref(""),
-  claimLink = ref(""),
+  inputKey = ref(""),
   storageError = ref(false),
-  receiptSaved = ref(false);
+  credentialSaved = ref(false);
 let timer: ReturnType<typeof setTimeout> | undefined,
   controller: AbortController | undefined,
   generation = 0;
 const receipt = computed(() =>
   orderID.value && token.value
-    ? `${location.origin}/orders/${orderID.value}#token=${token.value}`
+    ? `${location.origin}/orders/${orderID.value}#token=${encodeURIComponent(token.value)}`
     : "",
+);
+const credential = computed(() =>
+  orderID.value ? receipt.value : token.value,
 );
 function stop() {
   clearTimeout(timer);
@@ -52,18 +53,27 @@ function stop() {
 }
 async function load() {
   const current = generation;
-  if (busy.value || !token.value || !orderID.value) return;
+  if (busy.value || !token.value) return;
   clearTimeout(timer);
   controller = new AbortController();
   busy.value = true;
   try {
-    const result = await api<OrderDetail>(`/orders/${orderID.value}`, {
-      token: token.value,
-      signal: controller.signal,
-    });
+    const result = orderID.value
+      ? await api<OrderDetail>(`/orders/${orderID.value}`, {
+          token: token.value,
+          signal: controller.signal,
+        })
+      : await api<OrderDetail>("/orders/lookup", {
+          method: "POST",
+          body: { key: token.value },
+          signal: controller.signal,
+        });
     if (current !== generation) return;
     detail.value = result;
     error.value = "";
+    storageError.value = !rememberClaimKey(token.value);
+    if (result.order.delivery_status === "done")
+      forgetPurchase(result.order.id);
     if (
       !["closed", "invalid"].includes(result.order.payment_status) &&
       result.order.delivery_status !== "done"
@@ -82,58 +92,66 @@ watch(
     stop();
     detail.value = undefined;
     error.value = "";
-    token.value = "";
     storageError.value = false;
-    receiptSaved.value = false;
+    credentialSaved.value = false;
     orderID.value = String(route.params.id ?? "");
-    if (!orderID.value) return;
     const fromURL = new URLSearchParams(route.hash.slice(1)).get("token");
-    try {
-      token.value =
-        fromURL ?? sessionStorage.getItem(`tinyfaka:${orderID.value}`) ?? "";
-      if (fromURL) sessionStorage.setItem(`tinyfaka:${orderID.value}`, fromURL);
-    } catch {
-      token.value = fromURL ?? "";
-      storageError.value = true;
-    }
+    if (orderID.value) {
+      try {
+        token.value =
+          fromURL ?? sessionStorage.getItem(`tinyfaka:${orderID.value}`) ?? "";
+        if (fromURL)
+          sessionStorage.setItem(`tinyfaka:${orderID.value}`, fromURL);
+      } catch {
+        token.value = fromURL ?? "";
+        storageError.value = true;
+      }
+    } else token.value = restoreClaimKey();
+    inputKey.value = token.value;
     void load();
   },
   { immediate: true },
 );
 onUnmounted(stop);
 async function claim() {
-  let url: URL;
-  try {
-    url = new URL(claimLink.value.trim());
-  } catch {
-    message.error(t("errors.claim_link"));
+  if (!inputKey.value.trim() || Array.from(inputKey.value).length > 128) {
+    error.value = t("errors.claim_key");
     return;
   }
-  try {
-    const value = new URLSearchParams(url.hash.slice(1)).get("token");
-    if (
-      url.origin !== location.origin ||
-      !/^\/orders\/[A-Za-z0-9_-]+$/.test(url.pathname) ||
-      !value ||
-      value.length !== 43
-    )
-      throw new Error(t("errors.claim_link"));
-    await router.push(url.pathname + url.hash);
-  } catch (e) {
-    message.error(errorText(e));
-  }
+  stop();
+  detail.value = undefined;
+  error.value = "";
+  // 用户新提交的密钥独立于旧链接中的订单号，查询响应只能属于本次输入。
+  credentialSaved.value = false;
+  orderID.value = "";
+  token.value = inputKey.value;
+  await load();
+  if (detail.value && (route.path !== "/claim" || route.hash))
+    await router.replace("/claim");
+}
+async function otherOrder() {
+  stop();
+  detail.value = undefined;
+  error.value = "";
+  token.value = "";
+  inputKey.value = "";
+  orderID.value = "";
+  forgetClaimKey();
+  credentialSaved.value = false;
+  if (route.path !== "/claim" || route.hash) await router.replace("/claim");
 }
 async function copy(value: string) {
   try {
     await copyText(value);
-    if (value === receipt.value) receiptSaved.value = true;
+    if (value === credential.value) credentialSaved.value = true;
     message.success(t("common.copied"));
   } catch {
     message.warning(t("common.copy_fallback"));
   }
 }
 function pay() {
-  if (storageError.value && !receiptSaved.value) return;
+  storageError.value = !rememberClaimKey(token.value);
+  if (storageError.value && !credentialSaved.value) return;
   if (detail.value?.order.checkout_url)
     location.assign(detail.value.order.checkout_url);
 }
@@ -146,38 +164,45 @@ const statusType = computed(() => {
   const status = detail.value?.order.payment_status;
   if (status === "paid") return "success";
   if (status === "expired" || status === "review") return "warning";
-  return status === "invalid" ? "error" : "default";
+  return status === "invalid" || status === "closed" ? "error" : "default";
 });
 </script>
 <template>
   <StoreLayout>
-    <main v-if="!orderID || !token" class="page">
-      <section class="panel grid claim-panel">
+    <main v-if="!detail" class="page">
+      <form class="panel grid claim-panel" @submit.prevent="claim">
         <div class="section-title">
-          <h1>{{ orderID ? t("claim.order_title") : t("claim.title") }}</h1>
+          <h1>{{ t("claim.title") }}</h1>
         </div>
         <p class="muted">{{ t("claim.private_help") }}</p>
-        <n-alert v-if="orderID" type="warning">{{
+        <n-alert v-if="orderID && !token" type="warning">{{
           t("claim.missing")
         }}</n-alert>
         <div class="field-stack">
-          <label class="field-label" for="claim-link">{{
-            t("claim.full_link")
-          }}</label
+          <label class="field-label" for="claim-key">{{ t("claim.key") }}</label
           ><n-input
-            id="claim-link"
-            v-model:value="claimLink"
-            :placeholder="t('claim.placeholder')"
-            @keydown.enter="claim"
+            v-model:value="inputKey"
+            :placeholder="t('claim.key_placeholder')"
+            :input-props="{
+              id: 'claim-key',
+              autocomplete: 'off',
+              spellcheck: false,
+            }"
+            :disabled="busy"
           />
         </div>
         <div class="form-actions">
-          <n-button type="primary" @click="claim">{{
-            t("claim.view")
-          }}</n-button>
+          <n-button
+            type="primary"
+            attr-type="submit"
+            :loading="busy"
+            :disabled="busy || !inputKey.trim()"
+            >{{ t("claim.view") }}</n-button
+          >
         </div>
+        <n-alert v-if="error" type="error">{{ errorText(error) }}</n-alert>
         <small class="field-help">{{ t("claim.lost_help") }}</small>
-      </section>
+      </form>
     </main>
     <main v-else class="checkout-page">
       <section class="checkout-receipt">
@@ -242,20 +267,6 @@ const statusType = computed(() => {
             </div>
           </dl>
         </template>
-        <template v-else-if="busy">
-          <div class="checkout-receipt-head">
-            <n-skeleton text width="34%" />
-          </div>
-          <div class="checkout-amount-block">
-            <n-skeleton text width="26%" /><n-skeleton
-              text
-              :repeat="2"
-              width="64%"
-            />
-          </div>
-          <div class="form-grid"><n-skeleton text :repeat="3" /></div>
-        </template>
-        <p v-else class="muted">{{ t("claim.not_loaded") }}</p>
       </section>
       <section
         class="checkout-flow"
@@ -296,14 +307,14 @@ const statusType = computed(() => {
         </div>
         <div v-else class="checkout-flow-head">
           <span>{{ t("claim.order_title") }}</span>
-          <h1>{{ t("claim.save_title") }}</h1>
-          <small class="field-help">{{ t("claim.save_help") }}</small>
+          <h1>{{ t("claim.status_title") }}</h1>
+          <small class="field-help">{{ t("claim.status_help") }}</small>
         </div>
         <div class="checkout-copy-field">
-          <span>{{ t("claim.link") }}</span>
-          <code :title="receipt">{{ receipt }}</code>
-          <n-button size="small" secondary @click="copy(receipt)">{{
-            t("claim.copy_link")
+          <span>{{ orderID ? t("claim.link") : t("claim.key") }}</span>
+          <code :title="credential">{{ credential }}</code>
+          <n-button size="small" secondary @click="copy(credential)">{{
+            orderID ? t("claim.copy_link") : t("claim.copy_key")
           }}</n-button>
         </div>
         <n-alert v-if="storageError" type="warning">{{
@@ -334,9 +345,11 @@ const statusType = computed(() => {
             type="warning"
             >{{ t("claim.manual_help") }}</n-alert
           >
-          <n-checkbox v-if="storageError" v-model:checked="receiptSaved">{{
-            t("claim.saved_manually")
-          }}</n-checkbox>
+          <n-checkbox
+            v-if="storageError && detail.order.payment_status === 'pending'"
+            v-model:checked="credentialSaved"
+            >{{ t("claim.saved_manually") }}</n-checkbox
+          >
           <n-button
             v-if="
               detail.order.checkout_url &&
@@ -345,13 +358,16 @@ const statusType = computed(() => {
             type="primary"
             size="large"
             block
-            :disabled="storageError && !receiptSaved"
+            :disabled="storageError && !credentialSaved"
             @click="pay"
             >{{ t("claim.pay") }}</n-button
           >
           <div class="form-actions">
             <n-button :loading="busy" secondary size="small" @click="load">{{
               t("orders.refresh_status")
+            }}</n-button>
+            <n-button secondary size="small" @click="otherOrder">{{
+              t("claim.other")
             }}</n-button>
           </div>
           <div

@@ -6,6 +6,7 @@ import { useRoute } from "vue-router";
 import { NAlert, NButton, NSkeleton } from "naive-ui";
 import { api, errorText, type Product } from "../api";
 import { t } from "../i18n";
+import { restorePurchase } from "../claim";
 import StoreLayout from "../components/StoreLayout.vue";
 import MarkdownContent from "../components/MarkdownContent.vue";
 import PurchaseDialog from "../components/PurchaseDialog.vue";
@@ -84,12 +85,14 @@ watch(
                 size="large"
                 :disabled="
                   ['card', 'account'].includes(product.kind) &&
-                  product.available === 0
+                  product.available === 0 &&
+                  !restorePurchase(product.id)
                 "
                 @click="purchaseOpen = true"
                 >{{
                   ["card", "account"].includes(product.kind) &&
-                  product.available === 0
+                  product.available === 0 &&
+                  !restorePurchase(product.id)
                     ? t("product.sold_out")
                     : t("shop.buy")
                 }}</n-button

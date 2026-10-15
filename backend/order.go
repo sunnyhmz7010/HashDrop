@@ -52,6 +52,8 @@ func scanOrder(row scanner) (Order, error) {
 }
 
 type orderInput struct {
+	Key            string `json:"key"`
+	RequestID      string `json:"request_id"`
 	ProductID      string `json:"product_id"`
 	Quantity       int    `json:"quantity"`
 	CouponCode     string `json:"coupon_code"`
@@ -77,29 +79,82 @@ func (a *App) createOrder(w http.ResponseWriter, r *http.Request) error {
 	if input.Quantity < 1 || input.Quantity > 100 {
 		return bad("数量须为 1–100")
 	}
-	o, token, err := a.reservePricedOrder(r.Context(), input)
+	if err := validateClaimKey(input.Key); err != nil {
+		return err
+	}
+	if input.RequestID == "" {
+		input.RequestID = newID()
+	} else if !validRequestID(input.RequestID) {
+		return bad("下单请求标识无效，请重新打开下单弹窗")
+	}
+	if input.QuotedTotal == nil || input.QuotedCurrency == "" {
+		return bad("请先获取并确认订单报价")
+	}
+	o, _, err := a.reservePricedOrder(r.Context(), input)
+	if errors.Is(err, errClaimKeyUsed) {
+		suggestions, e := a.suggestClaimKeys(r.Context(), input.Key)
+		if e != nil {
+			return e
+		}
+		reply(w, 409, map[string]any{"error": "领取密钥已被使用，请更换或选择派生密钥", "code": "key_conflict", "suggestions": suggestions})
+		return nil
+	}
 	if err != nil {
 		return err
 	}
-	// 持久化后立即返回凭证，网关延迟或排队不能阻塞领取入口的交付。
+	// 同一次下单的重试沿用订单快照、优惠占用及 merchantNo。
+	if _, err = a.db.ExecContext(r.Context(), "UPDATE orders SET next_check=0 WHERE id=? AND payment_status='creating'", o.ID); err != nil {
+		return err
+	}
+	// 持久化后立即返回订单，弹窗继续等待支付链接。
 	// 只唤醒单个内置调度器，不为每笔订单启动额外 goroutine。
 	select {
 	case a.wake <- struct{}{}:
 	default:
 	}
-	reply(w, 201, map[string]any{"order": o, "token": token})
+	reply(w, 201, map[string]any{"order": o})
 	return nil
 }
-func (a *App) reserveOrder(ctx context.Context, productID string, quantity int) (Order, string, error) {
-	return a.reservePricedOrder(ctx, orderInput{ProductID: productID, Quantity: quantity})
+func (a *App) reserveOrder(ctx context.Context, productID string, quantity int, token, id string) (Order, error) {
+	o, _, err := a.reservePricedOrder(ctx, orderInput{ProductID: productID, Quantity: quantity, Key: token, RequestID: id})
+	return o, err
 }
 func (a *App) reservePricedOrder(ctx context.Context, input orderInput) (Order, string, error) {
 	productID, quantity := input.ProductID, input.Quantity
+	token, id := input.Key, input.RequestID
+	// 内部调用沿用随机凭证；公开下单入口必须先验证买家设置的密钥。
+	if token == "" {
+		token = randomToken()
+	}
+	if id == "" {
+		id = newID()
+	}
+	if err := validateClaimKey(token); err != nil {
+		return Order{}, "", err
+	}
 	tx, err := a.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Order{}, "", err
 	}
 	defer tx.Rollback()
+	// 在重新报价与库存校验前恢复同一次请求，避免重复占用优惠次数。
+	existing, err := scanOrder(tx.QueryRowContext(ctx, orderSelect+" WHERE id=?", id))
+	if err == nil {
+		if existing.ProductID != productID || existing.Quantity != quantity || !constantEqual(existing.TokenHash, tokenHash(token)) {
+			return Order{}, "", &apiError{409, "下单请求标识无效，请重新打开下单弹窗"}
+		}
+		return existing, token, nil
+	}
+	if err != sql.ErrNoRows {
+		return Order{}, "", err
+	}
+	var used bool
+	if err = tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM orders WHERE token_hash=?)", tokenHash(token)).Scan(&used); err != nil {
+		return Order{}, "", err
+	}
+	if used {
+		return Order{}, "", errClaimKeyUsed
+	}
 	p, err := scanProduct(tx.QueryRowContext(ctx, productSelect+" WHERE p.id=? AND p.active=1 AND p.deleted_at IS NULL", productID))
 	if err == sql.ErrNoRows {
 		return Order{}, "", bad("商品不存在或已下架")
@@ -109,12 +164,15 @@ func (a *App) reservePricedOrder(ctx context.Context, input orderInput) (Order, 
 	}
 	quote, err := quoteOrder(ctx, tx, p, quantity, input.CouponCode, unixNow())
 	if err != nil {
+		var invalid *apiError
+		if input.QuotedTotal != nil && errors.As(err, &invalid) && invalid.Status == 400 {
+			return Order{}, "", &apiError{409, "优惠或价格已变化，请重新确认金额"}
+		}
 		return Order{}, "", err
 	}
 	if input.QuotedTotal != nil && (*input.QuotedTotal != quote.Total || input.QuotedCurrency != quote.Currency) {
 		return Order{}, "", &apiError{409, "优惠或价格已变化，请重新确认金额"}
 	}
-	token, id := randomToken(), newID()
 	content := ""
 	if p.Kind == "static" {
 		plain, e := a.vault.decrypt(p.Content, "product:"+p.ID)
@@ -191,6 +249,10 @@ func (a *App) reservePricedOrder(ctx context.Context, input orderInput) (Order, 
 	return o, token, nil
 }
 func (a *App) orderDetail(w http.ResponseWriter, r *http.Request) error {
+	refund, allowed := a.beginClaim(r)
+	if !allowed {
+		return &apiError{429, "密钥尝试过于频繁，请稍后再试"}
+	}
 	token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if len(token) != 43 || !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
 		return &apiError{401, "请输入有效的领取凭证"}
@@ -200,11 +262,16 @@ func (a *App) orderDetail(w http.ResponseWriter, r *http.Request) error {
 		return &apiError{404, "订单或凭证无效"}
 	}
 	if err != nil {
+		refund()
 		return err
 	}
 	if !constantEqual(o.TokenHash, tokenHash(token)) {
 		return &apiError{404, "订单或凭证无效"}
 	}
+	refund()
+	return a.replyOrder(w, r, o)
+}
+func (a *App) replyOrder(w http.ResponseWriter, r *http.Request, o Order) error {
 	results, err := a.deliveryResults(r.Context(), o.ID)
 	if err != nil {
 		return err
@@ -246,7 +313,7 @@ func (a *App) syncOrderLocked(ctx context.Context, id string) error {
 		return err
 	}
 	if o.GatewayID == "" {
-		remote, checkout, err := client.create(ctx, o, strings.TrimRight(config.PublicURL, "/")+"/orders/"+id)
+		remote, checkout, err := client.create(ctx, o, strings.TrimRight(config.PublicURL, "/")+"/claim")
 		if err != nil {
 			return err
 		}

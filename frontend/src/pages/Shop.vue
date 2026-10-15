@@ -2,6 +2,7 @@
      Copyright 2026 TGDash Team. Apache-2.0，见 frontend/public/HashPay-LICENSE.txt。 -->
 <script setup lang="ts">
 import { t } from "../i18n";
+import { restorePurchase } from "../claim";
 
 import { onMounted, ref } from "vue";
 import { NAlert, NButton, NEmpty, NSkeleton, NSpin, NTooltip } from "naive-ui";
@@ -107,13 +108,15 @@ onMounted(load);
                       :aria-label="t('shop.buy')"
                       :disabled="
                         ['card', 'account'].includes(product.kind) &&
-                        product.available === 0
+                        product.available === 0 &&
+                        !restorePurchase(product.id)
                       "
                       @click="openPurchase(product.id)"
                       ><ProductIcon name="buy" /></n-button></template
                   >{{
                     ["card", "account"].includes(product.kind) &&
-                    product.available === 0
+                    product.available === 0 &&
+                    !restorePurchase(product.id)
                       ? t("product.sold_out")
                       : t("shop.buy")
                   }}</n-tooltip

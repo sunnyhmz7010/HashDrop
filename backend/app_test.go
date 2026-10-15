@@ -176,7 +176,8 @@ func insertProduct(t *testing.T, a *App, kind string, stock int) string {
 }
 func reserve(t *testing.T, a *App, product string, n int) (Order, string) {
 	t.Helper()
-	o, token, err := a.reserveOrder(context.Background(), product, n)
+	token := randomToken()
+	o, err := a.reserveOrder(context.Background(), product, n, token, newID())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +202,7 @@ func TestConcurrentReservation(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			o, _, err := a.reserveOrder(context.Background(), id, 1)
+			o, err := a.reserveOrder(context.Background(), id, 1, randomToken(), newID())
 			if err == nil {
 				success <- o
 			}

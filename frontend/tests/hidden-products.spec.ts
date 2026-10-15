@@ -1,4 +1,5 @@
 import { test, expect } from "./fixture";
+import { placeTestOrder } from "./checkout";
 
 test("隐藏商品通过链接购买，取消隐藏后恢复首页入口", async ({
   page,
@@ -75,9 +76,8 @@ test("隐藏商品通过链接购买，取消隐藏后恢复首页入口", async
       () => document.documentElement.scrollWidth > innerWidth + 1,
     ),
   ).toBeFalsy();
-  await purchase.getByRole("button", { name: "创建订单", exact: true }).click();
-  await expect(page).toHaveURL(/\/orders\/[^/]+#token=/);
-  const orderID = new URL(page.url()).pathname.split("/").pop()!;
+  const { orderID } = await placeTestOrder(page);
+  await page.goto(`${base}/claim`);
   await expect(
     page.getByRole("button", { name: "前往 HashPay 付款" }),
   ).toBeVisible({ timeout: 15_000 });

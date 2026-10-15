@@ -60,12 +60,11 @@ func TestHiddenProductCanBePurchasedWithoutAppearingInCatalog(t *testing.T) {
 	if product := save(); !product.Hidden {
 		t.Fatal("旧客户端省略隐藏字段时清除了隐藏设置")
 	}
-	response = public("POST", "/api/orders", `{"product_id":"`+hiddenID+`","quantity":2}`)
+	response = public("POST", "/api/orders", `{"product_id":"`+hiddenID+`","quantity":2,"key":"hidden-purchase","quoted_total":2468,"quoted_currency":"CNY"}`)
 	var created struct {
-		Order Order  `json:"order"`
-		Token string `json:"token"`
+		Order Order `json:"order"`
 	}
-	if response.Code != http.StatusCreated || json.Unmarshal(response.Body.Bytes(), &created) != nil || created.Order.ProductID != hiddenID || created.Order.Quantity != 2 || created.Order.Total != 2468 || created.Token == "" {
+	if response.Code != http.StatusCreated || json.Unmarshal(response.Body.Bytes(), &created) != nil || created.Order.ProductID != hiddenID || created.Order.Quantity != 2 || created.Order.Total != 2468 {
 		t.Fatalf("隐藏商品匿名下单失败: %s", response.Body)
 	}
 	product, err := scanProduct(a.db.QueryRow(productSelect+" WHERE p.id=?", hiddenID))

@@ -1,4 +1,5 @@
 import { test, expect, type Locator } from "./fixture";
+import { placeTestOrder } from "./checkout";
 
 async function verifyRichContent(content: Locator) {
   await expect(
@@ -224,8 +225,8 @@ test("Markdown 详情保存、图片视频展示与首页直接下单", async ({
   await expect(page).toHaveURL(`${base}/`);
   const purchase = page.getByRole("dialog", { name: "确认下单", exact: true });
   await expect(
-    purchase.getByRole("button", { name: "创建订单" }),
-  ).toBeEnabled();
+    purchase.getByRole("button", { name: "前往支付" }),
+  ).toBeDisabled();
   await purchase.getByRole("button", { name: "取消" }).click();
   expect(posts).toBe(0);
   // 初次读取失败允许重新查询；提交失败保留数量且不跳转。
@@ -235,12 +236,13 @@ test("Markdown 详情保存、图片视频展示与首页直接下单", async ({
   await buy.click();
   await expect(purchase.getByText("详情加载暂时失败")).toBeVisible();
   await expect(
-    purchase.getByRole("button", { name: "创建订单" }),
+    purchase.getByRole("button", { name: "前往支付" }),
   ).toBeDisabled();
   await page.unroute(`**/api/products/${product.id}`);
   await purchase.getByRole("button", { name: "重新加载" }).click();
+  await purchase.getByRole("button", { name: "生成", exact: true }).click();
   await expect(
-    purchase.getByRole("button", { name: "创建订单" }),
+    purchase.getByRole("button", { name: "前往支付" }),
   ).toBeEnabled();
   await purchase.getByLabel("购买数量").fill("2");
   await purchase.getByLabel("购买数量").blur();
@@ -248,7 +250,7 @@ test("Markdown 详情保存、图片视频展示与首页直接下单", async ({
   await page.route("**/api/orders", (route) =>
     route.fulfill({ status: 503, json: { error: "订单创建暂时失败" } }),
   );
-  await purchase.getByRole("button", { name: "创建订单" }).click();
+  await purchase.getByRole("button", { name: "前往支付" }).click();
   await expect(purchase.getByText("订单创建暂时失败")).toBeVisible();
   await expect(purchase.getByLabel("购买数量")).toHaveValue("2");
   await page.unroute("**/api/orders");
@@ -261,21 +263,18 @@ test("Markdown 详情保存、图片视频展示与首页直接下单", async ({
     path: "../.local/purchase-dialog-desktop.png",
     animations: "disabled",
   });
-  await purchase.getByRole("button", { name: "创建订单" }).click();
+  const placing = placeTestOrder(page);
+  await expect(
+    purchase.getByRole("button", { name: "继续获取支付链接" }),
+  ).toBeDisabled();
   await page.keyboard.press("Escape");
   await expect(purchase).toBeVisible();
-  await expect(
-    purchase.getByRole("button", { name: "创建订单" }),
-  ).toBeDisabled();
-  await expect(page).toHaveURL(/\/orders\/[^/]+#token=/);
+  const { orderID, key: token } = await placing;
   expect(posts).toBe(1);
-  const orderURL = new URL(page.url());
-  const orderID = orderURL.pathname.split("/").pop()!;
-  const token = new URLSearchParams(orderURL.hash.slice(1)).get("token")!;
-  expect(token).toHaveLength(43);
+  expect(token).toHaveLength(24);
   const order = await (
-    await page.request.get(`${base}/api/orders/${orderID}`, {
-      headers: { Authorization: `Bearer ${token}` },
+    await page.request.post(`${base}/api/orders/lookup`, {
+      data: { key: token },
     })
   ).json();
   expect(order.order.quantity).toBe(2);

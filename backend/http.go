@@ -67,6 +67,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /api/products/{id}", wrap(a.productDetail))
 	mux.HandleFunc("POST /api/orders", wrap(a.createOrder))
 	mux.HandleFunc("POST /api/orders/quote", wrap(a.quoteOrder))
+	mux.HandleFunc("POST /api/orders/lookup", wrap(a.lookupOrder))
 	mux.HandleFunc("GET /api/orders/{id}", wrap(a.orderDetail))
 	mux.HandleFunc("POST /api/webhooks/hashpay", wrap(a.webhook))
 	mux.HandleFunc("POST /api/admin/login", wrap(a.login))
@@ -130,6 +131,10 @@ type limiter struct {
 
 func newLimiter() *limiter { return &limiter{entries: map[string]limitEntry{}} }
 func (l *limiter) allow(key string, max int, window time.Duration) bool {
+	_, allowed := l.reserve(key, max, window)
+	return allowed
+}
+func (l *limiter) reserve(key string, max int, window time.Duration) (time.Time, bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := time.Now()
@@ -140,16 +145,29 @@ func (l *limiter) allow(key string, max int, window time.Duration) bool {
 			}
 		}
 		if len(l.entries) > 5000 {
-			return false
+			return time.Time{}, false
 		}
 	}
 	e := l.entries[key]
 	if now.After(e.until) {
 		e = limitEntry{until: now.Add(window)}
 	}
+	if e.count >= max {
+		return time.Time{}, false
+	}
 	e.count++
 	l.entries[key] = e
-	return e.count <= max
+	return e.until, true
+}
+func (l *limiter) refund(key string, until time.Time) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	e := l.entries[key]
+	// 上一个窗口的成功请求不能抵扣新窗口的失败次数。
+	if e.until.Equal(until) && e.count > 0 {
+		e.count--
+		l.entries[key] = e
+	}
 }
 func clientIP(r *http.Request) string {
 	host, _, _ := net.SplitHostPort(r.RemoteAddr)

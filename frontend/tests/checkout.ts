@@ -2,7 +2,7 @@ import { expect, type Page } from "./fixture";
 import type { Order } from "../src/api";
 
 export async function stubPaymentPage(page: Page) {
-  const base = process.env.TINYFAKA_TEST_URL!;
+  const base = process.env.HASHDROP_TEST_URL!;
   // 仅替换第三方托管页面；创建、签名查询、库存及交付均使用真实 Go 后端与测试网关。
   await page.route("**/pay/gw-*", (route) =>
     route.fulfill({
@@ -13,7 +13,7 @@ export async function stubPaymentPage(page: Page) {
 }
 
 export async function placeTestOrder(page: Page, customKey?: string) {
-  const base = process.env.TINYFAKA_TEST_URL!;
+  const base = process.env.HASHDROP_TEST_URL!;
   await stubPaymentPage(page);
   const field = page.locator("#purchase-key");
   if (customKey !== undefined) await field.fill(customKey);

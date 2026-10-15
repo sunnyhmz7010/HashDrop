@@ -4,13 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"hashdrop"
 	_ "modernc.org/sqlite"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
-	"tinyfaka"
 )
 
 func openDatabase(path string) (*sql.DB, error) {
@@ -56,7 +56,7 @@ func openDatabase(path string) (*sql.DB, error) {
 }
 
 func initializeDatabase(db *sql.DB) error {
-	schema, err := tinyfaka.Assets.ReadFile("schema.sql")
+	schema, err := hashdrop.Assets.ReadFile("schema.sql")
 	if err != nil {
 		return err
 	}

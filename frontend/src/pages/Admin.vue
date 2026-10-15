@@ -57,7 +57,7 @@ async function logout() {
 }
 </script>
 <template>
-  <!-- 基于 HashPay src/app/pages/Admin.vue 修改，接入 TinyFaka 路由和密码会话。
+  <!-- 基于 HashPay src/app/pages/Admin.vue 修改，接入 HashDrop 路由和密码会话。
        Copyright 2026 TGDash Team. Apache-2.0，见 frontend/public/HashPay-LICENSE.txt。 -->
   <n-layout class="shell">
     <AppHeader>
@@ -89,7 +89,7 @@ async function logout() {
               @update:value="openPage"
             />
             <div class="workspace-release">
-              <span>TinyFaka v{{ version }}</span>
+              <span>HashDrop v{{ version }}</span>
             </div>
           </div>
         </n-drawer-content>
@@ -103,7 +103,7 @@ async function logout() {
               @update:value="openPage"
             />
             <div class="workspace-release">
-              <span>TinyFaka v{{ version }}</span>
+              <span>HashDrop v{{ version }}</span>
             </div>
           </div>
         </n-layout-sider>

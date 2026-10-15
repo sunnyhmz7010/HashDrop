@@ -101,10 +101,10 @@ watch(
     try {
       token.value =
         fromURL ??
-        sessionStorage.getItem(`tinyfaka:donation:${id.value}`) ??
+        sessionStorage.getItem(`hashdrop:donation:${id.value}`) ??
         "";
       if (fromURL)
-        sessionStorage.setItem(`tinyfaka:donation:${id.value}`, fromURL);
+        sessionStorage.setItem(`hashdrop:donation:${id.value}`, fromURL);
     } catch {
       token.value = fromURL ?? "";
       storageError.value = true;

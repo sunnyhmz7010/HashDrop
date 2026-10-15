@@ -2,12 +2,12 @@ import { test, expect } from "./fixture";
 
 test("网页初始化、失败重填、HTTP 登录与只写私钥", async ({ page, request }) => {
   const fixture = await (
-    await request.get(`${process.env.TINYFAKA_TEST_URL}/__test/setup-fixture`)
+    await request.get(`${process.env.HASHDROP_TEST_URL}/__test/setup-fixture`)
   ).json();
   const base: string = fixture.url;
   await page.goto(`${base}/admin`);
   await expect(
-    page.getByRole("heading", { name: "初始化 TinyFaka" }),
+    page.getByRole("heading", { name: "初始化 HashDrop" }),
   ).toBeVisible();
   expect(page.url()).toBe(`${base}/setup`);
   await expect(
@@ -80,7 +80,7 @@ test("网页初始化、失败重填、HTTP 登录与只写私钥", async ({ pag
     page.getByRole("heading", { name: "概览", exact: true }),
   ).toBeVisible();
   const cookie = (await page.context().cookies()).find(
-    (cookie) => cookie.name === "tinyfaka_session",
+    (cookie) => cookie.name === "hashdrop_session",
   );
   expect(cookie).toMatchObject({
     secure: false,

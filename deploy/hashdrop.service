@@ -1,14 +1,14 @@
 [Unit]
-Description=TinyFaka automatic delivery
+Description=HashDrop automatic delivery
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=tinyfaka
-Group=tinyfaka
-WorkingDirectory=/var/lib/tinyfaka
-ExecStart=/usr/local/bin/tinyfaka -config /etc/tinyfaka/config.json -data-dir /var/lib/tinyfaka -listen 0.0.0.0:8080
+User=hashdrop
+Group=hashdrop
+WorkingDirectory=/var/lib/hashdrop
+ExecStart=/usr/local/bin/hashdrop -config /etc/hashdrop/config.json -data-dir /var/lib/hashdrop -listen 0.0.0.0:8080
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=25
@@ -17,7 +17,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/tinyfaka /etc/tinyfaka
+ReadWritePaths=/var/lib/hashdrop /etc/hashdrop
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 CapabilityBoundingSet=
 LockPersonality=true

@@ -61,7 +61,7 @@ async function save() {
 }
 </script>
 <template>
-  <!-- 卡片与字段排列裁剪自 HashPay pages/Settings.vue，沿用 TinyFaka 设置接口。 -->
+  <!-- 卡片与字段排列裁剪自 HashPay pages/Settings.vue，沿用 HashDrop 设置接口。 -->
   <div class="grid">
     <div class="section-title">
       <h2>{{ t("nav.settings") }}</h2>

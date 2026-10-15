@@ -1,4 +1,4 @@
-/* 基于 HashPay src/shared/i18n.ts 裁剪与扩展 TinyFaka 文案。
+/* 基于 HashPay src/shared/i18n.ts 裁剪与扩展 HashDrop 文案。
  * Copyright 2026 TGDash Team，Apache-2.0，见 frontend/public/HashPay-LICENSE.txt。
  * 参考版本 dd1f7149e8f772b121f1b31b9fc207a1466bc935。
  */
@@ -313,7 +313,7 @@ const zh = {
   "product.loading": "正在加载商品",
   "product.loading_purchase": "正在加载购买信息",
   "common.reload": "重新加载",
-  "setup.title": "初始化 TinyFaka",
+  "setup.title": "初始化 HashDrop",
   "setup.finished": "初始化已完成，请通过配置的站点地址登录。",
   "setup.login": "进入管理员登录",
   "setup.http_warning":
@@ -869,7 +869,7 @@ const en: Record<MessageKey, string> = {
   "product.loading": "Loading product",
   "product.loading_purchase": "Loading purchase details",
   "common.reload": "Reload",
-  "setup.title": "Initialize TinyFaka",
+  "setup.title": "Initialize HashDrop",
   "setup.finished": "Setup is complete. Sign in using the configured site URL.",
   "setup.login": "Go to admin sign in",
   "setup.http_warning":

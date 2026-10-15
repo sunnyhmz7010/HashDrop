@@ -13,15 +13,15 @@ ARG TARGETARCH
 WORKDIR /app
 COPY . .
 COPY --from=frontend /app/backend/web ./backend/web
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" -o /tinyfaka ./backend
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" -o /hashdrop ./backend
 
 FROM alpine:3.24
 RUN apk add --no-cache ca-certificates \
-    && addgroup -S -g 10001 tinyfaka \
-    && adduser -S -D -u 10001 -G tinyfaka tinyfaka \
+    && addgroup -S -g 10001 hashdrop \
+    && adduser -S -D -u 10001 -G hashdrop hashdrop \
     && mkdir -p /data \
-    && chown tinyfaka:tinyfaka /data
-COPY --from=builder /tinyfaka /app/tinyfaka
-USER tinyfaka
+    && chown hashdrop:hashdrop /data
+COPY --from=builder /hashdrop /app/hashdrop
+USER hashdrop
 WORKDIR /app
-CMD ["/app/tinyfaka", "-config", "/data/config.json", "-data-dir", "/data", "-listen", "0.0.0.0:8080"]
+CMD ["/app/hashdrop", "-config", "/data/config.json", "-data-dir", "/data", "-listen", "0.0.0.0:8080"]

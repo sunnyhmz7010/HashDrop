@@ -1,4 +1,4 @@
-<!-- 基于 HashPay src/app/pages/Pay.vue 修改：保留页框，顶栏共用 TinyFaka 品牌与语言入口。
+<!-- 基于 HashPay src/app/pages/Pay.vue 修改：保留页框，顶栏共用 HashDrop 品牌与语言入口。
      Copyright 2026 TGDash Team. Apache-2.0，见 frontend/public/HashPay-LICENSE.txt。 -->
 <script setup lang="ts">
 import { NButton, NLayout, NLayoutContent } from "naive-ui";

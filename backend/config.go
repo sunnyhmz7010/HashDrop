@@ -185,7 +185,7 @@ func writeConfig(path string, c Config) error {
 	if err = os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(dir, ".tinyfaka-config-*")
+	f, err := os.CreateTemp(dir, ".hashdrop-config-*")
 	if err != nil {
 		return err
 	}

@@ -14,7 +14,7 @@ const router = useRouter(),
   loginURL = ref(""),
   insecure = location.protocol === "http:";
 const form = reactive({
-  title: "TinyFaka",
+  title: "HashDrop",
   public_url: location.origin,
   username: "admin",
   password: "",

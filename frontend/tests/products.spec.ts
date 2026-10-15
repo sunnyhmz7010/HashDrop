@@ -87,7 +87,7 @@ async function verifyRichContent(content: Locator) {
 
 test("Markdown 详情保存、图片视频展示与首页直接下单", async ({ page }) => {
   test.setTimeout(60_000);
-  const base = process.env.TINYFAKA_TEST_URL!;
+  const base = process.env.HASHDROP_TEST_URL!;
   await page.goto(base);
   const name = "Markdown 详情示例";
   const image = `${base}/__test/media/image.svg`;
@@ -331,7 +331,7 @@ test("隐藏商品通过链接购买，取消隐藏后恢复首页入口", async
   page,
   request,
 }) => {
-  const base = process.env.TINYFAKA_TEST_URL!;
+  const base = process.env.HASHDROP_TEST_URL!;
   const name = "链接专用卡密";
   await loginAdmin(page);
   const pool = await createInventory(page, "链接专用库存");
@@ -429,7 +429,7 @@ test("隐藏商品通过链接购买，取消隐藏后恢复首页入口", async
 });
 
 test("删除商品保留订单和领取，失败可重试", async ({ page, request }) => {
-  const base = process.env.TINYFAKA_TEST_URL!;
+  const base = process.env.HASHDROP_TEST_URL!;
   const name = "删除验证卡密";
   await loginAdmin(page);
   const pool = await createInventory(page, "删除验证库存");

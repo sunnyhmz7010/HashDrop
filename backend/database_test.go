@@ -7,7 +7,7 @@ import (
 )
 
 func TestDatabaseInitializesAndReopens(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "全新安装", "tinyfaka.db")
+	path := filepath.Join(t.TempDir(), "全新安装", "hashdrop.db")
 	db, err := openDatabase(path)
 	if err != nil {
 		t.Fatal(err)

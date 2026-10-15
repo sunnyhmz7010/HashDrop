@@ -28,7 +28,7 @@ func bootstrapConfig(dataDir, listen string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	return Config{Listen: listen, Database: filepath.Join(absolute, "tinyfaka.db"), BackupDir: filepath.Join(absolute, "backups"), Title: "TinyFaka"}, nil
+	return Config{Listen: listen, Database: filepath.Join(absolute, "hashdrop.db"), BackupDir: filepath.Join(absolute, "backups"), Title: "HashDrop"}, nil
 }
 
 type setupInput struct {

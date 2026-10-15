@@ -6,7 +6,7 @@ test("赞赏页配置、独立付款查询、手机菜单与停用后的历史�
   request,
 }) => {
   test.setTimeout(90_000);
-  const base = process.env.TINYFAKA_TEST_URL!;
+  const base = process.env.HASHDROP_TEST_URL!;
   await loginAdmin(page);
   await page.getByRole("menuitem", { name: "赞赏页", exact: true }).click();
   await expect(page).toHaveURL(`${base}/admin/donation`);
@@ -22,7 +22,7 @@ test("赞赏页配置、独立付款查询、手机菜单与停用后的历史�
     await page.getByRole("switch", { name: "启用赞赏页" }).check();
     await page
       .getByLabel("页面标题", { exact: true })
-      .fill("支持 TinyFaka 持续开发");
+      .fill("支持 HashDrop 持续开发");
     await page
       .getByLabel("赞赏说明（Markdown）")
       .fill("## 感谢支持\n你的赞赏将用于项目维护。");
@@ -35,7 +35,7 @@ test("赞赏页配置、独立付款查询、手机菜单与停用后的历史�
     ).toBeVisible();
     await page.reload();
     await expect(page.getByLabel("页面标题", { exact: true })).toHaveValue(
-      "支持 TinyFaka 持续开发",
+      "支持 HashDrop 持续开发",
     );
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole("button", { name: "打开管理菜单" }).click();
@@ -55,7 +55,7 @@ test("赞赏页配置、独立付款查询、手机菜单与停用后的历史�
     ).json();
     await page.goto(`${base}/donate`);
     await expect(
-      page.getByRole("heading", { name: "支持 TinyFaka 持续开发" }),
+      page.getByRole("heading", { name: "支持 HashDrop 持续开发" }),
     ).toBeVisible();
     await expect(page.getByRole("heading", { name: "感谢支持" })).toBeVisible();
     await page.getByRole("button", { name: "12.34 CNY", exact: true }).click();
@@ -164,7 +164,7 @@ test("窄屏长标题完整展示，凭证无法存储时先保存查询链接",
   page,
   request,
 }) => {
-  const base = process.env.TINYFAKA_TEST_URL!;
+  const base = process.env.HASHDROP_TEST_URL!;
   await page.setViewportSize({ width: 320, height: 740 });
   await loginAdmin(page);
   await expect(page).toHaveURL(`${base}/admin`);

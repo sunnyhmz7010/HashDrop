@@ -1,4 +1,4 @@
-module tinyfaka
+module hashdrop
 
 go 1.27.0
 

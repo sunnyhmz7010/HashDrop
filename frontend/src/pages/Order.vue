@@ -99,9 +99,9 @@ watch(
     if (orderID.value) {
       try {
         token.value =
-          fromURL ?? sessionStorage.getItem(`tinyfaka:${orderID.value}`) ?? "";
+          fromURL ?? sessionStorage.getItem(`hashdrop:${orderID.value}`) ?? "";
         if (fromURL)
-          sessionStorage.setItem(`tinyfaka:${orderID.value}`, fromURL);
+          sessionStorage.setItem(`hashdrop:${orderID.value}`, fromURL);
       } catch {
         token.value = fromURL ?? "";
         storageError.value = true;

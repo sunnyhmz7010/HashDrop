@@ -67,7 +67,7 @@ func newTestApp(t *testing.T) (*App, *fakeGateway) {
 	g := &fakeGateway{key: key, orders: map[string]GatewayOrder{}}
 	g.server = httptest.NewServer(http.HandlerFunc(g.handler))
 	t.Cleanup(g.server.Close)
-	c := Config{Listen: "127.0.0.1:8080", PublicURL: "http://127.0.0.1:8080", Title: "TinyFaka", Development: true, Database: filepath.Join(dir, "test.db"), BackupDir: filepath.Join(dir, "backups"), AdminUsername: "admin", AdminPassword: passwordHash("test-password-only"), HashPay: HashPayConfig{BaseURL: g.server.URL, MerchantID: "merchant-test", PrivateKeyFile: keyPath}}
+	c := Config{Listen: "127.0.0.1:8080", PublicURL: "http://127.0.0.1:8080", Title: "HashDrop", Development: true, Database: filepath.Join(dir, "test.db"), BackupDir: filepath.Join(dir, "backups"), AdminUsername: "admin", AdminPassword: passwordHash("test-password-only"), HashPay: HashPayConfig{BaseURL: g.server.URL, MerchantID: "merchant-test", PrivateKeyFile: keyPath}}
 	app := &App{db: db, vault: v, config: c, limits: newLimiter(), wake: make(chan struct{}, 1)}
 	app.initialized.Store(true)
 	return app, g
@@ -501,7 +501,7 @@ func TestAmountAndEncryptionBoundaries(t *testing.T) {
 
 // 浏览器测试只替换 HashPay 边界，商城、后台、数据库与交付均运行真实代码。
 func TestBrowserFixture(t *testing.T) {
-	if os.Getenv("TINYFAKA_BROWSER_FIXTURE") != "1" {
+	if os.Getenv("HASHDROP_BROWSER_FIXTURE") != "1" {
 		t.Skip("仅供 Playwright 启动真实后端")
 	}
 	a, g := newTestApp(t)
@@ -536,7 +536,7 @@ func TestBrowserFixture(t *testing.T) {
 	})
 	mux.HandleFunc("GET /__test/media/image.svg", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/svg+xml")
-		fmt.Fprint(w, `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="220" viewBox="0 0 640 220"><rect width="640" height="220" rx="16" fill="#eef8f1"/><rect x="28" y="28" width="64" height="164" rx="8" fill="#18a058"/><text x="120" y="110" font-family="sans-serif" font-size="32" fill="#111827">TinyFaka</text><text x="120" y="155" font-family="sans-serif" font-size="20" fill="#6b7280">Product media preview</text></svg>`)
+		fmt.Fprint(w, `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="220" viewBox="0 0 640 220"><rect width="640" height="220" rx="16" fill="#eef8f1"/><rect x="28" y="28" width="64" height="164" rx="8" fill="#18a058"/><text x="120" y="110" font-family="sans-serif" font-size="32" fill="#111827">HashDrop</text><text x="120" y="155" font-family="sans-serif" font-size="20" fill="#6b7280">Product media preview</text></svg>`)
 	})
 	mux.HandleFunc("GET /__test/setup-fixture", func(w http.ResponseWriter, r *http.Request) {
 		key, err := os.ReadFile(a.config.HashPay.PrivateKeyFile)
@@ -570,8 +570,8 @@ func TestBrowserFixture(t *testing.T) {
 			t.Error(err)
 		}
 	}()
-	fmt.Println("TINYFAKA_FIXTURE_URL=" + a.config.PublicURL)
-	if path := os.Getenv("TINYFAKA_FIXTURE_URL_FILE"); path != "" {
+	fmt.Println("HASHDROP_FIXTURE_URL=" + a.config.PublicURL)
+	if path := os.Getenv("HASHDROP_FIXTURE_URL_FILE"); path != "" {
 		if err = os.WriteFile(path, []byte(a.config.PublicURL), 0600); err != nil {
 			t.Fatal(err)
 		}

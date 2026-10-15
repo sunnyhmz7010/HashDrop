@@ -1,5 +1,5 @@
 name: Bug Report / 缺陷反馈
-description: Report a reproducible bug in TinyFaka / 提交可复现的问题
+description: Report a reproducible bug in HashDrop / 提交可复现的问题
 title: "[Bug] "
 labels:
   - bug
@@ -35,7 +35,7 @@ body:
     id: version
     attributes:
       label: Version / 版本
-      description: TinyFaka version or commit hash. / TinyFaka 版本或 commit hash。
+      description: HashDrop version or commit hash. / HashDrop 版本或 commit hash。
       placeholder: e.g. v1.0.0 or commit hash / 例如 v1.0.0 或 commit hash
     validations:
       required: true

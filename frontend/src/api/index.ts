@@ -3,7 +3,7 @@ import { computed, ref } from "vue";
 
 export const csrf = ref("");
 export const initialized = ref<boolean>();
-export const site = ref({ title: "TinyFaka", notice: "" });
+export const site = ref({ title: "HashDrop", notice: "" });
 export class APIError extends Error {
   constructor(
     public status: number,

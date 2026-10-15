@@ -11,7 +11,7 @@ export async function createInventory(
   content = "",
 ): Promise<Inventory> {
   await expect(page.locator(".workspace-frame")).toBeVisible();
-  const baseURL = process.env.TINYFAKA_TEST_URL!;
+  const baseURL = process.env.HASHDROP_TEST_URL!;
   const session = await (
     await page.request.get(`${baseURL}/api/admin/session`)
   ).json();
@@ -36,7 +36,7 @@ export async function importInventory(
   pool: Inventory,
   content: string,
 ) {
-  await page.goto(`${process.env.TINYFAKA_TEST_URL!}/admin/inventories`);
+  await page.goto(`${process.env.HASHDROP_TEST_URL!}/admin/inventories`);
   const row = page.getByRole("row").filter({ hasText: pool.id });
   await row.getByRole("button", { name: "导入", exact: true }).click();
   await page.getByPlaceholder("每行一份库存").fill(content);
@@ -45,7 +45,7 @@ export async function importInventory(
 }
 
 export async function loginAdmin(page: Page) {
-  await page.goto(`${process.env.TINYFAKA_TEST_URL!}/admin/login`);
+  await page.goto(`${process.env.HASHDROP_TEST_URL!}/admin/login`);
   await page.locator("#password input").fill("test-password-only");
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await expect(page.locator(".workspace-frame")).toBeVisible();
@@ -54,7 +54,7 @@ export async function loginAdmin(page: Page) {
 export const test = base.extend<{ browserState: void }>({
   browserState: [
     async ({ request, context, page }, use) => {
-      const baseURL = process.env.TINYFAKA_TEST_URL!;
+      const baseURL = process.env.HASHDROP_TEST_URL!;
       const response = await request.post(`${baseURL}/__test/reset-limits`);
       if (!response.ok()) throw new Error("测试请求计数重置失败");
       const errors: string[] = [];

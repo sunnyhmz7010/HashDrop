@@ -1,12 +1,12 @@
 services:
-  tinyfaka:
-    image: ghcr.io/sunnyhmz7010/tinyfaka:1.0.0
-    container_name: tinyfaka
+  hashdrop:
+    image: ghcr.io/sunnyhmz7010/hashdrop:1.0.0
+    container_name: hashdrop
     restart: unless-stopped
     ports:
       - "8080:8080"
     volumes:
-      - tinyfaka_data:/data
+      - hashdrop_data:/data
 
 volumes:
-  tinyfaka_data:
+  hashdrop_data:

@@ -23,8 +23,8 @@ export default async function setup() {
       cwd: resolve(".."),
       env: {
         ...process.env,
-        TINYFAKA_BROWSER_FIXTURE: "1",
-        TINYFAKA_FIXTURE_URL_FILE: urlFile,
+        HASHDROP_BROWSER_FIXTURE: "1",
+        HASHDROP_FIXTURE_URL_FILE: urlFile,
       },
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
@@ -41,7 +41,7 @@ export default async function setup() {
   for (let attempt = 0; attempt < 120; attempt++) {
     if (child.exitCode !== null) throw new Error(`后端启动失败：${output}`);
     if (existsSync(urlFile)) {
-      process.env.TINYFAKA_TEST_URL = readFileSync(urlFile, "utf8");
+      process.env.HASHDROP_TEST_URL = readFileSync(urlFile, "utf8");
       ready = true;
       break;
     }

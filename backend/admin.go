@@ -13,7 +13,7 @@ import (
 	"unicode/utf8"
 )
 
-const sessionCookie = "tinyfaka_session"
+const sessionCookie = "hashdrop_session"
 
 func audit(action, id string) { slog.Info("管理与交易事件", "action", action, "object_id", id) }
 func (a *App) csrf(token string) string {

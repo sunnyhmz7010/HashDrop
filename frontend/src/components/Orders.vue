@@ -1,6 +1,6 @@
 <!-- 详情布局基于 HashPay src/app/components/OrderModal.vue 与 styles.scss 修改。
      Copyright 2026 TGDash Team. Apache-2.0，见 frontend/public/HashPay-LICENSE.txt。
-     保留原分区、信息网格和操作栏，字段替换为 TinyFaka 订单与交付数据。 -->
+     保留原分区、信息网格和操作栏，字段替换为 HashDrop 订单与交付数据。 -->
 <script setup lang="ts">
 import { formatTime, t } from "../i18n";
 

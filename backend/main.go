@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"golang.org/x/term"
+	"hashdrop"
 	"io/fs"
 	"log/slog"
 	"net"
@@ -20,7 +21,6 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
-	"tinyfaka"
 	"unicode/utf8"
 )
 
@@ -135,7 +135,7 @@ func main() {
 			slog.Error("退出失败", "error", e)
 		}
 	}()
-	slog.Info("TinyFaka 启动", "listen", ln.Addr().String())
+	slog.Info("HashDrop 启动", "listen", ln.Addr().String())
 	if err = server.Serve(ln); err != nil && err != http.ErrServerClosed {
 		slog.Error("HTTP 服务失败", "error", err)
 		os.Exit(1)
@@ -175,7 +175,7 @@ func initialize(path, site, dataDir string, dev bool) error {
 	if err != nil {
 		return err
 	}
-	c := Config{Listen: "127.0.0.1:8080", PublicURL: site, Database: filepath.Join(absoluteDataDir, "tinyfaka.db"), BackupDir: filepath.Join(absoluteDataDir, "backups"), Title: "TinyFaka", Development: dev, AdminUsername: "admin", AdminPassword: passwordHash(password), CurrentKey: "v1", EncryptionKeys: map[string]string{"v1": base64.StdEncoding.EncodeToString(key)}, DedupKey: base64.StdEncoding.EncodeToString(dedup)}
+	c := Config{Listen: "127.0.0.1:8080", PublicURL: site, Database: filepath.Join(absoluteDataDir, "hashdrop.db"), BackupDir: filepath.Join(absoluteDataDir, "backups"), Title: "HashDrop", Development: dev, AdminUsername: "admin", AdminPassword: passwordHash(password), CurrentKey: "v1", EncryptionKeys: map[string]string{"v1": base64.StdEncoding.EncodeToString(key)}, DedupKey: base64.StdEncoding.EncodeToString(dedup)}
 	if err := validateConfig(c); err != nil {
 		return err
 	}
@@ -186,7 +186,7 @@ func initialize(path, site, dataDir string, dev bool) error {
 	return nil
 }
 func (a *App) staticHandler() http.Handler {
-	files, _ := fs.Sub(tinyfaka.Assets, "backend/web")
+	files, _ := fs.Sub(hashdrop.Assets, "backend/web")
 	handler := http.FileServer(http.FS(files))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" && r.Method != "HEAD" {

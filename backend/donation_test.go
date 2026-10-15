@@ -303,7 +303,7 @@ func TestDonationProtectsGatewayUntilFinished(t *testing.T) {
 			if _, err := a.db.Exec("UPDATE donations SET payment_status=? WHERE id=?", status, d.ID); err != nil {
 				t.Fatal(err)
 			}
-			w := admin("PUT", "/api/admin/settings", `{"title":"TinyFaka","hashpay_url":"https://other.example","merchant_id":"other"}`)
+			w := admin("PUT", "/api/admin/settings", `{"title":"HashDrop","hashpay_url":"https://other.example","merchant_id":"other"}`)
 			finished := status == "paid" || status == "closed" || status == "invalid"
 			if (finished && w.Code != 200) || (!finished && (w.Code != 400 || !strings.Contains(w.Body.String(), "待核验付款的赞赏"))) {
 				t.Fatalf("网关切换保护错误: %s: %d %s", status, w.Code, w.Body)

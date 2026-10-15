@@ -9,7 +9,7 @@ import type { Product } from "../src/api";
 import { placeTestOrder } from "./checkout";
 
 test("匿名购买、凭证领取与管理员库存管理", async ({ page, request }) => {
-  const base = process.env.TINYFAKA_TEST_URL!;
+  const base = process.env.HASHDROP_TEST_URL!;
   await page.goto(base);
   await expect(page.locator(".product-card").first()).toBeVisible();
   const products: Product[] = await (
@@ -181,13 +181,13 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   await page.keyboard.press("Escape");
   await expect(page.locator(".form-modal")).toHaveCount(0);
   await page.getByRole("menuitem", { name: "系统设置", exact: true }).click();
-  await expect(page.locator("#site-title input")).toHaveValue("TinyFaka");
-  await page.locator("#site-title input").fill("TinyFaka 测试店铺");
+  await expect(page.locator("#site-title input")).toHaveValue("HashDrop");
+  await page.locator("#site-title input").fill("HashDrop 测试店铺");
   await page.getByRole("button", { name: "保存设置" }).click();
   await expect(page.getByText("设置已保存")).toBeVisible();
   await page.reload();
   await expect(page.locator("#site-title input")).toHaveValue(
-    "TinyFaka 测试店铺",
+    "HashDrop 测试店铺",
   );
   await expect(page.locator(".n-spin-content--spinning")).toHaveCount(0);
   for (const width of [1440, 768, 390]) {

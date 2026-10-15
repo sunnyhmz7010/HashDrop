@@ -77,7 +77,7 @@ func TestDeleteOrderPreservesLatePaymentAndClaim(t *testing.T) {
 	if err := a.db.QueryRow("SELECT status FROM stock_items WHERE inventory_id=?", product).Scan(&reservation); err != nil || reservation != "reserved" {
 		t.Fatal("删除提前释放了库存")
 	}
-	if result := request("PUT", "/api/admin/settings", `{"title":"TinyFaka","hashpay_url":"https://other.example","merchant_id":"other"}`); result.Code != 400 || !strings.Contains(result.Body.String(), "待核验付款或未完成交付") {
+	if result := request("PUT", "/api/admin/settings", `{"title":"HashDrop","hashpay_url":"https://other.example","merchant_id":"other"}`); result.Code != 400 || !strings.Contains(result.Body.String(), "待核验付款或未完成交付") {
 		t.Fatal("删除后仍待付款的订单未保护原支付商户映射")
 	}
 	gateway.set(order.ID, "paid", "admin")
@@ -351,7 +351,7 @@ func TestGatewaySettingsAllowCompletedAndTerminatedOrders(t *testing.T) {
 					t.Fatalf("删除订单失败: %s", result.Body)
 				}
 			}
-			if result := request("PUT", "/api/admin/settings", `{"title":"TinyFaka","hashpay_url":"https://other.example/","merchant_id":"other"}`); result.Code != 200 {
+			if result := request("PUT", "/api/admin/settings", `{"title":"HashDrop","hashpay_url":"https://other.example/","merchant_id":"other"}`); result.Code != 200 {
 				t.Fatalf("完成或终止的历史订单仍阻止切换: %s", result.Body)
 			}
 			var saved Config

@@ -1,4 +1,4 @@
-package tinyfaka
+package hashdrop
 
 import "embed"
 

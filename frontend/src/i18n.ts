@@ -11,7 +11,7 @@ import {
   type MessageKey,
 } from "./locales";
 
-const storageKey = "tinyfaka.locale";
+const storageKey = "hashdrop.locale";
 export const locale = ref<Locale>(initialLocale());
 export const localeOptions = computed(() => [
   { label: t("locale.zh"), value: "zh-CN" },

@@ -10,7 +10,7 @@ import { placeTestOrder } from "./checkout";
 
 test("独立库存池共享、商品改绑与历史订单交付", async ({ page, request }) => {
   test.setTimeout(90_000);
-  const base = process.env.TINYFAKA_TEST_URL!;
+  const base = process.env.HASHDROP_TEST_URL!;
   await loginAdmin(page);
   await page.getByRole("menuitem", { name: "库存管理", exact: true }).click();
 

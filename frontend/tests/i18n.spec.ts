@@ -13,7 +13,7 @@ async function switchLanguage(page: Page, name: string) {
 }
 
 test("中英文切换、统一顶栏与管理入口", async ({ page, request }) => {
-  const base = process.env.TINYFAKA_TEST_URL!;
+  const base = process.env.HASHDROP_TEST_URL!;
   const fixture = await (
     await request.get(`${base}/__test/setup-fixture`)
   ).json();
@@ -21,7 +21,7 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
   await setup.setViewportSize({ width: 320, height: 900 });
   await setup.goto(fixture.url);
   await expect(
-    setup.getByRole("heading", { name: "Initialize TinyFaka" }),
+    setup.getByRole("heading", { name: "Initialize HashDrop" }),
   ).toBeVisible();
   await setup.getByLabel("Site name", { exact: true }).fill("Draft title");
   await switchLanguage(setup, "中文");

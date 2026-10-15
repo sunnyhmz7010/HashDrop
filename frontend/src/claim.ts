@@ -2,8 +2,8 @@ import { ref } from "vue";
 import type { OrderQuote } from "./api";
 
 export const currentClaimKey = ref("");
-const claimStorage = "tinyfaka:claim";
-const purchaseStorage = "tinyfaka:checkout";
+const claimStorage = "hashdrop:claim";
+const purchaseStorage = "hashdrop:checkout";
 
 export interface PurchaseIntent {
   requestID: string;

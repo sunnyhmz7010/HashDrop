@@ -3,7 +3,7 @@ import { placeTestOrder, stubPaymentPage } from "./checkout";
 import type { Product } from "../src/api";
 
 test("密钥生成、重复候选和跨设备领取", async ({ page, request }) => {
-  const base = process.env.TINYFAKA_TEST_URL!;
+  const base = process.env.HASHDROP_TEST_URL!;
   const products: Product[] = await (
     await request.get(`${base}/api/products`)
   ).json();
@@ -73,7 +73,7 @@ test("密钥生成、重复候选和跨设备领取", async ({ page, request }) 
 });
 
 test("下单响应中断后重试复用订单并直接支付", async ({ page, request }) => {
-  const base = process.env.TINYFAKA_TEST_URL!;
+  const base = process.env.HASHDROP_TEST_URL!;
   const login = await request.post(`${base}/api/admin/login`, {
     headers: { Origin: base },
     data: { username: "admin", password: "test-password-only" },

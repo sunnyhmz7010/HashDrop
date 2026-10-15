@@ -139,7 +139,7 @@ func (a *App) runScheduler(ctx context.Context) {
 			}
 			c := a.settings()
 			backupCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
-			err := backupDatabase(backupCtx, a.db, filepath.Join(c.BackupDir, fmt.Sprintf("tinyfaka-%d.db", unixNow())))
+			err := backupDatabase(backupCtx, a.db, filepath.Join(c.BackupDir, fmt.Sprintf("hashdrop-%d.db", unixNow())))
 			cancel()
 			if err != nil {
 				slog.Error("定期备份失败", "error", err)

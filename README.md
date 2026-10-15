@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>TinyFaka</h1>
+  <h1>HashDrop</h1>
   <p>在单台 VPS 上提供匿名购买、HashPay 收款与安全自动发卡。</p>
 </div>
 
@@ -36,7 +36,14 @@
 
 ### 📦 安装与运行
 
-v1.0.0 是全新安装基线。推荐使用 GitHub Actions 构建并发布的 GHCR 镜像，以及[对应的 Compose 文件](https://github.com/sunnyhmz7010/TinyFaka/blob/v1.0.0/compose.yaml)，默认固定镜像为 `ghcr.io/sunnyhmz7010/tinyfaka:1.0.0`。将 `compose.yaml` 保存到部署目录，然后执行：
+v1.0.0 是全新安装基线，已按 HashDrop 名称重新发布。默认镜像为 `ghcr.io/sunnyhmz7010/hashdrop:1.0.0`，请使用[对应的 Compose 文件](https://github.com/sunnyhmz7010/HashDrop/blob/v1.0.0/compose.yaml)。也可在项目根目录自行构建：
+
+```sh
+docker build -t ghcr.io/sunnyhmz7010/hashdrop:1.0.0 .
+docker compose up -d
+```
+
+使用已发布镜像时，将对应的 `compose.yaml` 保存到部署目录，然后执行：
 
 ```sh
 docker compose pull
@@ -45,9 +52,15 @@ docker compose up -d
 
 浏览器访问 `http://服务器地址:8080`，自动进入初始化页面，直接填写管理员账号和密码，无需初始化凭证。页面同时提供站点名称、地址和 HashPay 商户信息；商城公告在初始化后的后台系统设置中填写。密码不要求最小长度或字符组合，只须非空并与确认密码一致。配置与密钥由服务端生成并保存到 Docker 持久化卷；无需填写环境变量或手工编辑配置文件。HTTP 会明文传输密码与私钥，应在可信网络中完成初始化。
 
-容器中 `/app/tinyfaka` 是程序，`/data` 统一保存配置、私钥、数据库和备份，Compose 只挂载一个数据卷。首次启动通过内嵌的 `schema.sql` 一次性创建完整数据库结构，后续启动直接打开已有数据库；v1.0.0 不提供早期实验版本的升级迁移。
+容器中 `/app/hashdrop` 是程序，`/data` 统一保存配置、私钥、数据库和备份，Compose 只挂载一个数据卷。首次启动通过内嵌的 `schema.sql` 一次性创建完整数据库结构，后续启动直接打开已有数据库；v1.0.0 不提供早期实验版本的升级迁移。
 
-Compose 默认镜像为 `ghcr.io/sunnyhmz7010/tinyfaka:1.0.0`，也可换成 `latest` 或镜像摘要。只有推送 `v*` 版本标签才会发布镜像，推送 `main` 不触发发布。更新执行 `docker compose pull` 和 `docker compose up -d`，已有初始化信息保留。
+Compose 默认镜像为 `ghcr.io/sunnyhmz7010/hashdrop:1.0.0`，也可换成 `latest` 或镜像摘要。只有推送 `v*` 版本标签才会发布镜像，推送 `main` 不触发发布。更新执行 `docker compose pull` 和 `docker compose up -d`，已有初始化信息保留。
+
+### 🔄 旧部署更名
+
+已有 TinyFaka 部署须先备份完整数据目录，再停止旧服务。新 Compose 的服务和卷键为 `hashdrop`、`hashdrop_data`，不能直接用空的新卷替代旧数据卷。请通过 `docker volume ls` 查到旧卷的实际名称，并在新 Compose 的 `volumes.hashdrop_data` 下设置 `external: true` 和 `name: 旧卷实际名称`，复用原卷；不要执行 `docker compose down -v`。
+
+保留原 `config.json`、密钥和数据库。已有配置中的 `database` 路径继续有效，不必重命名旧数据库；仅全新安装默认使用 `hashdrop.db`。站点名称由配置保存，需要在后台手动改为 HashDrop。systemd 部署请参照 `deploy/hashdrop.service` 更新程序、运行用户和目录，并保持原配置中的数据路径可访问。浏览器存储和管理员 Cookie 改用新前缀，管理员需要重新登录；购买者应提前保存领取密钥及赞赏私密查询链接，更名后仍可使用原领取密钥查询订单。
 
 ## 📖 使用说明
 
@@ -126,7 +139,7 @@ HashPay 创建超时重试复用 `merchantNo`。回调解密成功不能证明�
 ## 🗂️ 项目结构
 
 ```text
-TinyFaka/
+HashDrop/
 ├── backend/              # 路由、业务、安全、支付与内置调度
 │   └── web/              # 前端构建产物，嵌入二进制
 ├── frontend/

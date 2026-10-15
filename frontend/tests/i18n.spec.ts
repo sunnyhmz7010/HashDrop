@@ -14,8 +14,6 @@ async function switchLanguage(page: Page, name: string) {
 
 test("中英文切换、统一顶栏与管理入口", async ({ page, request }) => {
   const base = process.env.TINYFAKA_TEST_URL!;
-  const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(error.message));
   const fixture = await (
     await request.get(`${base}/__test/setup-fixture`)
   ).json();
@@ -36,12 +34,7 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
       () => document.documentElement.scrollWidth > innerWidth + 1,
     ),
   ).toBeFalsy();
-  await setup.screenshot({
-    path: "../.local/setup-en-mobile.png",
-    fullPage: true,
-  });
   await setup.close();
-  await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(base);
   await expect(
     page.getByRole("link", { name: "Details" }).first(),
@@ -60,7 +53,6 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
   ).toBeVisible();
   await page.locator(".topbar .brand").click();
   const publicBrand = (await page.locator(".topbar .brand").boundingBox())!;
-  await page.screenshot({ path: "../.local/shop-en.png", fullPage: true });
 
   // 真实创建固定文本订单，切换语言不能改变领取凭证或业务内容。
   const products: Product[] = await (
@@ -114,7 +106,6 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
   await expect(page.locator(".delivery-item pre")).toHaveText(
     order.deliveries[0].content,
   );
-  await page.screenshot({ path: "../.local/receipt-en.png", fullPage: true });
 
   await page.goto(`${base}/admin/login`);
   await page.locator("#password input").fill("wrong-password");
@@ -155,7 +146,6 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
   expect(signOut.x).toBeGreaterThanOrEqual(
     adminLanguage.x + adminLanguage.width,
   );
-  await page.screenshot({ path: "../.local/admin-en.png", fullPage: true });
 
   await page
     .getByRole("menuitem", { name: "System settings", exact: true })
@@ -245,10 +235,6 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
     await page.keyboard.press("Escape");
     await expect(page.locator(".n-drawer")).toBeHidden();
     if (width === 390) {
-      await page.screenshot({
-        path: "../.local/admin-header-en-mobile.png",
-        animations: "disabled",
-      });
       await page.getByRole("button", { name: "Sign out", exact: true }).click();
       await expect(
         page.getByRole("heading", { name: "Admin sign in" }),
@@ -278,5 +264,4 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
     blocked.getByRole("link", { name: "详情" }).first(),
   ).toBeVisible();
   await blocked.close();
-  expect(errors).toEqual([]);
 });

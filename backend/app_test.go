@@ -166,7 +166,7 @@ func insertProduct(t *testing.T, a *App, kind string, stock int) string {
 			t.Fatal(err)
 		}
 	}
-	if _, err = a.db.Exec("INSERT INTO inventories(id,name,kind,content,content_aad,created_at,updated_at) VALUES(?,?,?,?,?,?,?)", id, "测试库存池", kind, content, "inventory:"+id, unixNow(), unixNow()); err != nil {
+	if _, err = a.db.Exec("INSERT INTO inventories(id,name,kind,content,created_at,updated_at) VALUES(?,?,?,?,?,?)", id, "测试库存池", kind, content, unixNow(), unixNow()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = a.db.Exec("INSERT INTO products(id,name,price,currency,inventory_id,active,created_at,updated_at) VALUES(?,?,?,?,?,1,?,?)", id, "测试商品", 1234, "CNY", id, unixNow(), unixNow()); err != nil {

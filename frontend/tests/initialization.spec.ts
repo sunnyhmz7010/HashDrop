@@ -5,8 +5,6 @@ test("网页初始化、失败重填、HTTP 登录与只写私钥", async ({ pag
     await request.get(`${process.env.TINYFAKA_TEST_URL}/__test/setup-fixture`)
   ).json();
   const base: string = fixture.url;
-  const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(`${base}/admin`);
   await expect(
     page.getByRole("heading", { name: "初始化 TinyFaka" }),
@@ -14,9 +12,6 @@ test("网页初始化、失败重填、HTTP 登录与只写私钥", async ({ pag
   expect(page.url()).toBe(`${base}/setup`);
   await expect(
     page.getByRole("link", { name: "商城", exact: true }),
-  ).toHaveCount(0);
-  await expect(
-    page.getByLabel("一次性初始化凭证", { exact: true }),
   ).toHaveCount(0);
   await expect(page.getByLabel("商城公告", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("switch")).toHaveCount(0);
@@ -56,11 +51,6 @@ test("网页初始化、失败重填、HTTP 登录与只写私钥", async ({ pag
         () => document.documentElement.scrollWidth > innerWidth + 1,
       ),
     ).toBeFalsy();
-    if (width === 390 || width === 1440)
-      await page.screenshot({
-        path: `../.local/setup-${width}.png`,
-        fullPage: true,
-      });
   }
   await page
     .getByLabel("商户 RSA 私钥", { exact: true })
@@ -72,9 +62,6 @@ test("网页初始化、失败重填、HTTP 登录与只写私钥", async ({ pag
   await page.getByRole("button", { name: "完成初始化", exact: true }).click();
   await expect(page.getByLabel("管理员密码", { exact: true })).toBeDisabled();
   await expect(page.getByRole("heading", { name: "登录后台" })).toBeVisible();
-  await expect(
-    page.getByLabel("动态验证码（已启用时填写）", { exact: true }),
-  ).toHaveCount(0);
   await page.unroute("**/api/setup");
   const status = await request.get(`${base}/api/setup/status`);
   expect(await status.json()).toEqual({ initialized: true });
@@ -132,5 +119,4 @@ test("网页初始化、失败重填、HTTP 登录与只写私钥", async ({ pag
   );
   await page.goto(`${base}/setup`);
   await expect(page.getByRole("heading", { name: "登录后台" })).toBeVisible();
-  expect(errors).toEqual([]);
 });

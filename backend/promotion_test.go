@@ -2,16 +2,13 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
-	"tinyfaka"
 )
 
 func promotionRule() promotionInput {
@@ -341,45 +338,5 @@ func TestPromotionAdminValidationAndDeletion(t *testing.T) {
 	}
 	if next := saveTestPromotion(t, a, rule, ""); next == id {
 		t.Fatal("重新派发的优惠复用了历史规则 ID")
-	}
-}
-
-func TestPromotionMigrationKeepsVersionSevenOrders(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "v7.db")
-	db, err := sql.Open("sqlite", databaseURI(path))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	for _, file := range []string{"001_init", "002_gateway_orders", "003_gateway_identity", "004_remove_service_products", "005_product_details", "006_hidden_products", "007_deleted_products"} {
-		schema, err := tinyfaka.Assets.ReadFile("migrations/" + file + ".sql")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err = db.Exec(string(schema)); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if _, err = db.Exec(`INSERT INTO products(id,name,price,currency,kind,active,created_at,updated_at) VALUES('old','原商品',1234,'CNY','static',1,1,1)`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = db.Exec(`INSERT INTO orders(id,product_id,product_name,kind,unit_price,currency,quantity,total,token_hash,payment_status,delivery_status,reservation_status,created_at,updated_at) VALUES('old-order','old','原商品','static',1234,'CNY',2,2468,'original-token-hash','paid','done','consumed',1,1)`); err != nil {
-		t.Fatal(err)
-	}
-	if err = db.Close(); err != nil {
-		t.Fatal(err)
-	}
-	db, err = openDatabase(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	order, err := (&App{db: db}).loadOrder(context.Background(), "old-order")
-	if err != nil || order.Total != 2468 || order.OriginalTotal != 2468 || order.DiscountTotal != 0 || len(order.Discounts) != 0 || order.TokenHash != "original-token-hash" || order.DeliveryStatus != "done" {
-		t.Fatalf("迁移破坏原订单: %+v %v", order, err)
-	}
-	var version int
-	if err = db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 10 {
-		t.Fatal("未完成优惠迁移")
 	}
 }

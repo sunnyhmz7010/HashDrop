@@ -102,39 +102,8 @@ func TestSetupAcceptsShortPasswordAndCustomUsername(t *testing.T) {
 			t.Fatalf("账号 %s 登录状态错误: %d", check.username, w.Code)
 		}
 	}
-	// 旧版配置没有账号字段，升级时沿用密码并补默认 admin 账号。
-	data, err := os.ReadFile(a.configPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var legacy map[string]any
-	if err = json.Unmarshal(data, &legacy); err != nil {
-		t.Fatal(err)
-	}
-	delete(legacy, "admin_username")
-	legacy["totp_secret"] = "retired-authentication-secret"
-	data, err = json.Marshal(legacy)
-	if err != nil {
-		t.Fatal(err)
-	}
-	legacyPath := filepath.Join(t.TempDir(), "config.json")
-	if err = os.WriteFile(legacyPath, data, 0600); err != nil {
-		t.Fatal(err)
-	}
-	c, _, err = readConfig(legacyPath)
-	if err != nil || c.AdminUsername != "admin" || !passwordMatches(c.AdminPassword, input.Password) {
-		t.Fatalf("旧配置管理员不兼容: %v", err)
-	}
-	a.config = c
-	request := httptest.NewRequest("POST", "/api/admin/login", strings.NewReader(`{"username":"admin","password":"1"}`))
-	request.Header.Set("Origin", c.PublicURL)
-	request.Header.Set("Content-Type", "application/json")
-	response := httptest.NewRecorder()
-	a.routes().ServeHTTP(response, request)
-	if response.Code != http.StatusOK {
-		t.Fatalf("旧配置仍要求已移除的动态验证码: %s", response.Body)
-	}
 }
+
 func TestPublicURLMatchesBrowserOrigin(t *testing.T) {
 	for input, want := range map[string]string{
 		"http://Shop.Example.com:80/":  "http://shop.example.com",

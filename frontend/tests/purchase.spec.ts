@@ -10,9 +10,6 @@ import { placeTestOrder } from "./checkout";
 
 test("匿名购买、凭证领取与管理员库存管理", async ({ page, request }) => {
   const base = process.env.TINYFAKA_TEST_URL!;
-  const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(error.message));
-  await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(base);
   await expect(page.locator(".product-card").first()).toBeVisible();
   const products: Product[] = await (
@@ -27,15 +24,7 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   await expect(
     page.getByRole("button", { name: "下单", exact: true }),
   ).toBeEnabled();
-  await page.screenshot({
-    path: "../.local/product-desktop.png",
-    fullPage: true,
-  });
   await page.setViewportSize({ width: 390, height: 900 });
-  await page.screenshot({
-    path: "../.local/product-mobile.png",
-    fullPage: true,
-  });
   const productID = new URL(page.url()).pathname.split("/").pop()!;
   const productData = await (
     await request.get(`${base}/api/products/${productID}`)
@@ -59,10 +48,6 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
     ),
   ).toBeFalsy();
   await expect(page.getByRole("link", { name: "返回商城" })).toBeInViewport();
-  await page.screenshot({
-    path: "../.local/product-long-name-mobile.png",
-    fullPage: true,
-  });
   await page.unroute(`**/api/products/${productID}`);
   await page.reload();
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -71,7 +56,7 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
     key: token,
     orderID,
     receipt,
-  } = await placeTestOrder(page, "browser-legacy-" + "a".repeat(28));
+  } = await placeTestOrder(page, "browser-receipt-" + "a".repeat(27));
   await page.goto(receipt);
   await expect(page.getByRole("heading", { name: "订单状态" })).toBeVisible();
   // 公网普通 HTTP 没有 Clipboard API，使用浏览器复制后仍能保存领取链接。
@@ -85,15 +70,16 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
     page.getByRole("button", { name: "前往 HashPay 付款" }),
   ).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText("已复制", { exact: true })).toBeHidden();
-  await page.screenshot({
-    path: "../.local/payment-desktop.png",
-    fullPage: true,
-  });
   await page.setViewportSize({ width: 390, height: 900 });
-  await page.screenshot({
-    path: "../.local/payment-mobile.png",
-    fullPage: true,
-  });
+  await expect(
+    page.getByRole("button", { name: "前往 HashPay 付款" }),
+  ).toBeInViewport();
+  await expect(page.locator(".checkout-copy-field code")).toBeInViewport();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth + 1,
+    ),
+  ).toBeFalsy();
   await page.setViewportSize({ width: 1440, height: 1000 });
   const detail = await request.get(`${base}/api/orders/${orderID}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -118,10 +104,6 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
       page.getByRole("button", { name: "前往 HashPay 付款" }),
     ).toHaveCount(0);
     await expect(page.locator(".checkout-copy-field code")).toHaveText(receipt);
-    await page.screenshot({
-      path: `../.local/payment-${paymentStatus}.png`,
-      fullPage: true,
-    });
     await page.unroute(`**/api/orders/${orderID}`);
   }
   expect(
@@ -129,25 +111,13 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   ).toBeTruthy();
   await page.reload();
   await expect(page.locator(".delivery-item pre")).toContainText("卡密-");
-  await page.screenshot({
-    path: "../.local/receipt-desktop.png",
-    fullPage: true,
-  });
   await page.goto(`${base}/claim`);
   await page.getByRole("button", { name: "查询其他订单", exact: true }).click();
-  await page.screenshot({
-    path: "../.local/claim-desktop.png",
-    fullPage: true,
-  });
   await page.locator("#claim-key").fill(token);
   await page.getByRole("button", { name: "查看订单", exact: true }).click();
   await expect(page).toHaveURL(`${base}/claim`);
   await expect(page.locator(".delivery-item pre")).toContainText("卡密-");
   await page.goto(`${base}/admin/login`);
-  await page.screenshot({
-    path: "../.local/login-desktop.png",
-    fullPage: true,
-  });
   await page.locator("#password input").fill("test-password-only");
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await expect(
@@ -220,11 +190,6 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
     "TinyFaka 测试店铺",
   );
   await expect(page.locator(".n-spin-content--spinning")).toHaveCount(0);
-  await page.screenshot({
-    path: "../.local/settings-desktop.png",
-    fullPage: true,
-    animations: "disabled",
-  });
   for (const width of [1440, 768, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto(base);
@@ -289,10 +254,6 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
     editor.getByRole("button", { name: "保存商品" }),
   ).toBeInViewport();
   await expect(editor.getByText("新增商品", { exact: true })).toBeInViewport();
-  await page.screenshot({
-    path: "../.local/product-dialog-mobile.png",
-    animations: "disabled",
-  });
   await editor.getByRole("button", { name: "取消", exact: true }).click();
   await page.setViewportSize({ width: 390, height: 900 });
   await page.goto(receipt);
@@ -305,34 +266,18 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   );
   expect(interrupted.url()).toBe(receipt);
   await interrupted.close();
-  await page.screenshot({ path: "../.local/order-mobile.png", fullPage: true });
   await page.goto(`${base}/admin/products`);
   await expect(
     page.getByRole("row").filter({ hasText: "浏览器验证商品" }),
   ).toBeVisible();
   await expect(page.locator(".n-spin-content--spinning")).toHaveCount(0);
-  await page.screenshot({
-    path: "../.local/admin-mobile.png",
-    fullPage: true,
-    animations: "disabled",
-  });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(base);
   await expect(page.locator(".product-card").first()).toBeVisible();
   await expect(page.locator(".n-spin-content--spinning")).toHaveCount(0);
-  await page.screenshot({
-    path: "../.local/shop-desktop.png",
-    fullPage: true,
-    animations: "disabled",
-  });
   await page.goto(`${base}/admin/orders`);
   await expect(page.locator(".order-row").first()).toBeVisible();
   await expect(page.locator(".n-spin-content--spinning")).toHaveCount(0);
-  await page.screenshot({
-    path: "../.local/orders-desktop.png",
-    fullPage: true,
-    animations: "disabled",
-  });
   const blocked = await page.context().newPage();
   await blocked.addInitScript(() => {
     Storage.prototype.setItem = () => {
@@ -386,21 +331,14 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   );
   await expect(page.locator(".form-modal")).toBeVisible();
   await expect(page.getByText("订单状态已更新", { exact: true })).toBeHidden();
-  await page.screenshot({
-    path: "../.local/order-actions-desktop.png",
-    fullPage: true,
-    animations: "disabled",
-  });
   await page.setViewportSize({ width: 390, height: 900 });
   await expect(page.getByRole("dialog", { name: "订单详情" })).toBeInViewport();
-  await page.screenshot({ path: "../.local/order-actions-mobile.png" });
   const orderDialog = page.getByRole("dialog", { name: "订单详情" });
   await orderDialog.locator(".delivery-item pre").scrollIntoViewIfNeeded();
   await expect(orderDialog.locator(".delivery-item pre")).toBeInViewport();
   await expect(
     orderDialog.getByText("订单详情", { exact: true }),
   ).toBeInViewport();
-  await page.screenshot({ path: "../.local/order-delivery-mobile.png" });
   await page.setViewportSize({ width: 1440, height: 1000 });
   let finishDelete = () => {};
   const pendingDelete = new Promise<void>((resolve) => {
@@ -447,5 +385,4 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   await expect(paidRow).toHaveCount(0);
   await page.goto(receipt);
   await expect(page.locator(".delivery-item pre")).toContainText("卡密-");
-  expect(errors).toEqual([]);
 });

@@ -6,8 +6,7 @@
 !assets.go
 !backend/
 !backend/*.go
-!migrations/
-!migrations/*.sql
+!schema.sql
 !frontend/
 !frontend/package.json
 !frontend/package-lock.json

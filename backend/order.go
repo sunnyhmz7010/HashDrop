@@ -179,11 +179,7 @@ func (a *App) reservePricedOrder(ctx context.Context, input orderInput) (Order, 
 	}
 	content := ""
 	if p.Kind == "static" {
-		// 兼容迁移前的前缀，但认证上下文始终必须属于当前库存池，防止跨记录替换。
-		if p.ContentAAD != "inventory:"+p.InventoryID && p.ContentAAD != "product:"+p.InventoryID {
-			return Order{}, "", errors.New("库存池密文认证上下文无效")
-		}
-		plain, e := a.vault.decrypt(p.Content, p.ContentAAD)
+		plain, e := a.vault.decrypt(p.Content, "inventory:"+p.InventoryID)
 		if e != nil {
 			return Order{}, "", e
 		}
@@ -358,7 +354,7 @@ func (a *App) syncOrderLocked(ctx context.Context, id string) error {
 		}
 		return errors.New("HashPay 查询结果不匹配")
 	}
-	// 仅在签名查询完整核验订单归属、金额和币种后保存映射；旧订单不盲目回填当前配置。
+	// 仅在签名查询完整核验订单归属、金额和币种后保存映射。
 	if o.GatewayURL == "" && o.GatewayMerchantID == "" {
 		if _, err = a.db.ExecContext(ctx, "UPDATE orders SET gateway_url=?,gateway_merchant_id=? WHERE id=?", strings.TrimRight(config.HashPay.BaseURL, "/"), config.HashPay.MerchantID, id); err != nil {
 			return err

@@ -51,10 +51,6 @@ func readConfig(path string) (Config, *vault, error) {
 	if err = json.Unmarshal(data, &c); err != nil {
 		return c, nil, err
 	}
-	// 旧配置仅保存密码，升级后使用默认管理员账号。
-	if c.AdminUsername == "" {
-		c.AdminUsername = "admin"
-	}
 	c.PublicURL, err = normalizePublicURL(c.PublicURL)
 	if err != nil {
 		return c, nil, err

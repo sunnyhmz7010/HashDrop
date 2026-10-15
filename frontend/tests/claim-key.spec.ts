@@ -50,11 +50,6 @@ test("密钥生成、重复候选和跨设备领取", async ({ page, request }) 
         () => document.documentElement.scrollWidth > innerWidth + 1,
       ),
     ).toBeFalsy();
-    if (width === 1440 || width === 320)
-      await page.screenshot({
-        path: `../.local/key-purchase-${width}.png`,
-        animations: "disabled",
-      });
   }
   await dialog.getByRole("button", { name: "取消", exact: true }).click();
   expect(
@@ -74,10 +69,6 @@ test("密钥生成、重复候选和跨设备领取", async ({ page, request }) 
   await expect(other.locator(".delivery-item pre")).toContainText("购买时内容");
   expect(other.url()).toBe(`${base}/claim`);
   await other.setViewportSize({ width: 390, height: 900 });
-  await other.screenshot({
-    path: "../.local/key-claim-mobile.png",
-    fullPage: true,
-  });
   await other.close();
 });
 

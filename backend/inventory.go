@@ -78,12 +78,12 @@ func (a *App) saveInventory(w http.ResponseWriter, r *http.Request) error {
 	}
 	defer tx.Rollback()
 	id := r.PathValue("id")
-	content, aad := "", ""
+	content := ""
 	if id == "" {
 		id = newID()
 	} else {
 		var kind string
-		if err = tx.QueryRowContext(r.Context(), "SELECT kind,content,content_aad FROM inventories WHERE id=? AND deleted_at IS NULL", id).Scan(&kind, &content, &aad); err == sql.ErrNoRows {
+		if err = tx.QueryRowContext(r.Context(), "SELECT kind,content FROM inventories WHERE id=? AND deleted_at IS NULL", id).Scan(&kind, &content); err == sql.ErrNoRows {
 			return &apiError{404, "库存池不存在或已删除"}
 		} else if err != nil {
 			return err
@@ -94,8 +94,7 @@ func (a *App) saveInventory(w http.ResponseWriter, r *http.Request) error {
 	}
 	if input.Kind == "static" {
 		if input.StaticContent != "" {
-			aad = "inventory:" + id
-			content, err = a.vault.encrypt(input.StaticContent, aad)
+			content, err = a.vault.encrypt(input.StaticContent, "inventory:"+id)
 			if err != nil {
 				return err
 			}
@@ -105,8 +104,8 @@ func (a *App) saveInventory(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	now := unixNow()
-	if _, err = tx.ExecContext(r.Context(), `INSERT INTO inventories(id,name,kind,content,content_aad,created_at,updated_at) VALUES(?,?,?,?,?,?,?)
- ON CONFLICT(id) DO UPDATE SET name=excluded.name,content=excluded.content,content_aad=excluded.content_aad,updated_at=excluded.updated_at`, id, input.Name, input.Kind, content, aad, now, now); err != nil {
+	if _, err = tx.ExecContext(r.Context(), `INSERT INTO inventories(id,name,kind,content,created_at,updated_at) VALUES(?,?,?,?,?,?)
+ ON CONFLICT(id) DO UPDATE SET name=excluded.name,content=excluded.content,updated_at=excluded.updated_at`, id, input.Name, input.Kind, content, now, now); err != nil {
 		return err
 	}
 	if err = tx.Commit(); err != nil {

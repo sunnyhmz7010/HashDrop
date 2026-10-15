@@ -1,4 +1,10 @@
-import { test, expect, createInventory, type Locator } from "./fixture";
+import {
+  loginAdmin,
+  test,
+  expect,
+  createInventory,
+  type Locator,
+} from "./fixture";
 import type { Promotion, Product } from "../src/api";
 import { placeTestOrder } from "./checkout";
 
@@ -8,12 +14,7 @@ test("优惠管理保存、叠加报价、价格变化确认与历史领取", as
 }) => {
   test.setTimeout(90_000);
   const base = process.env.TINYFAKA_TEST_URL!;
-  const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(error.message));
-  await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto(`${base}/admin/login`);
-  await page.locator("#password input").fill("test-password-only");
-  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await loginAdmin(page);
   await expect(
     page.getByRole("menuitem", { name: "优惠管理", exact: true }),
   ).toBeVisible();
@@ -92,10 +93,6 @@ test("优惠管理保存、叠加报价、价格变化确认与历史领取", as
     edit.getByRole("switch", { name: "允许与其他优惠一同使用", exact: true }),
   ).toHaveAttribute("aria-checked", "true");
   await expect(edit.locator("#promotion-products")).toContainText(second.name);
-  await page.screenshot({
-    path: "../.local/promotions-editor-desktop.png",
-    animations: "disabled",
-  });
   await page.setViewportSize({ width: 390, height: 900 });
   await expect(
     edit.getByRole("button", { name: "保存优惠", exact: true }),
@@ -105,10 +102,6 @@ test("优惠管理保存、叠加报价、价格变化确认与历史领取", as
       () => document.documentElement.scrollWidth > innerWidth + 1,
     ),
   ).toBeFalsy();
-  await page.screenshot({
-    path: "../.local/promotions-editor-mobile.png",
-    animations: "disabled",
-  });
   await edit.getByRole("button", { name: "取消", exact: true }).click();
   await page.setViewportSize({ width: 1440, height: 1000 });
 
@@ -144,11 +137,6 @@ test("优惠管理保存、叠加报价、价格变化确认与历史领取", as
   expect(coupon.starts_at).toBeGreaterThan(0);
   expect(coupon.ends_at).toBeGreaterThan(coupon.starts_at);
   expect(coupon.product_ids).toEqual([first.id]);
-  await page.screenshot({
-    path: "../.local/promotions-list.png",
-    fullPage: true,
-    animations: "disabled",
-  });
 
   await page.goto(`${base}/products/${first.id}`);
   await expect(page.locator(".product-pricing")).toContainText("80.00 CNY");
@@ -169,19 +157,11 @@ test("优惠管理保存、叠加报价、价格变化确认与历史领取", as
   await expect(purchase.locator(".purchase-discounts")).toContainText(
     "限时九折优惠码",
   );
-  await page.screenshot({
-    path: "../.local/promotions-checkout-desktop.png",
-    animations: "disabled",
-  });
   await page.setViewportSize({ width: 390, height: 900 });
   await expect(
     purchase.getByRole("button", { name: "前往支付", exact: true }),
   ).toBeInViewport();
   await expect(purchase.getByText(/库存/)).toHaveCount(0);
-  await page.screenshot({
-    path: "../.local/promotions-checkout-mobile.png",
-    animations: "disabled",
-  });
   const { id: _id, used: _used, ...changedCoupon } = coupon;
   const checkoutKey = await purchase.locator("#purchase-key").inputValue();
   expect(
@@ -320,5 +300,4 @@ test("优惠管理保存、叠加报价、价格变化确认与历史领取", as
       })
     ).ok(),
   ).toBeTruthy();
-  expect(errors).toEqual([]);
 });

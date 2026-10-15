@@ -8,6 +8,8 @@ export default defineConfig({
   timeout: 45_000,
   use: {
     headless: true,
+    viewport: { width: 1440, height: 1000 },
+    screenshot: "only-on-failure",
     locale: "zh-CN",
     launchOptions: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
       ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE }

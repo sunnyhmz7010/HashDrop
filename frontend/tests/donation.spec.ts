@@ -1,4 +1,4 @@
-import { test, expect } from "./fixture";
+import { loginAdmin, test, expect } from "./fixture";
 import type { Donation, DonationSettings } from "../src/api";
 
 test("赞赏页配置、独立付款查询、手机菜单与停用后的历史记录", async ({
@@ -7,12 +7,7 @@ test("赞赏页配置、独立付款查询、手机菜单与停用后的历史�
 }) => {
   test.setTimeout(90_000);
   const base = process.env.TINYFAKA_TEST_URL!;
-  const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(error.message));
-  await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto(`${base}/admin/login`);
-  await page.locator("#password input").fill("test-password-only");
-  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await loginAdmin(page);
   await page.getByRole("menuitem", { name: "赞赏页", exact: true }).click();
   await expect(page).toHaveURL(`${base}/admin/donation`);
   await expect(page.getByLabel("页面标题", { exact: true })).toBeVisible();
@@ -42,10 +37,6 @@ test("赞赏页配置、独立付款查询、手机菜单与停用后的历史�
     await expect(page.getByLabel("页面标题", { exact: true })).toHaveValue(
       "支持 TinyFaka 持续开发",
     );
-    await page.screenshot({
-      path: "../.local/donation-admin-desktop.png",
-      fullPage: true,
-    });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole("button", { name: "打开管理菜单" }).click();
     await page
@@ -58,10 +49,6 @@ test("赞赏页配置、独立付款查询、手机菜单与停用后的历史�
         () => document.documentElement.scrollWidth > innerWidth + 1,
       ),
     ).toBeFalsy();
-    await page.screenshot({
-      path: "../.local/donation-admin-mobile.png",
-      fullPage: true,
-    });
 
     const shopBefore = await (
       await page.request.get(`${base}/api/admin/overview`)
@@ -79,10 +66,6 @@ test("赞赏页配置、独立付款查询、手机菜单与停用后的历史�
       "赞赏金额不在允许范围内",
     );
     await page.locator("#donate-amount").fill("12.34");
-    await page.screenshot({
-      path: "../.local/donation-public-mobile.png",
-      fullPage: true,
-    });
     const created = page.waitForResponse(
       (response) =>
         response.url() === `${base}/api/donations` &&
@@ -123,10 +106,6 @@ test("赞赏页配置、独立付款查询、手机菜单与停用后的历史�
     await expect(
       page.getByRole("heading", { name: "感谢你的赞赏" }),
     ).toBeVisible();
-    await page.screenshot({
-      path: "../.local/donation-paid-mobile.png",
-      fullPage: true,
-    });
     expect((await request.get(`${base}/api/donations/${id}`)).status()).toBe(
       401,
     );
@@ -172,7 +151,6 @@ test("赞赏页配置、独立付款查询、手机菜单与停用后的历史�
         () => document.documentElement.scrollWidth > innerWidth + 1,
       ),
     ).toBeFalsy();
-    expect(errors).toEqual([]);
   } finally {
     const restored = await page.request.put(`${base}/api/admin/donation`, {
       headers,
@@ -188,9 +166,7 @@ test("窄屏长标题完整展示，凭证无法存储时先保存查询链接",
 }) => {
   const base = process.env.TINYFAKA_TEST_URL!;
   await page.setViewportSize({ width: 320, height: 740 });
-  await page.goto(`${base}/admin/login`);
-  await page.locator("#password input").fill("test-password-only");
-  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await loginAdmin(page);
   await expect(page).toHaveURL(`${base}/admin`);
   const session = await (
     await page.request.get(`${base}/api/admin/session`)
@@ -261,10 +237,6 @@ test("窄屏长标题完整展示，凭证无法存储时先保存查询链接",
         () => document.documentElement.scrollWidth > innerWidth + 1,
       ),
     ).toBeFalsy();
-    await page.screenshot({
-      path: "../.local/donation-long-title-mobile.png",
-      fullPage: true,
-    });
     await page.goto(`${base}/donate/orders/${donationID}`);
     await expect(page.getByRole("alert")).toContainText("缺少查询凭证");
     await expect(

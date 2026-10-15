@@ -20,29 +20,28 @@ type Product struct {
 	InventoryID   string `json:"inventory_id,omitempty"`
 	InventoryName string `json:"inventory_name,omitempty"`
 	// Kind 来自关联库存池；商品本身不再保存交付类型和内容。
-	Kind       string `json:"kind"`
-	Active     bool   `json:"active"`
-	Hidden     bool   `json:"hidden"`
-	Available  int    `json:"available"`
-	Reserved   int    `json:"reserved"`
-	Sold       int    `json:"sold"`
-	Content    string `json:"-"`
-	ContentAAD string `json:"-"`
-	UpdatedAt  int64  `json:"updated_at"`
+	Kind      string `json:"kind"`
+	Active    bool   `json:"active"`
+	Hidden    bool   `json:"hidden"`
+	Available int    `json:"available"`
+	Reserved  int    `json:"reserved"`
+	Sold      int    `json:"sold"`
+	Content   string `json:"-"`
+	UpdatedAt int64  `json:"updated_at"`
 }
 
 const productSelect = `SELECT p.id,p.name,p.description,p.details,p.price,p.currency,COALESCE(i.kind,''),p.active,p.hidden,COALESCE(i.content,''),p.updated_at,
  (SELECT COUNT(*) FROM stock_items s WHERE s.inventory_id=i.id AND s.status='available'),
  (SELECT COUNT(*) FROM stock_items s WHERE s.inventory_id=i.id AND s.status='reserved'),
  (SELECT COUNT(*) FROM stock_items s WHERE s.inventory_id=i.id AND s.status='sold'),
- COALESCE(i.id,''),COALESCE(i.name,''),COALESCE(i.content_aad,'')
+ COALESCE(i.id,''),COALESCE(i.name,'')
  FROM products p LEFT JOIN inventories i ON i.id=p.inventory_id AND i.deleted_at IS NULL`
 
 type scanner interface{ Scan(...any) error }
 
 func scanProduct(row scanner) (Product, error) {
 	var p Product
-	err := row.Scan(&p.ID, &p.Name, &p.Description, &p.Details, &p.Price, &p.Currency, &p.Kind, &p.Active, &p.Hidden, &p.Content, &p.UpdatedAt, &p.Available, &p.Reserved, &p.Sold, &p.InventoryID, &p.InventoryName, &p.ContentAAD)
+	err := row.Scan(&p.ID, &p.Name, &p.Description, &p.Details, &p.Price, &p.Currency, &p.Kind, &p.Active, &p.Hidden, &p.Content, &p.UpdatedAt, &p.Available, &p.Reserved, &p.Sold, &p.InventoryID, &p.InventoryName)
 	return p, err
 }
 func (a *App) products(active bool) ([]Product, error) {

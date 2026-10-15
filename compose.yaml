@@ -1,6 +1,6 @@
 services:
   tinyfaka:
-    image: ghcr.io/sunnyhmz7010/tinyfaka:latest
+    image: ghcr.io/sunnyhmz7010/tinyfaka:1.0.0
     container_name: tinyfaka
     restart: unless-stopped
     ports:

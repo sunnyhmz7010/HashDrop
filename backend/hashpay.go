@@ -272,7 +272,7 @@ func (a *App) webhook(w http.ResponseWriter, r *http.Request) error {
 	if err != nil || !recentTimestamp(plain.Timestamp) || plain.Timestamp != ts {
 		return bad("通知解密或时间校验失败")
 	}
-	// 优先查赞赏映射；历史商品订单的随机 ID 也可能碰巧带有同一前缀。
+	// 优先查赞赏映射；商品订单的随机 ID 也可能碰巧带有同一前缀。
 	if strings.HasPrefix(plain.Payload.MerchantNo, "don_") {
 		d, err := a.loadDonation(r.Context(), plain.Payload.MerchantNo)
 		if err != nil && err != sql.ErrNoRows {

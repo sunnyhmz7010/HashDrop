@@ -2,14 +2,11 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
-	"tinyfaka"
 )
 
 func createInventoryViaAPI(t *testing.T, a *App, kind, content string) Inventory {
@@ -95,10 +92,6 @@ func TestInventoryCiphertextCannotMoveAcrossPools(t *testing.T) {
 	a, _ := newTestApp(t)
 	first := insertProduct(t, a, "static", 0)
 	second := insertProduct(t, a, "static", 0)
-	if _, err := a.db.Exec(`UPDATE inventories SET content=(SELECT content FROM inventories WHERE id=?),
- content_aad=(SELECT content_aad FROM inventories WHERE id=?) WHERE id=?`, first, first, second); err == nil {
-		t.Fatal("库存池接受了其他记录的密文认证上下文")
-	}
 	if _, err := a.db.Exec("UPDATE inventories SET content=(SELECT content FROM inventories WHERE id=?) WHERE id=?", first, second); err != nil {
 		t.Fatal(err)
 	}
@@ -207,129 +200,5 @@ func TestProductRebindingPreservesOriginalDeliveryAndReleasesOriginalPool(t *tes
 	}
 	if response := admin("PUT", "/api/admin/products/"+product, `{"name":"绑定失效库存","price":100,"currency":"CNY","active":true,"inventory_id":"`+product+`"}`); response.Code != 400 {
 		t.Fatal("商品可以关联已删除库存池")
-	}
-}
-
-func TestInventoryMigrationPreservesCiphertextsAndPendingOrders(t *testing.T) {
-	a, gateway := newTestApp(t)
-	path := filepath.Join(t.TempDir(), "before-inventories.db")
-	old, err := sql.Open("sqlite", databaseURI(path))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer old.Close()
-	for _, file := range []string{"001_init", "002_gateway_orders", "003_gateway_identity", "004_remove_service_products", "005_product_details", "006_hidden_products", "007_deleted_products", "008_promotions"} {
-		schema, err := tinyfaka.Assets.ReadFile("migrations/" + file + ".sql")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err = old.Exec(string(schema)); err != nil {
-			t.Fatal(err)
-		}
-	}
-	staticCipher, err := a.vault.encrypt("迁移前固定内容", "product:legacy-static")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, p := range []struct{ id, kind, content string }{{"legacy-static", "static", staticCipher}, {"legacy-stock", "card", ""}} {
-		if _, err = old.Exec("INSERT INTO products(id,name,price,currency,kind,active,content,created_at,updated_at) VALUES(?,?,100,'CNY',?,1,?,1,1)", p.id, p.id, p.kind, p.content); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for _, o := range []struct{ id, kind, product, payment, delivery, reservation string }{
-		{"old-pending", "card", "legacy-stock", "creating", "pending", "reserved"},
-		{"old-paid", "card", "legacy-stock", "paid", "done", "consumed"},
-	} {
-		if _, err = old.Exec(`INSERT INTO orders(id,product_id,product_name,kind,unit_price,currency,quantity,total,token_hash,payment_status,delivery_status,reservation_status,created_at,updated_at) VALUES(?,?,?,?,100,'CNY',1,100,?,?,?,?,1,1)`, o.id, o.product, o.product, o.kind, tokenHash(o.id), o.payment, o.delivery, o.reservation); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for _, stock := range []struct{ id, state, order string }{{"available", "available", ""}, {"reserved", "reserved", "old-pending"}, {"sold", "sold", "old-paid"}} {
-		cipher, err := a.vault.encrypt("迁移前库存-"+stock.id, "stock:"+stock.id)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var order any
-		if stock.order != "" {
-			order = stock.order
-		}
-		if _, err = old.Exec("INSERT INTO stock_items(id,product_id,content,fingerprint,status,order_id,created_at) VALUES(?,'legacy-stock',?,?,?,?,1)", stock.id, cipher, a.vault.fingerprint("legacy-stock", "迁移前库存-"+stock.id), stock.state, order); err != nil {
-			t.Fatal(err)
-		}
-		if stock.order != "" {
-			result, state := "", "pending"
-			if stock.state == "sold" {
-				state = "done"
-				result, err = a.vault.encrypt("原领取结果", "delivery:delivery-sold")
-				if err != nil {
-					t.Fatal(err)
-				}
-			}
-			if _, err = old.Exec("INSERT INTO deliveries(id,order_id,ordinal,stock_id,result,status,updated_at) VALUES(?,?,1,?,?,?,1)", "delivery-"+stock.id, stock.order, stock.id, result, state); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
-	if err = old.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err = a.db.Close(); err != nil {
-		t.Fatal(err)
-	}
-	a.db, err = openDatabase(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { a.db.Close() })
-	var version, foreignKeys int
-	if err = a.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 10 {
-		t.Fatal("库存迁移版本无效", err)
-	}
-	if err = a.db.QueryRow("PRAGMA foreign_keys").Scan(&foreignKeys); err != nil || foreignKeys != 1 {
-		t.Fatal("迁移后未开启外键", err)
-	}
-	for _, column := range []string{"kind", "content"} {
-		rows, err := a.db.Query("SELECT " + column + " FROM products")
-		if err == nil {
-			rows.Close()
-			t.Fatal("商品仍持有交付类型或内容")
-		}
-	}
-	pool, err := scanInventory(a.db.QueryRow(inventorySelect + " WHERE i.id='legacy-stock'"))
-	if err != nil || pool.Available != 1 || pool.Reserved != 1 || pool.Sold != 1 {
-		t.Fatalf("迁移改变库存状态: %+v %v", pool, err)
-	}
-	admin := adminSessionRequest(t, a)
-	duplicate := admin("POST", "/api/admin/inventories/legacy-stock/stock", `{"content":"迁移前库存-available"}`)
-	if duplicate.Code != 200 || !strings.Contains(duplicate.Body.String(), `"duplicates":1`) {
-		t.Fatal("迁移破坏了库存去重", duplicate.Body)
-	}
-	pending, err := a.loadOrder(context.Background(), "old-pending")
-	if err != nil || pending.InventoryID != "legacy-stock" {
-		t.Fatal("未记录旧订单库存来源", err)
-	}
-	syncPaid(t, a, gateway, pending)
-	results, err := a.deliveryResults(context.Background(), pending.ID)
-	if err != nil || len(results) != 1 || results[0].Content != "迁移前库存-reserved" {
-		t.Fatal("迁移破坏了旧预留交付", err)
-	}
-	results, err = a.deliveryResults(context.Background(), "old-paid")
-	if err != nil || len(results) != 1 || results[0].Content != "原领取结果" {
-		t.Fatal("迁移破坏了原领取结果", err)
-	}
-	static, _ := reserve(t, a, "legacy-static", 1)
-	syncPaid(t, a, gateway, static)
-	results, err = a.deliveryResults(context.Background(), static.ID)
-	if err != nil || len(results) != 1 || results[0].Content != "迁移前固定内容" {
-		t.Fatal("迁移后不能解密旧商品固定内容", err)
-	}
-	if response := admin("PUT", "/api/admin/inventories/legacy-static", `{"name":"修改库存","kind":"static","static_content":"新固定内容"}`); response.Code != 200 {
-		t.Fatal(response.Body)
-	}
-	static, _ = reserve(t, a, "legacy-static", 1)
-	syncPaid(t, a, gateway, static)
-	results, err = a.deliveryResults(context.Background(), static.ID)
-	if err != nil || len(results) != 1 || results[0].Content != "新固定内容" {
-		t.Fatal("迁移后更新内容的认证上下文不正确", err)
 	}
 }

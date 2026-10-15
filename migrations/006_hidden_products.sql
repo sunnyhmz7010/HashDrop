@@ -1,2 +1,0 @@
-ALTER TABLE products ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0 CHECK(hidden IN (0,1));
-PRAGMA user_version = 6;

@@ -42,12 +42,12 @@ func openDatabase(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, err
 	}
-	if version > 10 {
+	if version != 0 && version != 1 {
 		db.Close()
-		return nil, fmt.Errorf("数据库版本 %d 高于程序支持的版本", version)
+		return nil, fmt.Errorf("数据库结构版本 %d 不受支持", version)
 	}
-	if version < 10 {
-		if err = migrateDatabase(db, version); err != nil {
+	if version == 0 {
+		if err = initializeDatabase(db); err != nil {
 			db.Close()
 			return nil, err
 		}
@@ -55,47 +55,20 @@ func openDatabase(path string) (*sql.DB, error) {
 	return db, nil
 }
 
-func migrateDatabase(db *sql.DB, version int) error {
-	// 迁移发生在启动阶段。固定连接，事务中重建 orders 后检查所有外键。
-	conn, err := db.Conn(context.Background())
+func initializeDatabase(db *sql.DB) error {
+	schema, err := tinyfaka.Assets.ReadFile("schema.sql")
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
-	if _, err = conn.ExecContext(context.Background(), "PRAGMA foreign_keys=OFF"); err != nil {
+	tx, err := db.Begin()
+	if err != nil {
 		return err
 	}
-	for _, file := range []string{"migrations/001_init.sql", "migrations/002_gateway_orders.sql", "migrations/003_gateway_identity.sql", "migrations/004_remove_service_products.sql", "migrations/005_product_details.sql", "migrations/006_hidden_products.sql", "migrations/007_deleted_products.sql", "migrations/008_promotions.sql", "migrations/009_donations.sql", "migrations/010_independent_inventories.sql"}[version:] {
-		schema, readErr := tinyfaka.Assets.ReadFile(file)
-		if readErr != nil {
-			return readErr
-		}
-		tx, txErr := conn.BeginTx(context.Background(), nil)
-		if txErr != nil {
-			return txErr
-		}
-		if _, err = tx.Exec(string(schema)); err != nil {
-			tx.Rollback()
-			return err
-		}
-		rows, checkErr := tx.Query("PRAGMA foreign_key_check")
-		if checkErr != nil {
-			tx.Rollback()
-			return checkErr
-		}
-		invalid := rows.Next()
-		checkErr = rows.Err()
-		rows.Close()
-		if invalid || checkErr != nil {
-			tx.Rollback()
-			return fmt.Errorf("迁移 %s 的外键校验失败: %v", file, checkErr)
-		}
-		if err = tx.Commit(); err != nil {
-			return err
-		}
+	defer tx.Rollback()
+	if _, err = tx.Exec(string(schema)); err != nil {
+		return err
 	}
-	_, err = conn.ExecContext(context.Background(), "PRAGMA foreign_keys=ON")
-	return err
+	return tx.Commit()
 }
 
 func backupDatabase(ctx context.Context, db *sql.DB, target string) error {

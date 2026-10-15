@@ -44,14 +44,26 @@ export async function importInventory(
   await expect(page.getByRole("dialog")).toHaveCount(0);
 }
 
-export const test = base.extend<{ isolateLimits: void }>({
-  isolateLimits: [
-    async ({ request }, use) => {
-      const response = await request.post(
-        `${process.env.TINYFAKA_TEST_URL!}/__test/reset-limits`,
-      );
+export async function loginAdmin(page: Page) {
+  await page.goto(`${process.env.TINYFAKA_TEST_URL!}/admin/login`);
+  await page.locator("#password input").fill("test-password-only");
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await expect(page.locator(".workspace-frame")).toBeVisible();
+}
+
+export const test = base.extend<{ browserState: void }>({
+  browserState: [
+    async ({ request, context, page }, use) => {
+      const baseURL = process.env.TINYFAKA_TEST_URL!;
+      const response = await request.post(`${baseURL}/__test/reset-limits`);
       if (!response.ok()) throw new Error("测试请求计数重置失败");
+      const errors: string[] = [];
+      const watch = (target: Page) =>
+        target.on("pageerror", (error) => errors.push(error.message));
+      watch(page);
+      context.on("page", watch);
       await use();
+      expect(errors).toEqual([]);
     },
     { auto: true },
   ],

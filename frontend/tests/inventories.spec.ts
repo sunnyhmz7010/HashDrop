@@ -1,16 +1,17 @@
-import { test, expect, selectProductInventory, type Page } from "./fixture";
+import {
+  loginAdmin,
+  test,
+  expect,
+  selectProductInventory,
+  type Page,
+} from "./fixture";
 import type { Inventory, Product } from "../src/api";
 import { placeTestOrder } from "./checkout";
 
 test("独立库存池共享、商品改绑与历史订单交付", async ({ page, request }) => {
   test.setTimeout(90_000);
   const base = process.env.TINYFAKA_TEST_URL!;
-  const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(error.message));
-  await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto(`${base}/admin/login`);
-  await page.locator("#password input").fill("test-password-only");
-  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await loginAdmin(page);
   await page.getByRole("menuitem", { name: "库存管理", exact: true }).click();
 
   async function createPool(
@@ -127,7 +128,9 @@ test("独立库存池共享、商品改绑与历史订单交付", async ({ page,
   }
   async function viewOrder(order: { key: string }) {
     await page.goto(`${base}/claim`);
-    await page.getByRole("button", { name: "查询其他订单", exact: true }).click();
+    await page
+      .getByRole("button", { name: "查询其他订单", exact: true })
+      .click();
     await page.getByLabel("领取密钥", { exact: true }).fill(order.key);
     await page.getByRole("button", { name: "查看订单", exact: true }).click();
   }
@@ -227,7 +230,6 @@ test("独立库存池共享、商品改绑与历史订单交付", async ({ page,
     });
     await page.getByRole("button", { name: "取消", exact: true }).click();
   }
-  expect(errors).toEqual([]);
 });
 
 async function verifyViewport(page: Page) {

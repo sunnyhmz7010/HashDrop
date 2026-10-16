@@ -14,6 +14,7 @@ import {
   type DonationSettings,
 } from "../api";
 import { t } from "../i18n";
+import { rememberDonation } from "../donationHistory";
 
 const router = useRouter(),
   settings = ref<DonationSettings>(),
@@ -65,6 +66,8 @@ async function submit() {
         signal: controller.signal,
       },
     );
+    if (controller.signal.aborted) return;
+    rememberDonation(result.donation, result.token);
     // 创建成功后保留凭证入口，导航失败时继续同一笔赞赏。
     receiptPath.value = `/donate/orders/${result.donation.id}#token=${result.token}`;
     await router.push(receiptPath.value);

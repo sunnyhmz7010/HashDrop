@@ -43,7 +43,7 @@ router.beforeEach(async (to) => {
   }
   if (initialized.value === false && to.path !== "/setup") return "/setup";
   if (initialized.value === true && to.path === "/setup")
-    return "/center/login";
+    return { path: "/center", query: { login: "1" } };
   if (to.meta.center) {
     sessionError.value = "";
     try {
@@ -54,12 +54,12 @@ router.beforeEach(async (to) => {
       return;
     }
     const section = String(to.params.section ?? "");
-    if (adminAuthenticated.value && section === "login") return "/center";
     if (
       !adminAuthenticated.value &&
-      !["", "orders", "query", "login"].includes(section)
+      !["", "history", "query", "donations"].includes(section) &&
+      !(section === "orders" && to.params.id)
     )
-      return "/center/login";
+      return { path: "/center", query: { login: "1" } };
   }
 });
 createApp(App).use(router).mount("#app");

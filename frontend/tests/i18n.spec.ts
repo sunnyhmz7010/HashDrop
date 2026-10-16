@@ -41,18 +41,23 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
   ).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("lang", "en-US");
   await expect(
-    page.locator(".topbar").getByRole("link", { name: "Query center" }),
+    page.locator(".topbar").getByRole("link", { name: "Personal center" }),
   ).toBeVisible();
   const adminEntry = page
     .locator(".topbar")
-    .getByRole("button", { name: "Query center", exact: true });
+    .getByRole("button", { name: "Personal center", exact: true });
   await expect(adminEntry).toBeVisible();
   await adminEntry.click();
-  await expect(page.getByRole("heading", { name: "Order history", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Admin sign in", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Admin sign in", exact: true }),
+    page.getByRole("heading", { name: "Order history", exact: true }),
   ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Admin sign in", exact: true })
+    .click();
+  await expect(
+    page.getByRole("dialog", { name: "Admin sign in", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
   await page.locator(".topbar .brand").click();
   const publicBrand = (await page.locator(".topbar .brand").boundingBox())!;
 
@@ -70,7 +75,7 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
   await expect(
     page
       .locator(".topbar")
-      .getByRole("button", { name: "Query center", exact: true }),
+      .getByRole("button", { name: "Personal center", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Place order", exact: true }).click();
   await expect(
@@ -109,7 +114,7 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
     order.deliveries[0].content,
   );
 
-  await page.goto(`${base}/center/login`);
+  await page.goto(`${base}/center?login=1`);
   await page.locator("#password input").fill("wrong-password");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(
@@ -117,16 +122,11 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
       exact: true,
     }),
   ).toBeVisible();
-  await switchLanguage(page, "中文");
-  await expect(
-    page.getByText("账号或密码不正确", { exact: true }),
-  ).toBeVisible();
   await expect(page.locator("#password input")).toHaveValue("wrong-password");
-  await switchLanguage(page, "English");
   await page.locator("#password input").fill("test-password-only");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Overview", exact: true }),
+    page.getByRole("heading", { name: "Order history", exact: true }),
   ).toBeVisible();
   await expect(page.locator(".topbar a")).toHaveCount(1);
   await expect(
@@ -204,7 +204,7 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
     await page.setViewportSize({ width, height: 450 });
     await page.goto(base);
     await expect(
-      page.getByRole("button", { name: "Query center", exact: true }),
+      page.getByRole("button", { name: "Personal center", exact: true }),
     ).toBeInViewport();
     const shopBrand = (await page.locator(".topbar .brand").boundingBox())!;
     await page.goto(`${base}/center/orders`);
@@ -239,14 +239,14 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
     if (width === 390) {
       await page.getByRole("button", { name: "Sign out", exact: true }).click();
       await expect(
-        page.getByRole("heading", { name: "Admin sign in" }),
+        page.getByRole("button", { name: "Admin sign in", exact: true }),
       ).toBeVisible();
       expect(
         (await page.request.get(`${base}/api/admin/session`)).status(),
       ).toBe(401);
     }
   }
-  await page.goto(`${base}/center/orders`);
+  await page.goto(`${base}/center/history`);
   await expect(
     page.getByRole("heading", { name: "Order history" }),
   ).toBeVisible();

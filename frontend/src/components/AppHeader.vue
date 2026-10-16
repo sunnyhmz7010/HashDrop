@@ -1,8 +1,9 @@
 <!-- 基于 HashPay Admin.vue 的顶栏结构修改，商城与后台共用尺寸和品牌入口。
      Copyright 2026 TGDash Team. Apache-2.0，见 frontend/public/HashPay-LICENSE.txt。 -->
 <script setup lang="ts">
-import { NLayoutHeader } from "naive-ui";
+import { NButton, NLayoutHeader } from "naive-ui";
 import { site } from "../api";
+import { t } from "../i18n";
 import LocaleSwitch from "./LocaleSwitch.vue";
 </script>
 
@@ -12,7 +13,13 @@ import LocaleSwitch from "./LocaleSwitch.vue";
       site.title
     }}</router-link>
     <div class="topbar-actions">
-      <slot name="before-actions" /><LocaleSwitch /><slot name="actions" />
+      <slot name="before-actions" /><LocaleSwitch /><slot name="actions"
+        ><router-link to="/center"
+          ><n-button size="small" secondary>{{
+            t("center.title")
+          }}</n-button></router-link
+        ></slot
+      >
     </div>
   </n-layout-header>
 </template>

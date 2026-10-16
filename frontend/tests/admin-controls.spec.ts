@@ -115,7 +115,7 @@ test("商城公告复用 Markdown 编辑预览并展示图片视频", async ({ p
   await loginAdmin(page);
   await page.goto(`${base}/center/settings`);
   const notice = `## 公告验证\n\n**重要公告**\n\n![公告图片](${base}/__test/media/image.svg)\n\n![公告视频](${base}/__test/media/clip.webm)\n\n<script>alert(1)</script>`;
-  await page.getByLabel("商城公告", { exact: true }).fill(notice);
+  await page.getByLabel("商城公告（Markdown）", { exact: true }).fill(notice);
   await page.locator(".n-tabs-tab").getByText("预览", { exact: true }).click();
   await expect(page.locator(".markdown-content img")).toBeVisible();
   await expect(page.locator(".markdown-content video")).toHaveAttribute(
@@ -125,12 +125,12 @@ test("商城公告复用 Markdown 编辑预览并展示图片视频", async ({ p
   await page.getByRole("button", { name: "保存设置", exact: true }).click();
   await expect(page.getByText("设置已保存", { exact: true })).toBeVisible();
   await page.reload();
-  await expect(page.getByLabel("商城公告", { exact: true })).toHaveValue(
-    notice,
-  );
+  await expect(
+    page.getByLabel("商城公告（Markdown）", { exact: true }),
+  ).toHaveValue(notice);
   await page.goto(base);
   const announcement = page.getByRole("region", {
-    name: "商城公告",
+    name: "商城公告（Markdown）",
     exact: true,
   });
   await expect(
@@ -152,7 +152,7 @@ test("商城公告复用 Markdown 编辑预览并展示图片视频", async ({ p
   });
   // 还原公共公告，避免其他场景额外加载媒体。
   await page.goto(`${base}/center/settings`);
-  await page.getByLabel("商城公告", { exact: true }).fill("");
+  await page.getByLabel("商城公告（Markdown）", { exact: true }).fill("");
   await page.getByRole("button", { name: "保存设置", exact: true }).click();
   await expect(page.getByText("设置已保存", { exact: true })).toBeVisible();
 });

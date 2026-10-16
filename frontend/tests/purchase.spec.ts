@@ -112,11 +112,15 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   await page.getByRole("button", { name: "查看订单", exact: true }).click();
   await expect(page).toHaveURL(`${base}/center/query`);
   await expect(page.locator(".delivery-item pre")).toContainText("卡密-");
-  await page.goto(`${base}/center/login`);
+  await page.goto(`${base}/center?login=1`);
   await page.locator("#password input").fill("test-password-only");
   await page.getByRole("button", { name: "登录", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(
-    page.getByRole("heading", { name: "概览", exact: true }),
+    page.getByRole("button", { name: "退出登录", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "订单历史", exact: true }),
   ).toBeVisible();
   const pool = await createInventory(page, "浏览器验证库存");
   await page.getByRole("menuitem", { name: "商品", exact: true }).click();

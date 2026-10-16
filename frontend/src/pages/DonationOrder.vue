@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import {
   NAlert,
   NButton,
@@ -20,8 +20,15 @@ import {
   type Donation,
 } from "../api";
 import { formatTime, t } from "../i18n";
+import {
+  donationToken,
+  donationsCleared,
+  rememberDonation,
+} from "../donationHistory";
+const props = defineProps<{ embedded?: boolean }>();
 
 const route = useRoute(),
+  router = useRouter(),
   message = useMessage(),
   detail = ref<Donation>();
 const id = ref(""),
@@ -79,6 +86,7 @@ async function load() {
     });
     if (current !== generation) return;
     detail.value = result;
+    storageError.value = !rememberDonation(result, token.value);
     error.value = "";
     if (!["paid", "closed", "invalid"].includes(result.payment_status))
       timer = setTimeout(load, 6000);
@@ -101,12 +109,13 @@ watch(
     try {
       token.value =
         fromURL ??
-        sessionStorage.getItem(`hashdrop:donation:${id.value}`) ??
-        "";
+        (donationToken(id.value) ||
+          sessionStorage.getItem(`hashdrop:donation:${id.value}`) ||
+          "");
       if (fromURL)
         sessionStorage.setItem(`hashdrop:donation:${id.value}`, fromURL);
     } catch {
-      token.value = fromURL ?? "";
+      token.value = fromURL ?? donationToken(id.value);
       storageError.value = true;
     }
     void load();
@@ -114,6 +123,16 @@ watch(
   { immediate: true },
 );
 onUnmounted(stop);
+watch(donationsCleared, (ids) => {
+  if (!ids.includes(id.value)) return;
+  stop();
+  detail.value = undefined;
+  token.value = "";
+  error.value = "";
+  receiptSaved.value = false;
+  if (props.embedded) void router.replace("/center/donations");
+  else if (route.hash) void router.replace({ path: route.path });
+});
 async function copyReceipt() {
   try {
     await copyText(receipt.value);
@@ -131,8 +150,14 @@ function pay() {
 </script>
 
 <template>
-  <StoreLayout>
-    <main class="page donation-receipt grid">
+  <component :is="embedded ? 'div' : StoreLayout">
+    <main :class="['donation-receipt grid', embedded ? 'is-embedded' : 'page']">
+      <n-button
+        v-if="embedded"
+        secondary
+        @click="router.push('/center/donations')"
+        >{{ t("center.back_donations") }}</n-button
+      >
       <section class="panel grid">
         <div class="section-title">
           <h1>
@@ -224,12 +249,15 @@ function pay() {
         </div>
       </section>
     </main>
-  </StoreLayout>
+  </component>
 </template>
 
 <style scoped lang="scss">
 .donation-receipt {
   max-width: 720px;
+}
+.donation-receipt.is-embedded {
+  max-width: 100%;
 }
 .donation-total {
   font-size: 24px;

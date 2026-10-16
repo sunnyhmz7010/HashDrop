@@ -192,6 +192,11 @@ test("窄屏长标题完整展示，凭证无法存储时先保存查询链接",
     });
     expect(saved.ok()).toBeTruthy();
     await page.addInitScript(() => {
+      Object.defineProperty(window, "localStorage", {
+        get() {
+          throw new DOMException("Storage blocked", "SecurityError");
+        },
+      });
       Object.defineProperty(window, "sessionStorage", {
         get() {
           throw new DOMException("Storage blocked", "SecurityError");

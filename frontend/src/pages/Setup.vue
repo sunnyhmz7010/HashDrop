@@ -27,7 +27,7 @@ onMounted(async () => {
   try {
     const status = await api<{ initialized: boolean }>("/setup/status");
     initialized.value = status.initialized;
-    if (status.initialized) await router.replace("/center/login");
+    if (status.initialized) await router.replace("/center?login=1");
   } catch (e) {
     error.value = errorText(e);
   }
@@ -48,7 +48,7 @@ async function submit() {
     site.value = { title: result.title, notice: "" };
     form.password_confirm = form.private_key = "";
     finished.value = true;
-    loginURL.value = `${result.public_url}/center/login`;
+    loginURL.value = `${result.public_url}/center?login=1`;
     // 复用现有登录校验；跨域时不能把密码或会话凭证放入跳转链接。
     if (result.public_url === location.origin) {
       const session = await api<{ csrf: string }>("/admin/login", {
@@ -78,7 +78,13 @@ function validatedSiteURL(): string {
     <section class="setup-panel">
       <div class="section-title setup-heading">
         <h1>{{ t("setup.title") }}</h1>
-        <LocaleSwitch />
+        <div class="row-actions">
+          <LocaleSwitch /><router-link to="/center"
+            ><n-button size="small" secondary>{{
+              t("center.title")
+            }}</n-button></router-link
+          >
+        </div>
       </div>
       <n-alert v-if="finished" type="success"
         >{{ t("setup.finished") }}<a :href="loginURL">{{ t("setup.login") }}</a>
@@ -186,6 +192,7 @@ function validatedSiteURL(): string {
 
 <style scoped lang="scss">
 .setup-heading {
+  flex-wrap: wrap;
   gap: 12px;
 }
 

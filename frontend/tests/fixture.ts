@@ -45,12 +45,13 @@ export async function importInventory(
 }
 
 export async function loginAdmin(page: Page) {
-  await page.goto(`${process.env.HASHDROP_TEST_URL!}/center/login`);
+  await page.goto(`${process.env.HASHDROP_TEST_URL!}/center?login=1`);
   await page.locator("#password input").fill("test-password-only");
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await expect(
     page.getByRole("button", { name: /^(退出登录|Sign out)$/ }),
   ).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 }
 
 export const test = base.extend<{ browserState: void }>({

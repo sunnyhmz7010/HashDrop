@@ -63,12 +63,12 @@ test("网页初始化、自动登录与只写私钥", async ({ page, request }) 
   await page.getByRole("button", { name: "完成初始化", exact: true }).click();
   await expect(page.getByLabel("管理员密码", { exact: true })).toBeDisabled();
   await expect(
-    page.getByRole("heading", { name: "概览", exact: true }),
+    page.getByRole("heading", { name: "订单历史", exact: true }),
   ).toBeVisible();
   await expect(page).toHaveURL(`${base}/center`);
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "概览", exact: true }),
+    page.getByRole("heading", { name: "订单历史", exact: true }),
   ).toBeVisible();
   await page.unroute("**/api/setup");
   const status = await request.get(`${base}/api/setup/status`);
@@ -82,12 +82,17 @@ test("网页初始化、自动登录与只写私钥", async ({ page, request }) 
     ).status(),
   ).toBe(409);
   await page.getByRole("button", { name: "退出登录", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "登录后台" })).toBeVisible();
+  await page.getByRole("button", { name: "管理员登录", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "登录后台" })).toBeVisible();
   await page.getByLabel("管理员账号", { exact: true }).fill("store-owner");
   await page.locator("#password input").fill("1");
   await page.getByRole("button", { name: "登录", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(
-    page.getByRole("heading", { name: "概览", exact: true }),
+    page.getByRole("button", { name: "退出登录", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "订单历史", exact: true }),
   ).toBeVisible();
   const cookie = (await page.context().cookies()).find(
     (cookie) => cookie.name === "hashdrop_session",
@@ -128,5 +133,7 @@ test("网页初始化、自动登录与只写私钥", async ({ page, request }) 
     "网页部署测试店铺",
   );
   await page.goto(`${base}/setup`);
-  await expect(page.getByRole("heading", { name: "概览", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "订单历史", exact: true }),
+  ).toBeVisible();
 });

@@ -27,20 +27,24 @@ import Donations from "../components/Donations.vue";
 import AppHeader from "../components/AppHeader.vue";
 import GuestOrders from "../components/GuestOrders.vue";
 import Order from "./Order.vue";
-import Login from "./Login.vue";
+import LoginDialog from "../components/LoginDialog.vue";
+import GuestDonations from "../components/GuestDonations.vue";
+import DonationOrder from "./DonationOrder.vue";
 const route = useRoute(),
   router = useRouter(),
   message = useMessage(),
   busy = ref(false),
-  navOpen = ref(false);
-const section = computed(() =>
-  String(
-    route.params.section ?? (adminAuthenticated.value ? "overview" : "orders"),
-  ),
-);
-const menuOptions = computed(() =>
-  adminAuthenticated.value
+  navOpen = ref(false),
+  loginOpen = ref(false);
+const section = computed(() => String(route.params.section ?? "history"));
+const personalSections = ["history", "query", "donations"];
+const menuOptions = computed(() => [
+  { key: "history", label: t("center.history") },
+  { key: "query", label: t("center.query") },
+  { key: "donations", label: t("center.donations") },
+  ...(adminAuthenticated.value
     ? [
+        { key: "admin-divider", type: "divider" as const },
         { key: "overview", label: t("nav.overview") },
         { key: "products", label: t("nav.products") },
         { key: "inventories", label: t("nav.inventories") },
@@ -49,14 +53,28 @@ const menuOptions = computed(() =>
         { key: "donation", label: t("nav.donation") },
         { key: "settings", label: t("nav.settings") },
       ]
-    : [
-        { key: "orders", label: t("center.history") },
-        { key: "query", label: t("center.query") },
-      ],
-);
+    : []),
+]);
 watch(adminAuthenticated, (value) => {
-  if (value === false && !["orders", "query", "login"].includes(section.value))
-    void router.replace("/center/login");
+  if (
+    value === false &&
+    !personalSections.includes(section.value) &&
+    !route.params.id
+  )
+    void router.replace("/center");
+});
+watch(
+  () => route.query.login,
+  (value) => {
+    if (value === "1" && !adminAuthenticated.value) loginOpen.value = true;
+  },
+  { immediate: true },
+);
+watch(loginOpen, (value) => {
+  if (!value && route.query.login) {
+    const { login, ...query } = route.query;
+    void router.replace({ path: route.path, query, hash: route.hash });
+  }
 });
 function openPage(key: string) {
   navOpen.value = false;
@@ -69,7 +87,8 @@ async function logout() {
     await api("/admin/logout", { method: "POST" });
     csrf.value = "";
     adminAuthenticated.value = false;
-    await router.push("/center/login");
+    if (!personalSections.includes(section.value) && !route.params.id)
+      await router.push("/center");
   } catch (e) {
     message.error(errorText(e));
   } finally {
@@ -103,11 +122,9 @@ async function logout() {
           @click="logout"
           >{{ t("nav.logout") }}</n-button
         >
-        <router-link v-else-if="section !== 'login'" to="/center/login"
-          ><n-button size="small" secondary>{{
-            t("center.admin_login")
-          }}</n-button></router-link
-        >
+        <n-button v-else size="small" secondary @click="loginOpen = true">{{
+          t("center.admin_login")
+        }}</n-button>
       </template>
     </AppHeader>
     <n-layout-content class="workspace-layout" content-class="workspace-page">
@@ -147,24 +164,34 @@ async function logout() {
           >
           <template v-else>
             <n-alert
-              v-if="historyStorageError && !adminAuthenticated"
+              v-if="
+                historyStorageError &&
+                (section === 'history' || section === 'query')
+              "
               type="warning"
               class="space-bottom"
               >{{ t("center.storage_error") }}</n-alert
             >
-            <Login v-if="section === 'login'" />
-            <Order v-else-if="route.params.id || section === 'query'" />
-            <GuestOrders v-else-if="!adminAuthenticated" />
-            <Products v-else-if="section === 'products'" />
-            <Inventories v-else-if="section === 'inventories'" /><Orders
-              v-else-if="section === 'orders'"
+            <DonationOrder
+              v-if="section === 'donations' && route.params.id"
+              embedded
             />
-            <Promotions v-else-if="section === 'promotions'" />
-            <Donations v-else-if="section === 'donation'" />
-            <Settings v-else-if="section === 'settings'" /><Overview v-else />
+            <GuestDonations v-else-if="section === 'donations'" />
+            <Order v-else-if="route.params.id || section === 'query'" />
+            <GuestOrders v-else-if="section === 'history'" />
+            <template v-else-if="adminAuthenticated">
+              <Products v-if="section === 'products'" />
+              <Inventories v-else-if="section === 'inventories'" /><Orders
+                v-else-if="section === 'orders'"
+              />
+              <Promotions v-else-if="section === 'promotions'" />
+              <Donations v-else-if="section === 'donation'" />
+              <Settings v-else-if="section === 'settings'" /><Overview v-else />
+            </template>
           </template>
         </n-layout-content>
       </n-layout>
     </n-layout-content>
+    <LoginDialog v-model:show="loginOpen" />
   </n-layout>
 </template>

@@ -196,7 +196,7 @@ const statusType = computed(() => {
       <n-button
         v-if="route.params.id"
         secondary
-        @click="router.push('/center/orders')"
+        @click="router.push('/center/history')"
         >{{ t("center.back_history") }}</n-button
       >
     </div>

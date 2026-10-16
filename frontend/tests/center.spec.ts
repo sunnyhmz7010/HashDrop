@@ -55,6 +55,24 @@ test("查询中心保留浏览器订单，跨设备导入并同步清除", async
   expect(stored).toHaveLength(2);
   expect(JSON.stringify(stored)).not.toContain("购买时内容");
   expect(adminRequests).toEqual([]);
+  // 登录只追加管理菜单，个人记录不能被全站订单列表替换。
+  await page.goto(`${base}/center`);
+  await page.getByRole("button", { name: "管理员登录", exact: true }).click();
+  await page.locator("#password input").fill("test-password-only");
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.locator(".order-row")).toHaveCount(2);
+  await expect(
+    page.getByRole("menuitem", { name: "商品", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "订单历史", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "捐赠记录", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "退出登录", exact: true }).click();
+  await expect(page.locator(".order-row")).toHaveCount(2);
   const pendingTab = await context.newPage();
   await pendingTab.goto(`${base}/products/${product.id}`);
   await pendingTab.evaluate(
@@ -130,9 +148,7 @@ test("查询中心保留浏览器订单，跨设备导入并同步清除", async
   await pendingTab.close();
 });
 
-test("同一框架按会话展示权限并允许重试会话错误", async ({
-  page,
-}) => {
+test("同一框架按会话展示权限并允许重试会话错误", async ({ page }) => {
   const base = process.env.HASHDROP_TEST_URL!;
   await page.goto(`${base}/center/query`);
   await expect(page).toHaveURL(`${base}/center/query`);
@@ -140,10 +156,11 @@ test("同一框架按会话展示权限并允许重试会话错误", async ({
     page.getByRole("heading", { name: "查询交付", exact: true }),
   ).toBeVisible();
   await page.goto(`${base}/center/products`);
-  await expect(page).toHaveURL(`${base}/center/login`);
+  await expect(page.getByRole("dialog", { name: "登录后台" })).toBeVisible();
   expect((await page.request.get(`${base}/api/admin/orders`)).status()).toBe(
     401,
   );
+  await page.keyboard.press("Escape");
   await loginAdmin(page);
   await page.goto(`${base}/center/products`);
   await expect(page).toHaveURL(`${base}/center/products`);
@@ -161,7 +178,7 @@ test("同一框架按会话展示权限并允许重试会话错误", async ({
     ).ok(),
   ).toBeTruthy();
   await page.reload();
-  await expect(page).toHaveURL(`${base}/center/login`);
+  await expect(page).toHaveURL(`${base}/center?login=1`);
   await expect(
     page.getByRole("menuitem", { name: "商品", exact: true }),
   ).toHaveCount(0);

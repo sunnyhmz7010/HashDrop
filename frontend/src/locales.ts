@@ -6,7 +6,19 @@ export type Locale = "zh-CN" | "en-US";
 export type I18nParams = Record<string, string | number | null | undefined>;
 
 const zh = {
-  "center.title": "查询中心",
+  "center.title": "个人中心",
+  "center.donations": "捐赠记录",
+  "center.back_donations": "返回捐赠记录",
+  "center.donations_help":
+    "这里仅保存此浏览器的捐赠记录，与商品订单分开。其他设备可通过完整捐赠查询链接导入；清除前请备份链接。",
+  "center.donations_empty": "此浏览器还没有捐赠记录",
+  "center.import_donation": "导入捐赠查询链接",
+  "center.donation_link_invalid": "请输入本站完整的捐赠查询链接（含查询凭证）",
+  "center.clear_donations": "清除本地捐赠记录",
+  "center.clear_donations_warning":
+    "将清除此浏览器的捐赠记录与查询凭证，不影响商品订单或服务器记录。请先备份完整查询链接。",
+  "center.donation_storage_error":
+    "浏览器无法可靠保存或读取捐赠记录，请备份完整查询链接。",
   "center.history": "订单历史",
   "center.query": "查询交付",
   "center.order_detail": "订单详情",
@@ -263,7 +275,7 @@ const zh = {
   "settings.site": "站点",
   "settings.site_name": "站点名称",
   "settings.site_url": "站点地址",
-  "settings.notice": "商城公告",
+  "settings.notice": "商城公告（Markdown）",
   "settings.gateway_url": "HashPay 地址",
   "settings.merchant_id": "商户 ID",
   "settings.private_key": "商户 RSA 私钥",
@@ -562,7 +574,20 @@ const zh = {
 
 export type MessageKey = keyof typeof zh;
 const en: Record<MessageKey, string> = {
-  "center.title": "Query center",
+  "center.title": "Personal center",
+  "center.donations": "Donation history",
+  "center.back_donations": "Back to donation history",
+  "center.donations_help":
+    "Only donations saved in this browser appear here, separately from product orders. Import donations from another device using their full receipt links. Back up the links before clearing history.",
+  "center.donations_empty": "No donations saved in this browser",
+  "center.import_donation": "Import donation receipt link",
+  "center.donation_link_invalid":
+    "Enter a full donation receipt link for this site, including its credential",
+  "center.clear_donations": "Clear local donation history",
+  "center.clear_donations_warning":
+    "This removes donation records and credentials from this browser, without affecting product orders or server records. Back up full receipt links first.",
+  "center.donation_storage_error":
+    "This browser cannot reliably save or read donation history. Back up full receipt links.",
   "center.history": "Order history",
   "center.query": "Find delivery",
   "center.order_detail": "Order details",
@@ -840,7 +865,7 @@ const en: Record<MessageKey, string> = {
   "settings.site": "Site",
   "settings.site_name": "Site name",
   "settings.site_url": "Site URL",
-  "settings.notice": "Store announcement",
+  "settings.notice": "Store announcement (Markdown)",
   "settings.gateway_url": "HashPay URL",
   "settings.merchant_id": "Merchant ID",
   "settings.private_key": "Merchant RSA private key",

@@ -9,7 +9,7 @@ test("赞赏页配置、独立付款查询、手机菜单与停用后的历史�
   const base = process.env.HASHDROP_TEST_URL!;
   await loginAdmin(page);
   await page.getByRole("menuitem", { name: "赞赏页", exact: true }).click();
-  await expect(page).toHaveURL(`${base}/admin/donation`);
+  await expect(page).toHaveURL(`${base}/center/donation`);
   await expect(page.getByLabel("页面标题", { exact: true })).toBeVisible();
   const original = (await (
     await page.request.get(`${base}/api/admin/donation`)
@@ -115,7 +115,7 @@ test("赞赏页配置、独立付款查询、手机菜单与停用后的历史�
     expect(shopAfter).toEqual(shopBefore);
 
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.goto(`${base}/admin/donation`);
+    await page.goto(`${base}/center/donation`);
     await expect(
       page
         .locator(".donation-record")
@@ -167,7 +167,7 @@ test("窄屏长标题完整展示，凭证无法存储时先保存查询链接",
   const base = process.env.HASHDROP_TEST_URL!;
   await page.setViewportSize({ width: 320, height: 740 });
   await loginAdmin(page);
-  await expect(page).toHaveURL(`${base}/admin`);
+  await expect(page).toHaveURL(`${base}/center`);
   const session = await (
     await page.request.get(`${base}/api/admin/session`)
   ).json();

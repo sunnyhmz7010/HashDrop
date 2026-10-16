@@ -2,7 +2,14 @@ import { createApp } from "vue";
 import { createRouter, createWebHistory } from "vue-router";
 import App from "./App.vue";
 import Shop from "./pages/Shop.vue";
-import { api, initialized, loadSession } from "./api";
+import {
+  api,
+  initialized,
+  loadSession,
+  adminAuthenticated,
+  sessionError,
+  errorText,
+} from "./api";
 import "./styles.scss";
 
 const router = createRouter({
@@ -16,13 +23,10 @@ const router = createRouter({
       component: () => import("./pages/DonationOrder.vue"),
     },
     { path: "/products/:id", component: () => import("./pages/Product.vue") },
-    { path: "/orders/:id", component: () => import("./pages/Order.vue") },
-    { path: "/claim", component: () => import("./pages/Order.vue") },
-    { path: "/admin/login", component: () => import("./pages/Login.vue") },
     {
-      path: "/admin/:section?",
-      component: () => import("./pages/Admin.vue"),
-      meta: { admin: true },
+      path: "/center/:section?/:id?",
+      component: () => import("./pages/Center.vue"),
+      meta: { center: true },
     },
     { path: "/:pathMatch(.*)*", component: Shop },
   ],
@@ -38,14 +42,24 @@ router.beforeEach(async (to) => {
     }
   }
   if (initialized.value === false && to.path !== "/setup") return "/setup";
-  if (initialized.value === true && to.path === "/setup") return "/admin/login";
-  if (to.meta.admin) {
+  if (initialized.value === true && to.path === "/setup")
+    return "/center/login";
+  if (to.meta.center) {
+    sessionError.value = "";
     try {
-      if (!(await loadSession())) return "/admin/login";
-      initialized.value = true;
-    } catch {
-      return "/admin/login";
+      await loadSession();
+    } catch (error) {
+      adminAuthenticated.value = undefined;
+      sessionError.value = errorText(error);
+      return;
     }
+    const section = String(to.params.section ?? "");
+    if (adminAuthenticated.value && section === "login") return "/center";
+    if (
+      !adminAuthenticated.value &&
+      !["", "orders", "query", "login"].includes(section)
+    )
+      return "/center/login";
   }
 });
 createApp(App).use(router).mount("#app");

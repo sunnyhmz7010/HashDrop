@@ -4,6 +4,7 @@ import { t } from "../i18n";
 import { onMounted, reactive, ref } from "vue";
 import { NAlert, NButton, NInput, NSpin, useMessage } from "naive-ui";
 import { api, errorText, site, type Settings } from "../api";
+import MarkdownEditor from "./MarkdownEditor.vue";
 const message = useMessage(),
   data = ref<Settings>({
     title: "",
@@ -117,12 +118,11 @@ async function save() {
               <label class="field-label" for="notice-input">{{
                 t("settings.notice")
               }}</label>
-              <n-input
+              <MarkdownEditor
                 id="notice"
-                v-model:value="form.notice"
-                type="textarea"
+                input-id="notice-input"
+                v-model="form.notice"
                 :maxlength="2000"
-                :input-props="{ id: 'notice-input' }"
               />
             </div>
           </div>

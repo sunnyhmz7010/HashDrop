@@ -317,7 +317,7 @@ func (a *App) syncOrderLocked(ctx context.Context, id string) error {
 		return err
 	}
 	if o.GatewayID == "" {
-		remote, checkout, err := client.create(ctx, o, strings.TrimRight(config.PublicURL, "/")+"/claim")
+		remote, checkout, err := client.create(ctx, o, strings.TrimRight(config.PublicURL, "/")+"/center/orders/"+o.ID)
 		if err != nil {
 			return err
 		}

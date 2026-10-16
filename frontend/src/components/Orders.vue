@@ -4,11 +4,12 @@
 <script setup lang="ts">
 import { formatTime, t } from "../i18n";
 
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import {
   NAlert,
   NButton,
-  NEmpty,
+  NDatePicker,
+  NPagination,
   NInput,
   NSelect,
   NSpin,
@@ -17,7 +18,7 @@ import {
   useMessage,
 } from "naive-ui";
 import FormDialog from "./FormDialog.vue";
-import OrderRow from "./OrderRow.vue";
+import OrderTable from "./OrderTable.vue";
 import {
   api,
   copyText,
@@ -33,8 +34,8 @@ const message = useMessage(),
   dialog = useDialog(),
   items = ref<Order[]>([]),
   page = ref(1),
-  more = ref(false),
-  status = ref(""),
+  total = ref(0),
+  pageSize = ref(20),
   loading = ref(false),
   error = ref(""),
   show = ref(false),
@@ -49,23 +50,98 @@ const statusOptions = computed(() => [
     label,
   })),
 ]);
-async function load(next = page.value) {
-  if (loading.value) return;
+const filters = reactive({
+  status: "",
+  currency: "",
+  min: "",
+  max: "",
+  from: null as number | null,
+  to: null as number | null,
+});
+const applied = ref({ ...filters });
+const filtered = computed(
+  () =>
+    !!(
+      applied.value.status ||
+      applied.value.currency ||
+      applied.value.min ||
+      applied.value.max ||
+      applied.value.from !== null ||
+      applied.value.to !== null
+    ),
+);
+const currencies = computed(() => [
+  { label: t("orders.all_currencies"), value: "" },
+  ...["CNY", "USD", "EUR", "GBP", "HKD", "JPY", "USDT", "USDC"].map(
+    (value) => ({ label: value, value }),
+  ),
+]);
+let listGeneration = 0;
+let listController: AbortController | undefined;
+let lastRequest = { page: 1, query: { ...filters } };
+const compactQuery = window.matchMedia("(max-width: 600px)");
+const compact = ref(compactQuery.matches);
+const updateCompact = () => {
+  compact.value = compactQuery.matches;
+};
+onMounted(() => compactQuery.addEventListener("change", updateCompact));
+onUnmounted(() => compactQuery.removeEventListener("change", updateCompact));
+async function load(next = page.value, source = applied.value) {
+  const query = { ...source };
+  lastRequest = { page: next, query };
+  const current = ++listGeneration;
+  listController?.abort();
+  listController = new AbortController();
   loading.value = true;
   error.value = "";
+  const params = new URLSearchParams({
+    page: String(next),
+    status: query.status,
+    currency: query.currency,
+  });
+  if (query.min.trim()) params.set("min_amount", query.min.trim());
+  if (query.max.trim()) params.set("max_amount", query.max.trim());
+  if (query.from !== null)
+    params.set("created_from", String(Math.floor(query.from / 1000)));
+  if (query.to !== null)
+    params.set("created_to", String(Math.floor(query.to / 1000)));
   try {
-    const result = await api<{ items: Order[]; has_more: boolean }>(
-      `/admin/orders?page=${next}&status=${status.value}`,
-    );
+    const result = await api<{
+      items: Order[];
+      page: number;
+      total: number;
+      page_size: number;
+    }>("/admin/orders?" + params, { signal: listController.signal });
+    if (current !== listGeneration) return;
     items.value = result.items;
-    page.value = next;
-    more.value = result.has_more;
+    page.value = result.page;
+    total.value = result.total;
+    pageSize.value = result.page_size;
+    applied.value = query;
   } catch (e) {
-    error.value = errorText(e);
+    if (current === listGeneration) error.value = errorText(e);
   } finally {
-    loading.value = false;
+    if (current === listGeneration) loading.value = false;
   }
 }
+function resetFilters() {
+  Object.assign(filters, {
+    status: "",
+    currency: "",
+    min: "",
+    max: "",
+    from: null,
+    to: null,
+  });
+  void load(1, filters);
+}
+function retryList() {
+  void load(lastRequest.page, lastRequest.query);
+}
+onUnmounted(() => {
+  listGeneration++;
+  listController?.abort();
+});
 onMounted(() => load());
 let generation = 0,
   controller: AbortController | undefined;
@@ -187,62 +263,104 @@ async function copy(value: string) {
 <template>
   <div class="orders-view grid">
     <div class="section-title">
-      <h2>{{ t("orders.title") }}</h2>
+      <h2>{{ t("nav.orders") }}</h2>
       <n-button :loading="loading" @click="load()">{{
         t("orders.refresh_list")
       }}</n-button>
     </div>
     <n-alert v-if="error" type="error"
       >{{ errorText(error) }}
-      <n-button text @click="load()">{{ t("common.retry") }}</n-button></n-alert
+      <n-button text @click="retryList">{{
+        t("common.retry")
+      }}</n-button></n-alert
     >
     <div class="orders-workbench">
-      <div class="orders-filter">
-        <n-select
-          class="status-filter"
-          v-model:value="status"
-          :options="statusOptions"
-          :disabled="loading"
-          @update:value="() => load(1)"
-          :aria-label="t('orders.status_filter')"
-        />
-      </div>
-      <n-spin :show="loading"
-        ><div class="orders-table">
-          <div class="orders-table-head order-row--plain">
-            <span>{{ t("orders.product_column") }}</span
-            ><span>{{ t("orders.payment_status") }}</span
-            ><span>{{ t("common.amount") }}</span
-            ><span>{{ t("orders.delivery_column") }}</span
-            ><span>{{ t("common.created_at") }}</span>
-          </div>
-          <OrderRow
-            v-for="order in items"
-            :key="order.id"
-            :order="order"
-            @open="open(order)"
+      <form class="orders-filter" @submit.prevent="load(1, filters)">
+        <div class="field-stack">
+          <label class="field-label">{{ t("orders.status_filter") }}</label
+          ><n-select
+            v-model:value="filters.status"
+            :options="statusOptions"
+            :aria-label="t('orders.status_filter')"
           />
-          <div
-            v-if="!items.length && !loading && !error"
-            class="orders-table-empty"
-          >
-            <n-empty
-              :description="
-                status ? t('orders.filtered_empty') : t('orders.empty')
-              "
+        </div>
+        <div class="field-stack orders-date-filter">
+          <label class="field-label">{{ t("orders.created_range") }}</label>
+          <div class="date-filter-inputs">
+            <n-date-picker
+              v-model:value="filters.from"
+              type="datetime"
+              clearable
+              :placeholder="t('orders.created_from')"
             />
-          </div></div
-      ></n-spin>
-      <div class="orders-pagination">
-        <span>{{ t("pagination.page", { page }) }}</span>
-        <div class="topbar-actions">
-          <n-button :disabled="page === 1 || loading" @click="load(page - 1)">{{
-            t("pagination.previous")
+            <n-date-picker
+              v-model:value="filters.to"
+              type="datetime"
+              clearable
+              :placeholder="t('orders.created_to')"
+            />
+          </div>
+        </div>
+        <div class="field-stack">
+          <label class="field-label">{{ t("orders.currency_filter") }}</label
+          ><n-select
+            v-model:value="filters.currency"
+            :options="currencies"
+            :aria-label="t('orders.currency_filter')"
+            @update:value="
+              (value) => {
+                if (!value) filters.min = filters.max = '';
+              }
+            "
+          />
+        </div>
+        <div class="field-stack">
+          <label class="field-label" for="orders-min">{{
+            t("orders.min_amount")
+          }}</label
+          ><n-input
+            v-model:value="filters.min"
+            :disabled="!filters.currency"
+            :input-props="{ id: 'orders-min', inputmode: 'decimal' }"
+          />
+        </div>
+        <div class="field-stack">
+          <label class="field-label" for="orders-max">{{
+            t("orders.max_amount")
+          }}</label
+          ><n-input
+            v-model:value="filters.max"
+            :disabled="!filters.currency"
+            :input-props="{ id: 'orders-max', inputmode: 'decimal' }"
+          />
+        </div>
+        <div class="row-actions">
+          <n-button type="primary" attr-type="submit" :loading="loading">{{
+            t("orders.apply_filters")
           }}</n-button
-          ><n-button :disabled="!more || loading" @click="load(page + 1)">{{
-            t("pagination.next")
+          ><n-button :disabled="loading" @click="resetFilters">{{
+            t("orders.reset_filters")
           }}</n-button>
         </div>
+      </form>
+      <OrderTable
+        :items="items"
+        :loading="loading"
+        :empty-text="filtered ? t('orders.filtered_empty') : t('orders.empty')"
+        :show-empty="!error"
+        @open="open"
+      />
+      <div class="orders-pagination">
+        <span>{{ t("orders.total_count", { total }) }}</span
+        ><n-pagination
+          :page="page"
+          :item-count="total"
+          :page-size="pageSize"
+          :page-slot="compact ? 5 : 7"
+          size="small"
+          :disabled="loading"
+          @update:page="(next) => load(next)"
+        />
       </div>
     </div>
   </div>
@@ -443,6 +561,47 @@ async function copy(value: string) {
 </template>
 
 <style scoped>
+.orders-workbench {
+  grid-template-columns: minmax(0, 1fr);
+}
+.orders-workbench > * {
+  min-width: 0;
+}
+.orders-filter {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 0;
+  align-items: end;
+}
+.orders-filter .field-stack {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+.date-filter-inputs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+.orders-date-filter {
+  grid-column: span 2;
+}
+.orders-pagination {
+  flex-wrap: wrap;
+}
+@media (max-width: 820px) {
+  .date-filter-inputs {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .orders-filter {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .orders-date-filter {
+    grid-column: auto;
+  }
+}
+
 .order-modal-title,
 .order-delivery-title {
   align-items: center;

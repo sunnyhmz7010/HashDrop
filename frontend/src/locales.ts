@@ -6,6 +6,42 @@ export type Locale = "zh-CN" | "en-US";
 export type I18nParams = Record<string, string | number | null | undefined>;
 
 const zh = {
+  "center.title": "查询中心",
+  "center.history": "订单历史",
+  "center.query": "查询交付",
+  "center.order_detail": "订单详情",
+  "center.back_history": "返回订单历史",
+  "center.admin_login": "管理员登录",
+  "center.import_key": "凭密钥查询",
+  "center.history_empty": "此浏览器还没有订单记录",
+  "center.history_help":
+    "这里保存此浏览器下单或凭密钥查询成功的订单。其他设备的订单请凭密钥导入；清理浏览器数据后需凭密钥恢复。",
+  "center.clear_history": "清除本地历史",
+  "center.clear_warning":
+    "将清除此浏览器保存的订单记录与相应领取凭证，不会删除服务器订单。请先备份密钥。",
+  "center.clear_failed": "部分本地记录或凭证未能清除，请重试。",
+  "center.history_cleared": "本地历史已清除",
+  "center.storage_error":
+    "浏览器无法可靠保存或读取本地历史，请自行备份领取密钥。",
+  "center.refresh_error":
+    "有 {count} 项订单查询未能刷新，当前保留本地记录。{error}",
+  "center.clear_confirm": "清除",
+  "center.session_error": "暂时无法确认登录状态：{error}",
+
+  "orders.created_range": "下单时间区间",
+  "orders.created_from": "开始时间",
+  "orders.created_to": "结束时间",
+  "orders.currency_filter": "订单币种",
+  "orders.all_currencies": "全部币种",
+  "orders.min_amount": "最低订单金额",
+  "orders.max_amount": "最高订单金额",
+  "orders.apply_filters": "筛选",
+  "orders.reset_filters": "重置",
+  "orders.total_count": "共 {total} 笔订单",
+  "errors.filter_currency": "金额筛选须选择币种",
+  "errors.filter_range_format": "筛选区间格式或精度无效",
+  "errors.filter_range_order": "筛选区间起点不能大于终点",
+
   "nav.donation": "赞赏页",
   "donation.unavailable": "赞赏页暂未开启。",
   "donation.amount": "自定义赞赏金额",
@@ -98,7 +134,6 @@ const zh = {
   "orders.deleted": "订单已删除",
   "common.copied": "已复制",
   "common.copy_manual": "请手动复制内容",
-  "orders.title": "订单管理",
   "orders.refresh_list": "刷新列表",
   "common.retry": "重试",
   "orders.status_filter": "付款状态筛选",
@@ -143,8 +178,8 @@ const zh = {
   "stock.delete_title": "删除这份库存？",
   "stock.delete_warning": "删除后无法恢复，仅允许删除尚未预留的库存。",
   "common.delete": "删除",
-  "nav.products": "商品管理",
-  "nav.inventories": "库存管理",
+  "nav.products": "商品",
+  "nav.inventories": "库存",
   "inventory.add": "新增库存池",
   "inventory.edit": "编辑库存池",
   "inventory.name": "库存池名称",
@@ -155,9 +190,7 @@ const zh = {
   "inventory.association_help":
     "多个商品可共享同一库存池。更换关联仅影响新订单，上架前须选择库存池。",
   "inventory.create_first":
-    "请先到库存管理创建库存池；未关联的商品可以保存为下架草稿。",
-  "inventory.help":
-    "库存池独立管理交付类型和内容，可供多个商品共享。删除商品不会删除库存。",
+    "请先到库存创建库存池；未关联的商品可以保存为下架草稿。",
   "inventory.kind_help":
     "交付类型属于库存池；如需更换类型，请新建库存池并调整商品关联。",
   "inventory.products": "关联商品",
@@ -244,7 +277,6 @@ const zh = {
   "nav.orders": "订单",
   "nav.open_menu": "打开管理菜单",
   "nav.logout": "退出登录",
-  "nav.admin": "管理后台",
   "nav.menu": "管理菜单",
   "login.title": "登录后台",
   "login.username": "管理员账号",
@@ -437,7 +469,7 @@ const zh = {
   "errors.setup_rate": "初始化尝试过于频繁",
   "errors.setup_origin": "初始化请求来源无效",
   "errors.existing_database": "数据库已存在，请恢复原配置，不要重新初始化",
-  "nav.promotions": "优惠管理",
+  "nav.promotions": "优惠",
   "promotion.add": "新增优惠",
   "promotion.edit": "编辑优惠",
   "promotion.name": "优惠名称",
@@ -530,6 +562,44 @@ const zh = {
 
 export type MessageKey = keyof typeof zh;
 const en: Record<MessageKey, string> = {
+  "center.title": "Query center",
+  "center.history": "Order history",
+  "center.query": "Find delivery",
+  "center.order_detail": "Order details",
+  "center.back_history": "Back to order history",
+  "center.admin_login": "Admin sign in",
+  "center.import_key": "Find by claim key",
+  "center.history_empty": "No orders saved in this browser",
+  "center.history_help":
+    "Orders placed or successfully found in this browser appear here. Import orders from other devices using their claim keys. Clearing browser data requires the keys to restore access.",
+  "center.clear_history": "Clear local history",
+  "center.clear_warning":
+    "Remove order records and their claim credentials saved in this browser. Server orders will remain. Back up your keys first.",
+  "center.clear_failed":
+    "Some local records or credentials could not be cleared. Try again.",
+  "center.history_cleared": "Local history cleared",
+  "center.storage_error":
+    "This browser cannot reliably save or read local history. Back up your claim keys.",
+  "center.refresh_error":
+    "Could not refresh {count} order lookups. Local records are retained. {error}",
+  "center.clear_confirm": "Clear",
+  "center.session_error": "Unable to confirm sign-in status: {error}",
+
+  "orders.created_range": "Order creation range",
+  "orders.created_from": "Start time",
+  "orders.created_to": "End time",
+  "orders.currency_filter": "Order currency",
+  "orders.all_currencies": "All currencies",
+  "orders.min_amount": "Minimum order amount",
+  "orders.max_amount": "Maximum order amount",
+  "orders.apply_filters": "Filter",
+  "orders.reset_filters": "Reset",
+  "orders.total_count": "{total} orders",
+  "errors.filter_currency": "Select a currency to filter amounts",
+  "errors.filter_range_format": "Invalid filter range format or precision",
+  "errors.filter_range_order":
+    "The start of a filter range cannot exceed its end",
+
   "nav.donation": "Donation page",
   "donation.unavailable": "Donations are currently unavailable.",
   "donation.amount": "Donation amount",
@@ -632,7 +702,6 @@ const en: Record<MessageKey, string> = {
   "orders.deleted": "Order deleted",
   "common.copied": "Copied",
   "common.copy_manual": "Please copy the content manually",
-  "orders.title": "Order management",
   "orders.refresh_list": "Refresh list",
   "common.retry": "Retry",
   "orders.status_filter": "Filter by payment status",
@@ -691,8 +760,6 @@ const en: Record<MessageKey, string> = {
     "Products can share one pool. Changing the pool affects new orders only. Select a pool before publishing.",
   "inventory.create_first":
     "Create a pool in Inventory first. Products without a pool can be saved as unpublished drafts.",
-  "inventory.help":
-    "Pools manage delivery types and content independently and can be shared by multiple products. Deleting a product preserves its inventory.",
   "inventory.kind_help":
     "The delivery type belongs to the pool. To change it, create a new pool and update the product association.",
   "inventory.products": "Linked products",
@@ -791,7 +858,6 @@ const en: Record<MessageKey, string> = {
   "nav.orders": "Orders",
   "nav.open_menu": "Open admin menu",
   "nav.logout": "Sign out",
-  "nav.admin": "Admin panel",
   "nav.menu": "Admin menu",
   "login.title": "Admin sign in",
   "login.username": "Admin username",

@@ -36,7 +36,7 @@ export async function importInventory(
   pool: Inventory,
   content: string,
 ) {
-  await page.goto(`${process.env.HASHDROP_TEST_URL!}/admin/inventories`);
+  await page.goto(`${process.env.HASHDROP_TEST_URL!}/center/inventories`);
   const row = page.getByRole("row").filter({ hasText: pool.id });
   await row.getByRole("button", { name: "导入", exact: true }).click();
   await page.getByPlaceholder("每行一份库存").fill(content);
@@ -45,10 +45,12 @@ export async function importInventory(
 }
 
 export async function loginAdmin(page: Page) {
-  await page.goto(`${process.env.HASHDROP_TEST_URL!}/admin/login`);
+  await page.goto(`${process.env.HASHDROP_TEST_URL!}/center/login`);
   await page.locator("#password input").fill("test-password-only");
   await page.getByRole("button", { name: "登录", exact: true }).click();
-  await expect(page.locator(".workspace-frame")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /^(退出登录|Sign out)$/ }),
+  ).toBeVisible();
 }
 
 export const test = base.extend<{ browserState: void }>({

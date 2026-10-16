@@ -2,6 +2,8 @@ import { t, translateError } from "../i18n";
 import { computed, ref } from "vue";
 
 export const csrf = ref("");
+export const adminAuthenticated = ref<boolean>();
+export const sessionError = ref("");
 export const initialized = ref<boolean>();
 export const site = ref({ title: "HashDrop", notice: "" });
 export class APIError extends Error {
@@ -42,7 +44,10 @@ export async function api<T>(
     throw new APIError(response.status, t("errors.response_json"));
   });
   if (!response.ok) {
-    if (response.status === 401 && path.startsWith("/admin/")) csrf.value = "";
+    if (response.status === 401 && path.startsWith("/admin/")) {
+      csrf.value = "";
+      if (path !== "/admin/login") adminAuthenticated.value = false;
+    }
     throw new APIError(
       response.status,
       value.error ?? t("errors.request_failed"),
@@ -266,6 +271,7 @@ export async function loadSession(): Promise<boolean> {
   try {
     const result = await api<{ csrf: string }>("/admin/session");
     csrf.value = result.csrf;
+    adminAuthenticated.value = true;
     return true;
   } catch (error) {
     if (error instanceof APIError && error.status === 401) return false;

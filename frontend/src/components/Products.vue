@@ -10,13 +10,11 @@ import {
   NSelect,
   NSpin,
   NSwitch,
-  NTabs,
-  NTabPane,
   useDialog,
   useMessage,
 } from "naive-ui";
 import FormDialog from "./FormDialog.vue";
-import MarkdownContent from "./MarkdownContent.vue";
+import MarkdownEditor from "./MarkdownEditor.vue";
 import {
   api,
   errorText,
@@ -264,13 +262,8 @@ function removeProduct(product: Product) {
       </div>
     </div>
     <div v-else-if="!loading && !error" class="panel empty-panel">
-      <n-empty :description="t('product.empty')"
-        ><template #extra
-          ><n-button @click="edit()">{{ t("product.add") }}</n-button></template
-        ></n-empty
-      >
-    </div></n-spin
-  >
+      <n-empty :description="t('product.empty')" /></div
+  ></n-spin>
   <FormDialog
     v-model:show="editor"
     :title="model.id ? t('product.edit') : t('product.add')"
@@ -361,28 +354,12 @@ function removeProduct(product: Product) {
           <label class="field-label" for="product-details-input">{{
             t("product.details")
           }}</label>
-          <n-tabs type="line" animated>
-            <n-tab-pane
-              name="edit"
-              :tab="t('product.edit_details')"
-              display-directive="show"
-            >
-              <n-input
-                id="details"
-                v-model:value="model.details"
-                type="textarea"
-                :maxlength="65536"
-                :input-props="{ id: 'product-details-input' }"
-              />
-            </n-tab-pane>
-            <n-tab-pane
-              name="preview"
-              :tab="t('product.preview_details')"
-              display-directive="if"
-            >
-              <MarkdownContent :content="model.details" />
-            </n-tab-pane>
-          </n-tabs>
+          <MarkdownEditor
+            id="details"
+            input-id="product-details-input"
+            v-model="model.details"
+            :maxlength="65536"
+          />
         </div>
       </div>
       <n-alert v-if="formError" type="error" class="space-top">{{

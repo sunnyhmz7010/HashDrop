@@ -5,7 +5,7 @@ test("网页初始化、自动登录与只写私钥", async ({ page, request }) 
     await request.get(`${process.env.HASHDROP_TEST_URL}/__test/setup-fixture`)
   ).json();
   const base: string = fixture.url;
-  await page.goto(`${base}/admin`);
+  await page.goto(`${base}/center`);
   await expect(
     page.getByRole("heading", { name: "初始化 HashDrop" }),
   ).toBeVisible();
@@ -65,7 +65,7 @@ test("网页初始化、自动登录与只写私钥", async ({ page, request }) 
   await expect(
     page.getByRole("heading", { name: "概览", exact: true }),
   ).toBeVisible();
-  await expect(page).toHaveURL(`${base}/admin`);
+  await expect(page).toHaveURL(`${base}/center`);
   await page.reload();
   await expect(
     page.getByRole("heading", { name: "概览", exact: true }),
@@ -128,5 +128,5 @@ test("网页初始化、自动登录与只写私钥", async ({ page, request }) 
     "网页部署测试店铺",
   );
   await page.goto(`${base}/setup`);
-  await expect(page.getByRole("heading", { name: "登录后台" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "概览", exact: true })).toBeVisible();
 });

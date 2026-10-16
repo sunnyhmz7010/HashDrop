@@ -27,7 +27,7 @@ onMounted(async () => {
   try {
     const status = await api<{ initialized: boolean }>("/setup/status");
     initialized.value = status.initialized;
-    if (status.initialized) await router.replace("/admin/login");
+    if (status.initialized) await router.replace("/center/login");
   } catch (e) {
     error.value = errorText(e);
   }
@@ -48,7 +48,7 @@ async function submit() {
     site.value = { title: result.title, notice: "" };
     form.password_confirm = form.private_key = "";
     finished.value = true;
-    loginURL.value = `${result.public_url}/admin/login`;
+    loginURL.value = `${result.public_url}/center/login`;
     // 复用现有登录校验；跨域时不能把密码或会话凭证放入跳转链接。
     if (result.public_url === location.origin) {
       const session = await api<{ csrf: string }>("/admin/login", {
@@ -56,7 +56,7 @@ async function submit() {
         body: { username: form.username, password: form.password },
       });
       csrf.value = session.csrf;
-      await router.replace("/admin");
+      await router.replace("/center");
     } else location.replace(loginURL.value);
   } catch (e) {
     error.value = errorText(e);

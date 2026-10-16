@@ -7,7 +7,7 @@ export async function stubPaymentPage(page: Page) {
   await page.route("**/pay/gw-*", (route) =>
     route.fulfill({
       contentType: "text/html",
-      body: `<html><head><title>HashPay test</title></head><body><h1>HashPay</h1><a href="${base}/claim">Return to store</a></body></html>`,
+      body: `<html><head><title>HashPay test</title></head><body><h1>HashPay</h1><a href="${base}/center/orders/${new URL(route.request().url()).pathname.slice("/pay/gw-".length)}">Return to store</a></body></html>`,
     }),
   );
 }
@@ -45,6 +45,6 @@ export async function placeTestOrder(page: Page, customKey?: string) {
     key,
     order,
     orderID: order.id,
-    receipt: `${base}/orders/${order.id}#token=${encodeURIComponent(key)}`,
+    receipt: `${base}/center/orders/${order.id}#token=${encodeURIComponent(key)}`,
   };
 }

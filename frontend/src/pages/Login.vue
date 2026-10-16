@@ -6,7 +6,6 @@ import { t } from "../i18n";
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { NAlert, NButton, NInput } from "naive-ui";
-import StoreLayout from "../components/StoreLayout.vue";
 import { api, csrf, errorText } from "../api";
 const username = ref("admin"),
   password = ref(""),
@@ -27,7 +26,7 @@ async function login() {
     });
     csrf.value = result.csrf;
     password.value = "";
-    await router.push("/admin");
+    await router.push("/center");
   } catch (e) {
     error.value = errorText(e);
   } finally {
@@ -36,42 +35,40 @@ async function login() {
 }
 </script>
 <template>
-  <StoreLayout
-    ><main class="page">
-      <section class="panel grid login-panel">
-        <div class="section-title">
-          <h1>{{ t("login.title") }}</h1>
+  <main>
+    <section class="panel grid login-panel">
+      <div class="section-title">
+        <h1>{{ t("login.title") }}</h1>
+      </div>
+      <form class="form-grid" @submit.prevent="login">
+        <div class="field-stack">
+          <label class="field-label" for="login-username">{{
+            t("login.username")
+          }}</label>
+          <n-input
+            id="username"
+            v-model:value="username"
+            :maxlength="120"
+            :input-props="{ id: 'login-username', autocomplete: 'username' }"
+          />
         </div>
-        <form class="form-grid" @submit.prevent="login">
-          <div class="field-stack">
-            <label class="field-label" for="login-username">{{
-              t("login.username")
-            }}</label>
-            <n-input
-              id="username"
-              v-model:value="username"
-              :maxlength="120"
-              :input-props="{ id: 'login-username', autocomplete: 'username' }"
-            />
-          </div>
-          <div class="field-stack">
-            <label class="field-label" for="password">{{
-              t("login.password")
-            }}</label
-            ><n-input
-              id="password"
-              v-model:value="password"
-              type="password"
-              show-password-on="click"
-              :input-props="{ autocomplete: 'current-password' }"
-            />
-          </div>
-          <n-alert v-if="error" type="error">{{ errorText(error) }}</n-alert
-          ><n-button attr-type="submit" type="primary" block :loading="busy">{{
-            t("login.submit")
-          }}</n-button>
-        </form>
-      </section>
-    </main></StoreLayout
-  >
+        <div class="field-stack">
+          <label class="field-label" for="password">{{
+            t("login.password")
+          }}</label
+          ><n-input
+            id="password"
+            v-model:value="password"
+            type="password"
+            show-password-on="click"
+            :input-props="{ autocomplete: 'current-password' }"
+          />
+        </div>
+        <n-alert v-if="error" type="error">{{ errorText(error) }}</n-alert
+        ><n-button attr-type="submit" type="primary" block :loading="busy">{{
+          t("login.submit")
+        }}</n-button>
+      </form>
+    </section>
+  </main>
 </template>

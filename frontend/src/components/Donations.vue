@@ -277,7 +277,7 @@ async function recheck(id: string) {
       </div>
       <p class="helper">
         {{ t("donation.gateway_help") }}
-        <router-link to="/admin/settings" class="text-link">{{
+        <router-link to="/center/settings" class="text-link">{{
           t("nav.settings")
         }}</router-link>
       </p>

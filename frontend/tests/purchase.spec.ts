@@ -52,11 +52,7 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   await page.reload();
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole("button", { name: "下单", exact: true }).click();
-  const {
-    key: token,
-    orderID,
-    receipt,
-  } = await placeTestOrder(page);
+  const { key: token, orderID, receipt } = await placeTestOrder(page);
   await page.goto(receipt);
   await expect(page.getByRole("heading", { name: "订单状态" })).toBeVisible();
   // 公网普通 HTTP 没有 Clipboard API，使用浏览器复制后仍能保存领取链接。
@@ -110,20 +106,20 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   ).toBeTruthy();
   await page.reload();
   await expect(page.locator(".delivery-item pre")).toContainText("卡密-");
-  await page.goto(`${base}/claim`);
+  await page.goto(`${base}/center/query`);
   await page.getByRole("button", { name: "查询其他订单", exact: true }).click();
   await page.locator("#claim-key").fill(token);
   await page.getByRole("button", { name: "查看订单", exact: true }).click();
-  await expect(page).toHaveURL(`${base}/claim`);
+  await expect(page).toHaveURL(`${base}/center/query`);
   await expect(page.locator(".delivery-item pre")).toContainText("卡密-");
-  await page.goto(`${base}/admin/login`);
+  await page.goto(`${base}/center/login`);
   await page.locator("#password input").fill("test-password-only");
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "概览", exact: true }),
   ).toBeVisible();
   const pool = await createInventory(page, "浏览器验证库存");
-  await page.getByRole("menuitem", { name: "商品管理", exact: true }).click();
+  await page.getByRole("menuitem", { name: "商品", exact: true }).click();
   await page.getByRole("button", { name: "新增商品" }).click();
   await page.locator("#product-name input").fill("浏览器验证商品");
   await page.locator("#price input").fill("18.50");
@@ -197,7 +193,7 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
       () => document.documentElement.scrollWidth > window.innerWidth + 1,
     );
     expect(overflow).toBeFalsy();
-    await page.goto(`${base}/admin/products`);
+    await page.goto(`${base}/center/products`);
     await expect(page.getByRole("button", { name: "新增商品" })).toBeVisible();
     expect(
       await page.evaluate(
@@ -217,15 +213,13 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
       await page.getByRole("button", { name: "打开管理菜单" }).click();
       await page.getByRole("menuitem", { name: "订单", exact: true }).click();
       await expect(
-        page.getByRole("heading", { name: "订单管理" }),
+        page.getByRole("heading", { name: "订单", exact: true }),
       ).toBeVisible();
       await expect(
         page.getByRole("menuitem", { name: "订单", exact: true }),
       ).toHaveCount(0);
       await page.getByRole("button", { name: "打开管理菜单" }).click();
-      await page
-        .getByRole("menuitem", { name: "商品管理", exact: true })
-        .click();
+      await page.getByRole("menuitem", { name: "商品", exact: true }).click();
       await expect(
         page.getByRole("button", { name: "新增商品" }),
       ).toBeVisible();
@@ -265,7 +259,7 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   );
   expect(interrupted.url()).toBe(receipt);
   await interrupted.close();
-  await page.goto(`${base}/admin/products`);
+  await page.goto(`${base}/center/products`);
   await expect(
     page.getByRole("row").filter({ hasText: "浏览器验证商品" }),
   ).toBeVisible();
@@ -274,7 +268,7 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   await page.goto(base);
   await expect(page.locator(".product-card").first()).toBeVisible();
   await expect(page.locator(".n-spin-content--spinning")).toHaveCount(0);
-  await page.goto(`${base}/admin/orders`);
+  await page.goto(`${base}/center/orders`);
   await expect(page.locator(".order-row").first()).toBeVisible();
   await expect(page.locator(".n-spin-content--spinning")).toHaveCount(0);
   const blocked = await page.context().newPage();
@@ -306,7 +300,7 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   );
   await blocked.getByRole("button", { name: "复制", exact: true }).click();
   const blockedOrder = await placeTestOrder(blocked);
-  await blocked.goto(`${base}/claim`);
+  await blocked.goto(`${base}/center/orders/${blockedOrder.orderID}`);
   await blocked.locator("#claim-key").fill(blockedOrder.key);
   await blocked.getByRole("button", { name: "查看订单", exact: true }).click();
   await expect(
@@ -320,7 +314,7 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
     blocked.getByRole("button", { name: "前往 HashPay 付款" }),
   ).toBeEnabled();
   await blocked.close();
-  await page.goto(`${base}/admin/orders`);
+  await page.goto(`${base}/center/orders`);
   const paidRow = page.locator(".order-row").filter({ hasText: orderID });
   await paidRow.getByRole("button", { name: orderID, exact: true }).click();
   await page.getByRole("button", { name: "刷新状态", exact: true }).click();

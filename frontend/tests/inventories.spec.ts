@@ -12,13 +12,13 @@ test("独立库存池共享、商品改绑与历史订单交付", async ({ page,
   test.setTimeout(90_000);
   const base = process.env.HASHDROP_TEST_URL!;
   await loginAdmin(page);
-  await page.getByRole("menuitem", { name: "库存管理", exact: true }).click();
+  await page.getByRole("menuitem", { name: "库存", exact: true }).click();
 
   async function createPool(
     name: string,
     content?: string,
   ): Promise<Inventory> {
-    await page.goto(`${base}/admin/inventories`);
+    await page.goto(`${base}/center/inventories`);
     await page.getByRole("button", { name: "新增库存池", exact: true }).click();
     const editor = page.getByRole("dialog", {
       name: "新增库存池",
@@ -78,7 +78,7 @@ test("独立库存池共享、商品改绑与历史订单交付", async ({ page,
   await expect(poolRow).toContainText("2 / 0 / 0");
 
   async function createProduct(name: string, price: string): Promise<Product> {
-    await page.goto(`${base}/admin/products`);
+    await page.goto(`${base}/center/products`);
     await page.getByRole("button", { name: "新增商品", exact: true }).click();
     const editor = page.getByRole("dialog", { name: "新增商品", exact: true });
     await expect(
@@ -127,7 +127,7 @@ test("独立库存池共享、商品改绑与历史订单交付", async ({ page,
     };
   }
   async function viewOrder(order: { key: string }) {
-    await page.goto(`${base}/claim`);
+    await page.goto(`${base}/center/query`);
     await page
       .getByRole("button", { name: "查询其他订单", exact: true })
       .click();
@@ -135,11 +135,11 @@ test("独立库存池共享、商品改绑与历史订单交付", async ({ page,
     await page.getByRole("button", { name: "查看订单", exact: true }).click();
   }
   const pending = await buy(first);
-  await page.goto(`${base}/admin/products`);
+  await page.goto(`${base}/center/products`);
   await expect(firstRow).toContainText("1 / 1 / 0");
   await expect(secondRow).toContainText("1 / 1 / 0");
   const fixed = await createPool("改绑固定内容库存", "REBOUND-CONTENT");
-  await page.goto(`${base}/admin/products`);
+  await page.goto(`${base}/center/products`);
   await firstRow.getByRole("button", { name: "编辑", exact: true }).click();
   await selectProductInventory(page, fixed);
   await page.getByRole("button", { name: "保存商品", exact: true }).click();
@@ -175,7 +175,7 @@ test("独立库存池共享、商品改绑与历史订单交付", async ({ page,
   expect(await page.locator(".delivery-item pre").innerText()).not.toBe(
     originalContent,
   );
-  await page.goto(`${base}/admin/inventories`);
+  await page.goto(`${base}/center/inventories`);
   await expect(poolRow).toContainText("0 / 0 / 2");
   await expect(poolRow).toContainText("1 个商品");
   const session = await (
@@ -195,7 +195,7 @@ test("独立库存池共享、商品改绑与历史订单交付", async ({ page,
 
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.goto(`${base}/admin/inventories`);
+    await page.goto(`${base}/center/inventories`);
     await expect(poolRow).toBeVisible();
     await verifyViewport(page);
     await page.screenshot({
@@ -217,7 +217,7 @@ test("独立库存池共享、商品改绑与历史订单交付", async ({ page,
       animations: "disabled",
     });
     await editor.getByRole("button", { name: "取消", exact: true }).click();
-    await page.goto(`${base}/admin/products`);
+    await page.goto(`${base}/center/products`);
     await secondRow.getByRole("button", { name: "编辑", exact: true }).click();
     await expect(page.locator("#product-inventory")).toContainText(pool.name);
     await expect(

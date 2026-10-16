@@ -8,6 +8,7 @@ import { onMounted, ref } from "vue";
 import { NAlert, NButton, NEmpty, NSkeleton, NSpin, NTooltip } from "naive-ui";
 import StoreLayout from "../components/StoreLayout.vue";
 import ProductIcon from "../components/ProductIcon.vue";
+import MarkdownContent from "../components/MarkdownContent.vue";
 import PurchaseDialog from "../components/PurchaseDialog.vue";
 import ProductSummary from "../components/ProductSummary.vue";
 import { api, errorText, type Product } from "../api";
@@ -41,17 +42,14 @@ onMounted(load);
 </script>
 <template>
   <StoreLayout>
-    <template #actions>
-      <router-link to="/admin"
-        ><n-button size="small" secondary>{{
-          t("nav.admin")
-        }}</n-button></router-link
-      >
-    </template>
     <main class="checkout-page catalog-page">
-      <n-alert v-if="notice" type="info" :show-icon="false">{{
-        notice
-      }}</n-alert>
+      <section
+        v-if="notice.trim()"
+        class="panel shop-announcement"
+        :aria-label="t('settings.notice')"
+      >
+        <MarkdownContent :content="notice" />
+      </section>
       <n-alert v-if="error" type="error"
         >{{ errorText(error) }}
         <n-button text @click="load">{{

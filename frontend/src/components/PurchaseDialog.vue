@@ -28,8 +28,11 @@ import {
   generateClaimKey,
   newPurchaseID,
   rememberClaimKey,
+  rememberOrder,
   rememberPurchase,
   restorePurchase,
+  historyCleared,
+  clearedOrderIDs,
 } from "../claim";
 import { t } from "../i18n";
 import FormDialog from "./FormDialog.vue";
@@ -202,6 +205,14 @@ watch(
   },
 );
 onUnmounted(() => controller?.abort());
+watch(historyCleared, () => {
+  // 清除另一标签页的已创建订单时，取消本页重试，避免旧响应恢复凭证。
+  if (!show.value || !clearedOrderIDs.value.includes(requestID)) return;
+  controller?.abort();
+  busy.value = false;
+  forgetPurchase(requestID);
+  show.value = false;
+});
 function chooseKey(value: string) {
   if (busy.value || locked.value) return;
   key.value = value;
@@ -220,7 +231,8 @@ async function copyKey() {
 }
 async function openClaim() {
   rememberClaimKey(key.value);
-  await router.push("/claim");
+  if (order.value) rememberOrder(order.value, key.value);
+  await router.push("/center/query");
   show.value = false;
 }
 async function buy() {
@@ -268,7 +280,9 @@ async function buy() {
       },
       signal,
     });
+    if (signal.aborted) return;
     order.value = result.order;
+    rememberOrder(result.order, key.value);
     locked.value = true;
     const deadline = Date.now() + 20_000;
     while (!signal.aborted) {

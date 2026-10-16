@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -118,49 +119,114 @@ func (a *App) overview(w http.ResponseWriter, r *http.Request) error {
 	reply(w, 200, map[string]int{"products": products, "stock": stock, "orders": orders, "paid": paid, "manual": manual})
 	return nil
 }
+
+var zeroFilterAmount = regexp.MustCompile("^0+(\\.0+)?$")
+
 func (a *App) adminOrders(w http.ResponseWriter, r *http.Request) error {
-	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	values := r.URL.Query()
+	page, _ := strconv.Atoi(values.Get("page"))
 	if page < 1 {
 		page = 1
 	}
 	if page > 100000 {
 		return bad("页码超限")
 	}
-	status := r.URL.Query().Get("status")
-	q := orderSelect + " WHERE deleted_at IS NULL"
+	where := " WHERE deleted_at IS NULL"
 	args := []any{}
-	if status != "" {
+	if status := values.Get("status"); status != "" {
 		switch status {
 		case "creating", "pending", "paid", "expired", "invalid", "review", "closed":
 		default:
 			return bad("状态无效")
 		}
-		q += " AND payment_status=?"
+		where += " AND payment_status=?"
 		args = append(args, status)
 	}
-	q += " ORDER BY created_at DESC,id DESC LIMIT 21 OFFSET ?"
-	args = append(args, (page-1)*20)
-	rows, err := a.db.QueryContext(r.Context(), q, args...)
+	currency := values.Get("currency")
+	if currency != "" {
+		if _, err := currencyScale(currency); err != nil {
+			return bad(err.Error())
+		}
+		where += " AND currency=?"
+		args = append(args, currency)
+	}
+	bounds := map[string]int64{}
+	for _, field := range []string{"created_from", "created_to", "min_amount", "max_amount"} {
+		value := strings.TrimSpace(values.Get(field))
+		if value == "" {
+			continue
+		}
+		var amount int64
+		var err error
+		column, operator := "created_at", ">="
+		if field == "created_to" || field == "max_amount" {
+			operator = "<="
+		}
+		if field == "min_amount" || field == "max_amount" {
+			if currency == "" {
+				return bad("金额筛选须选择币种")
+			}
+			column = "total"
+			if !zeroFilterAmount.MatchString(value) {
+				amount, err = decimalMinor(value, currency)
+			}
+		} else {
+			amount, err = strconv.ParseInt(value, 10, 64)
+		}
+		if err != nil || amount < 0 {
+			return bad("筛选区间格式或精度无效")
+		}
+		bounds[field] = amount
+		where += " AND " + column + operator + "?"
+		args = append(args, amount)
+	}
+	for _, pair := range [][2]string{{"created_from", "created_to"}, {"min_amount", "max_amount"}} {
+		low, hasLow := bounds[pair[0]]
+		high, hasHigh := bounds[pair[1]]
+		if hasLow && hasHigh && low > high {
+			return bad("筛选区间起点不能大于终点")
+		}
+	}
+	// 总数和当前页使用同一数据库快照，避免订单变化导致页码与列表不一致。
+	tx, err := a.db.BeginTx(r.Context(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var total int
+	if err = tx.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM orders"+where, args...).Scan(&total); err != nil {
+		return err
+	}
+	lastPage := (total + 19) / 20
+	if lastPage < 1 {
+		lastPage = 1
+	}
+	if page > lastPage {
+		page = lastPage
+	}
+	rows, err := tx.QueryContext(r.Context(), orderSelect+where+" ORDER BY created_at DESC,id DESC LIMIT 20 OFFSET ?", append(args, (page-1)*20)...)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	items := []Order{}
 	for rows.Next() {
-		o, e := scanOrder(rows)
-		if e != nil {
-			return e
+		order, scanErr := scanOrder(rows)
+		if scanErr != nil {
+			return scanErr
 		}
-		items = append(items, o)
+		items = append(items, order)
 	}
 	if err = rows.Err(); err != nil {
 		return err
 	}
-	more := len(items) > 20
-	if more {
-		items = items[:20]
+	if err = rows.Close(); err != nil {
+		return err
 	}
-	reply(w, 200, map[string]any{"items": items, "page": page, "has_more": more})
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	reply(w, 200, map[string]any{"items": items, "page": page, "total": total, "page_size": 20, "has_more": page*20 < total})
 	return nil
 }
 func (a *App) adminOrder(w http.ResponseWriter, r *http.Request) error {

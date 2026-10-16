@@ -49,13 +49,6 @@ watch(
 
 <template>
   <StoreLayout>
-    <template #actions>
-      <router-link to="/admin"
-        ><n-button size="small" secondary>{{
-          t("nav.admin")
-        }}</n-button></router-link
-      >
-    </template>
     <main class="page product-page">
       <template v-if="product">
         <section class="panel product-summary">

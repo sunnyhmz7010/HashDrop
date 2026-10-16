@@ -246,7 +246,6 @@ function removeStock(id: string) {
       }}</n-button>
     </div>
   </div>
-  <p class="muted space-bottom">{{ t("inventory.help") }}</p>
   <n-alert v-if="error" type="error" class="space-bottom">
     {{ errorText(error) }}
     <n-button text @click="load">{{ t("common.retry") }}</n-button>
@@ -334,13 +333,7 @@ function removeStock(id: string) {
       </div>
     </div>
     <div v-else-if="!loading && !error" class="panel empty-panel">
-      <n-empty :description="t('inventory.empty')"
-        ><template #extra
-          ><n-button @click="edit()">{{
-            t("inventory.add")
-          }}</n-button></template
-        ></n-empty
-      >
+      <n-empty :description="t('inventory.empty')" />
     </div>
   </n-spin>
 

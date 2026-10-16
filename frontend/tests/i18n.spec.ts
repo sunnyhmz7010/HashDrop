@@ -41,13 +41,15 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
   ).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("lang", "en-US");
   await expect(
-    page.locator(".topbar").getByRole("link", { name: "Find / Claim" }),
+    page.locator(".topbar").getByRole("link", { name: "Query center" }),
   ).toBeVisible();
   const adminEntry = page
     .locator(".topbar")
-    .getByRole("button", { name: "Admin panel", exact: true });
+    .getByRole("button", { name: "Query center", exact: true });
   await expect(adminEntry).toBeVisible();
   await adminEntry.click();
+  await expect(page.getByRole("heading", { name: "Order history", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Admin sign in", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Admin sign in", exact: true }),
   ).toBeVisible();
@@ -68,14 +70,14 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
   await expect(
     page
       .locator(".topbar")
-      .getByRole("button", { name: "Admin panel", exact: true }),
+      .getByRole("button", { name: "Query center", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Place order", exact: true }).click();
   await expect(
     page.getByRole("dialog", { name: "Confirm order" }),
   ).toBeVisible();
   const { key: token, orderID } = await placeTestOrder(page);
-  await page.goto(`${base}/claim`);
+  await page.goto(`${base}/center/query`);
   await expect(
     page.getByRole("button", { name: "Pay with HashPay" }),
   ).toBeVisible({ timeout: 15_000 });
@@ -107,7 +109,7 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
     order.deliveries[0].content,
   );
 
-  await page.goto(`${base}/admin/login`);
+  await page.goto(`${base}/center/login`);
   await page.locator("#password input").fill("wrong-password");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(
@@ -181,7 +183,7 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await page.locator(".topbar .brand").click();
   await expect(page).toHaveURL(`${base}/`);
-  await page.goto(`${base}/claim`);
+  await page.goto(`${base}/center/query`);
   await page
     .getByRole("button", { name: "Find another order", exact: true })
     .click();
@@ -202,12 +204,12 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
     await page.setViewportSize({ width, height: 450 });
     await page.goto(base);
     await expect(
-      page.getByRole("button", { name: "Admin panel", exact: true }),
+      page.getByRole("button", { name: "Query center", exact: true }),
     ).toBeInViewport();
     const shopBrand = (await page.locator(".topbar .brand").boundingBox())!;
-    await page.goto(`${base}/admin/orders`);
+    await page.goto(`${base}/center/orders`);
     await expect(
-      page.getByRole("heading", { name: "Order management" }),
+      page.getByRole("heading", { name: "Orders", exact: true }),
     ).toBeVisible();
     const managementBrand = (await page
       .locator(".topbar .brand")
@@ -244,9 +246,9 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
       ).toBe(401);
     }
   }
-  await page.goto(`${base}/admin/orders`);
+  await page.goto(`${base}/center/orders`);
   await expect(
-    page.getByRole("heading", { name: "Admin sign in" }),
+    page.getByRole("heading", { name: "Order history" }),
   ).toBeVisible();
 
   const blocked = await page.context().newPage();

@@ -126,7 +126,7 @@ test("Markdown 详情保存、图片视频展示与首页直接下单", async ({
     "static",
     "测试交付内容",
   );
-  await page.getByRole("menuitem", { name: "商品管理", exact: true }).click();
+  await page.getByRole("menuitem", { name: "商品", exact: true }).click();
   await page.getByRole("button", { name: "新增商品" }).click();
   const editor = page.getByRole("dialog", { name: "新增商品", exact: true });
   await editor.locator("#product-name input").fill(name);
@@ -335,7 +335,7 @@ test("隐藏商品通过链接购买，取消隐藏后恢复首页入口", async
   const name = "链接专用卡密";
   await loginAdmin(page);
   const pool = await createInventory(page, "链接专用库存");
-  await page.getByRole("menuitem", { name: "商品管理", exact: true }).click();
+  await page.getByRole("menuitem", { name: "商品", exact: true }).click();
   await page.getByRole("button", { name: "新增商品", exact: true }).click();
   const editor = page.getByRole("dialog", { name: "新增商品", exact: true });
   await editor.locator("#product-name input").fill(name);
@@ -355,7 +355,7 @@ test("隐藏商品通过链接购买，取消隐藏后恢复首页入口", async
   const row = page.getByRole("row").filter({ hasText: name });
   await expect(row).toContainText("隐藏商品");
   await importInventory(page, pool, "HIDDEN-001\nHIDDEN-002\nHIDDEN-003");
-  await page.goto(`${base}/admin/products`);
+  await page.goto(`${base}/center/products`);
   await expect(row).toContainText("3 / 0 / 0");
   await page.reload();
   await row.getByRole("button", { name: "编辑", exact: true }).click();
@@ -397,7 +397,7 @@ test("隐藏商品通过链接购买，取消隐藏后恢复首页入口", async
     ),
   ).toBeFalsy();
   const { orderID } = await placeTestOrder(page);
-  await page.goto(`${base}/claim`);
+  await page.goto(`${base}/center/query`);
   await expect(
     page.getByRole("button", { name: "前往 HashPay 付款" }),
   ).toBeVisible({ timeout: 15_000 });
@@ -410,7 +410,7 @@ test("隐藏商品通过链接购买，取消隐藏后恢复首页入口", async
     await expect(result).toContainText("HIDDEN-");
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto(`${base}/admin/products`);
+  await page.goto(`${base}/center/products`);
   await row.getByRole("button", { name: "编辑", exact: true }).click();
   await page.getByRole("switch", { name: "隐藏商品", exact: true }).click();
   await page.getByRole("button", { name: "保存商品", exact: true }).click();
@@ -421,7 +421,7 @@ test("隐藏商品通过链接购买，取消隐藏后恢复首页入口", async
   await card.getByRole("link", { name: "详情", exact: true }).click();
   await expect(page.getByRole("link", { name: "返回商城" })).toBeVisible();
   // 恢复隐藏，避免本用例的库存进入共享测试商城，影响后续购买用例。
-  await page.goto(`${base}/admin/products`);
+  await page.goto(`${base}/center/products`);
   await row.getByRole("button", { name: "编辑", exact: true }).click();
   await page.getByRole("switch", { name: "隐藏商品", exact: true }).click();
   await page.getByRole("button", { name: "保存商品", exact: true }).click();
@@ -433,7 +433,7 @@ test("删除商品保留订单和领取，失败可重试", async ({ page, reque
   const name = "删除验证卡密";
   await loginAdmin(page);
   const pool = await createInventory(page, "删除验证库存");
-  await page.getByRole("menuitem", { name: "商品管理", exact: true }).click();
+  await page.getByRole("menuitem", { name: "商品", exact: true }).click();
   await page.getByRole("button", { name: "新增商品", exact: true }).click();
   await page.locator("#product-name input").fill(name);
   await page.locator("#price input").fill("7.50");
@@ -452,7 +452,7 @@ test("删除商品保留订单和领取，失败可重试", async ({ page, reque
     pool,
     "DELETE-001\nDELETE-002\nDELETE-003\nDELETE-004",
   );
-  await page.goto(`${base}/admin/products`);
+  await page.goto(`${base}/center/products`);
   await expect(row).toContainText("4 / 0 / 0");
 
   const receipts: { url: string; id: string }[] = [];
@@ -480,7 +480,7 @@ test("删除商品保留订单和领取，失败可重试", async ({ page, reque
       await expect(page.locator(".delivery-item pre")).toContainText("DELETE-");
     }
   }
-  await page.goto(`${base}/admin/products`);
+  await page.goto(`${base}/center/products`);
   await row.getByRole("button", { name: "编辑", exact: true }).click();
   const editor = page.getByRole("dialog", { name: "编辑商品", exact: true });
   await expect(editor.locator(".publication-state")).toContainText("上架");
@@ -562,7 +562,7 @@ test("删除商品保留订单和领取，失败可重试", async ({ page, reque
     await page.goto(receipt.url);
     await expect(page.locator(".delivery-item pre")).toContainText("DELETE-");
   }
-  await page.goto(`${base}/admin/orders`);
+  await page.goto(`${base}/center/orders`);
   for (const receipt of receipts) {
     await expect(
       page.locator(".order-row").filter({ hasText: receipt.id }),

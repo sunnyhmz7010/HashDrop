@@ -2,7 +2,7 @@ import { test, expect } from "./fixture";
 import { placeTestOrder, stubPaymentPage } from "./checkout";
 import type { Product } from "../src/api";
 
-test("密钥生成、重复候选和跨设备领取", async ({ page, request }) => {
+test("密钥生成、重复候选和跨设备领取", async ({ page, request, browser }) => {
   const base = process.env.HASHDROP_TEST_URL!;
   const products: Product[] = await (
     await request.get(`${base}/api/products`)
@@ -56,8 +56,9 @@ test("密钥生成、重复候选和跨设备领取", async ({ page, request }) 
     (await request.post(`${base}/__test/pay/${first.orderID}`)).ok(),
   ).toBeTruthy();
   // 新页面不继承原页面 sessionStorage，模拟另一台设备只凭密钥领取。
-  const other = await page.context().newPage();
-  await other.goto(`${base}/claim`);
+  const otherContext = await browser.newContext({ locale: "zh-CN" });
+  const other = await otherContext.newPage();
+  await other.goto(`${base}/center/query`);
   await other.getByLabel("领取密钥", { exact: true }).fill("错误密钥");
   await other.getByRole("button", { name: "查看订单", exact: true }).click();
   await expect(
@@ -67,9 +68,9 @@ test("密钥生成、重复候选和跨设备领取", async ({ page, request }) 
   await other.getByLabel("领取密钥", { exact: true }).fill(key);
   await other.getByRole("button", { name: "查看订单", exact: true }).click();
   await expect(other.locator(".delivery-item pre")).toContainText("购买时内容");
-  expect(other.url()).toBe(`${base}/claim`);
+  expect(other.url()).toBe(`${base}/center/query`);
   await other.setViewportSize({ width: 390, height: 900 });
-  await other.close();
+  await otherContext.close();
 });
 
 test("下单响应中断后重试复用订单并直接支付", async ({ page, request }) => {
@@ -172,5 +173,5 @@ test("下单响应中断后重试复用订单并直接支付", async ({ page, re
   await expect(
     page.getByRole("button", { name: "前往 HashPay 付款" }),
   ).toBeEnabled();
-  expect(page.url()).toBe(`${base}/claim`);
+  expect(page.url()).toBe(`${base}/center/orders/${firstID}`);
 });

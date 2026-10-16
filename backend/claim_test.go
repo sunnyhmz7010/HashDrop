@@ -60,7 +60,7 @@ func TestClaimKeyLookupAndPayment(t *testing.T) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	for _, returnURL := range g.returnURLs {
-		if returnURL != a.config.PublicURL+"/claim" {
+		if returnURL != a.config.PublicURL+"/center/orders/"+o.ID {
 			t.Fatalf("支付返回地址包含额外凭证: %q", returnURL)
 		}
 	}

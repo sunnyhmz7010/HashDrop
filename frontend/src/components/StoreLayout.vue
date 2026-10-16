@@ -9,13 +9,12 @@ import AppHeader from "./AppHeader.vue";
 <template>
   <n-layout class="shell checkout-shell">
     <AppHeader
-      ><template #before-actions
-        ><router-link to="/claim"
+      ><template #actions
+        ><router-link to="/center"
           ><n-button size="small" secondary>{{
-            t("claim.nav")
+            t("center.title")
           }}</n-button></router-link
-        ></template
-      ><template #actions><slot name="actions" /></template
+        ><slot name="actions" /></template
     ></AppHeader>
     <n-layout-content class="checkout-content"><slot /></n-layout-content>
   </n-layout>

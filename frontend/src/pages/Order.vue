@@ -6,7 +6,6 @@ import { formatTime, t } from "../i18n";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { NAlert, NButton, NCheckbox, NInput, NTag, useMessage } from "naive-ui";
-import StoreLayout from "../components/StoreLayout.vue";
 import {
   api,
   copyText,
@@ -20,6 +19,9 @@ import {
   forgetClaimKey,
   forgetPurchase,
   rememberClaimKey,
+  rememberOrder,
+  restoreOrderKey,
+  historyCleared,
   restoreClaimKey,
 } from "../claim";
 
@@ -39,7 +41,7 @@ let timer: ReturnType<typeof setTimeout> | undefined,
   generation = 0;
 const receipt = computed(() =>
   orderID.value && token.value
-    ? `${location.origin}/orders/${orderID.value}#token=${encodeURIComponent(token.value)}`
+    ? `${location.origin}/center/orders/${orderID.value}#token=${encodeURIComponent(token.value)}`
     : "",
 );
 const credential = computed(() =>
@@ -70,8 +72,9 @@ async function load() {
         });
     if (current !== generation) return;
     detail.value = result;
+    const orderSaved = rememberOrder(result.order, token.value);
     error.value = "";
-    storageError.value = !rememberClaimKey(token.value);
+    storageError.value = !rememberClaimKey(token.value) && !orderSaved;
     if (result.order.delivery_status === "done")
       forgetPurchase(result.order.id);
     if (
@@ -99,20 +102,31 @@ watch(
     if (orderID.value) {
       try {
         token.value =
-          fromURL ?? sessionStorage.getItem(`hashdrop:${orderID.value}`) ?? "";
+          fromURL ??
+          (restoreOrderKey(orderID.value) ||
+            sessionStorage.getItem(`hashdrop:${orderID.value}`) ||
+            "");
         if (fromURL)
           sessionStorage.setItem(`hashdrop:${orderID.value}`, fromURL);
       } catch {
         token.value = fromURL ?? "";
         storageError.value = true;
       }
-    } else token.value = restoreClaimKey();
+    } else token.value = route.query.new === "1" ? "" : restoreClaimKey();
     inputKey.value = token.value;
     void load();
   },
   { immediate: true },
 );
 onUnmounted(stop);
+watch(historyCleared, () => {
+  stop();
+  detail.value = undefined;
+  token.value = inputKey.value = orderID.value = "";
+  error.value = "";
+  credentialSaved.value = false;
+  if (route.params.id || route.hash) void router.replace("/center/query");
+});
 async function claim() {
   if (!inputKey.value.trim() || Array.from(inputKey.value).length > 128) {
     error.value = t("errors.claim_key");
@@ -126,8 +140,11 @@ async function claim() {
   orderID.value = "";
   token.value = inputKey.value;
   await load();
-  if (detail.value && (route.path !== "/claim" || route.hash))
-    await router.replace("/claim");
+  if (
+    detail.value &&
+    (route.path !== "/center/query" || route.hash || route.query.new)
+  )
+    await router.replace("/center/query");
 }
 async function otherOrder() {
   stop();
@@ -138,7 +155,8 @@ async function otherOrder() {
   orderID.value = "";
   forgetClaimKey();
   credentialSaved.value = false;
-  if (route.path !== "/claim" || route.hash) await router.replace("/claim");
+  if (route.path !== "/center/query" || route.hash)
+    await router.replace({ path: "/center/query", query: { new: "1" } });
 }
 async function copy(value: string) {
   try {
@@ -150,7 +168,9 @@ async function copy(value: string) {
   }
 }
 function pay() {
-  storageError.value = !rememberClaimKey(token.value);
+  const orderSaved =
+    detail.value && rememberOrder(detail.value.order, token.value);
+  storageError.value = !rememberClaimKey(token.value) && !orderSaved;
   if (storageError.value && !credentialSaved.value) return;
   if (detail.value?.order.checkout_url)
     location.assign(detail.value.order.checkout_url);
@@ -168,12 +188,20 @@ const statusType = computed(() => {
 });
 </script>
 <template>
-  <StoreLayout>
-    <main v-if="!detail" class="page">
+  <div class="guest-order-view grid">
+    <div class="section-title">
+      <h2>
+        {{ route.params.id ? t("center.order_detail") : t("center.query") }}
+      </h2>
+      <n-button
+        v-if="route.params.id"
+        secondary
+        @click="router.push('/center/orders')"
+        >{{ t("center.back_history") }}</n-button
+      >
+    </div>
+    <main v-if="!detail" class="grid">
       <form class="panel grid claim-panel" @submit.prevent="claim">
-        <div class="section-title">
-          <h1>{{ t("claim.title") }}</h1>
-        </div>
         <p class="muted">{{ t("claim.private_help") }}</p>
         <n-alert v-if="orderID && !token" type="warning">{{
           t("claim.missing")
@@ -396,10 +424,14 @@ const statusType = computed(() => {
         </template>
       </section>
     </main>
-  </StoreLayout>
+  </div>
 </template>
 
 <style scoped lang="scss">
+.guest-order-view .checkout-page {
+  padding: 0;
+  width: 100%;
+}
 .claim-panel {
   max-width: 460px;
   margin: 0 auto;

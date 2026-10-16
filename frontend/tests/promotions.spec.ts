@@ -16,7 +16,7 @@ test("优惠管理保存、叠加报价、价格变化确认与历史领取", as
   const base = process.env.HASHDROP_TEST_URL!;
   await loginAdmin(page);
   await expect(
-    page.getByRole("menuitem", { name: "优惠管理", exact: true }),
+    page.getByRole("menuitem", { name: "优惠", exact: true }),
   ).toBeVisible();
   const session = await (
     await page.request.get(`${base}/api/admin/session`)
@@ -47,7 +47,7 @@ test("优惠管理保存、叠加报价、价格变化确认与历史领取", as
   }
   const first = await createProduct("优惠叠加商品", false),
     second = await createProduct("优惠范围备用商品", true);
-  await page.getByRole("menuitem", { name: "优惠管理", exact: true }).click();
+  await page.getByRole("menuitem", { name: "优惠", exact: true }).click();
   async function select(form: Locator, selector: string, name: string) {
     await form.locator(selector).click();
     await page
@@ -206,7 +206,7 @@ test("优惠管理保存、叠加报价、价格变化确认与历史领取", as
     "save10",
   );
   const { orderID } = await placeTestOrder(page);
-  const receipt = `${base}/claim`;
+  const receipt = `${base}/center/query`;
   await page.goto(receipt);
   await expect(page.locator(".checkout-amount-block")).toContainText(
     "64.00 CNY",
@@ -228,7 +228,7 @@ test("优惠管理保存、叠加报价、价格变化确认与历史领取", as
     ).ok(),
   ).toBeTruthy();
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto(`${base}/admin/promotions`);
+  await page.goto(`${base}/center/promotions`);
   await activity.getByRole("button", { name: "编辑", exact: true }).click();
   await edit
     .locator("#promotion-products .n-tag")

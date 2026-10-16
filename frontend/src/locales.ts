@@ -261,6 +261,7 @@ const zh = {
   "claim.nav": "查询 / 领取",
   "claim.key": "领取密钥",
   "claim.key_placeholder": "自行填写或点击生成",
+  "claim.lookup_placeholder": "请输入下单时保存的领取密钥",
   "claim.key_help":
     "密钥为查询和领取的唯一凭证，请复制保存，丢失后无法自动找回。区分大小写，最多 128 个字符；简单密钥容易被猜中，建议点击生成。",
   "claim.generate": "生成",
@@ -315,6 +316,7 @@ const zh = {
   "common.reload": "重新加载",
   "setup.title": "初始化 HashDrop",
   "setup.finished": "初始化已完成，请通过配置的站点地址登录。",
+  "setup.auto_login_failed": "自动登录失败，请通过上方入口登录。原因：{error}",
   "setup.login": "进入管理员登录",
   "setup.http_warning":
     "当前连接为 HTTP，提交的密码和私钥会明文传输，请在可信网络中完成初始化。",
@@ -810,6 +812,8 @@ const en: Record<MessageKey, string> = {
   "claim.nav": "Find / Claim",
   "claim.key": "Claim key",
   "claim.key_placeholder": "Enter a key or select Generate",
+  "claim.lookup_placeholder":
+    "Enter the claim key saved when placing your order",
   "claim.key_help":
     "This key is your only credential to find and claim the order. Copy and save it; lost keys cannot be recovered automatically. Case-sensitive, up to 128 characters. Simple keys are easy to guess; use Generate for a random key.",
   "claim.generate": "Generate",
@@ -871,6 +875,8 @@ const en: Record<MessageKey, string> = {
   "common.reload": "Reload",
   "setup.title": "Initialize HashDrop",
   "setup.finished": "Setup is complete. Sign in using the configured site URL.",
+  "setup.auto_login_failed":
+    "Automatic sign-in failed. Use the sign-in link above. Reason: {error}",
   "setup.login": "Go to admin sign in",
   "setup.http_warning":
     "This connection uses HTTP. Passwords and private keys are transmitted in plain text. Complete setup on a trusted network.",

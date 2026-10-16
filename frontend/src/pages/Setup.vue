@@ -4,7 +4,7 @@ import { t } from "../i18n";
 import { onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { NAlert, NButton, NInput } from "naive-ui";
-import { api, errorText, initialized, site } from "../api";
+import { api, csrf, errorText, initialized, site } from "../api";
 import LocaleSwitch from "../components/LocaleSwitch.vue";
 
 const router = useRouter(),
@@ -46,15 +46,22 @@ async function submit() {
     });
     initialized.value = true;
     site.value = { title: result.title, notice: "" };
-    form.password = form.password_confirm = form.private_key = "";
+    form.password_confirm = form.private_key = "";
     finished.value = true;
     loginURL.value = `${result.public_url}/admin/login`;
-    // 登录的 Origin 必须与站点地址一致，保存后引导到实际配置地址。
-    if (result.public_url === location.origin)
-      await router.replace("/admin/login");
+    // 复用现有登录校验；跨域时不能把密码或会话凭证放入跳转链接。
+    if (result.public_url === location.origin) {
+      const session = await api<{ csrf: string }>("/admin/login", {
+        method: "POST",
+        body: { username: form.username, password: form.password },
+      });
+      csrf.value = session.csrf;
+      await router.replace("/admin");
+    } else location.replace(loginURL.value);
   } catch (e) {
     error.value = errorText(e);
   } finally {
+    if (finished.value) form.password = "";
     busy.value = false;
   }
 }
@@ -170,6 +177,9 @@ function validatedSiteURL(): string {
           >{{ t("setup.submit") }}</n-button
         >
       </form>
+      <n-alert v-if="finished && error" type="warning" class="space-top">{{
+        t("setup.auto_login_failed", { error: errorText(error) })
+      }}</n-alert>
     </section>
   </main>
 </template>

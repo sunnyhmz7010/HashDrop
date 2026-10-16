@@ -182,7 +182,7 @@ const statusType = computed(() => {
           <label class="field-label" for="claim-key">{{ t("claim.key") }}</label
           ><n-input
             v-model:value="inputKey"
-            :placeholder="t('claim.key_placeholder')"
+            :placeholder="t('claim.lookup_placeholder')"
             :input-props="{
               id: 'claim-key',
               autocomplete: 'off',

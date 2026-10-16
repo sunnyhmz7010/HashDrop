@@ -1,6 +1,6 @@
 import { test, expect } from "./fixture";
 
-test("网页初始化、失败重填、HTTP 登录与只写私钥", async ({ page, request }) => {
+test("网页初始化、自动登录与只写私钥", async ({ page, request }) => {
   const fixture = await (
     await request.get(`${process.env.HASHDROP_TEST_URL}/__test/setup-fixture`)
   ).json();
@@ -17,6 +17,7 @@ test("网页初始化、失败重填、HTTP 登录与只写私钥", async ({ pag
   await expect(page.getByRole("switch")).toHaveCount(0);
   await page.getByLabel("管理员账号", { exact: true }).fill("store-owner");
   await page.getByLabel("站点名称", { exact: true }).fill("网页部署测试店铺");
+  await page.getByLabel("站点地址", { exact: true }).fill(base);
   await page.getByLabel("管理员密码", { exact: true }).fill("1");
   await page.getByLabel("确认密码", { exact: true }).fill("2");
   await page.getByRole("button", { name: "完成初始化", exact: true }).click();
@@ -61,7 +62,14 @@ test("网页初始化、失败重填、HTTP 登录与只写私钥", async ({ pag
   });
   await page.getByRole("button", { name: "完成初始化", exact: true }).click();
   await expect(page.getByLabel("管理员密码", { exact: true })).toBeDisabled();
-  await expect(page.getByRole("heading", { name: "登录后台" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "概览", exact: true }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(`${base}/admin`);
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "概览", exact: true }),
+  ).toBeVisible();
   await page.unroute("**/api/setup");
   const status = await request.get(`${base}/api/setup/status`);
   expect(await status.json()).toEqual({ initialized: true });
@@ -73,6 +81,8 @@ test("网页初始化、失败重填、HTTP 登录与只写私钥", async ({ pag
       })
     ).status(),
   ).toBe(409);
+  await page.getByRole("button", { name: "退出登录", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "登录后台" })).toBeVisible();
   await page.getByLabel("管理员账号", { exact: true }).fill("store-owner");
   await page.locator("#password input").fill("1");
   await page.getByRole("button", { name: "登录", exact: true }).click();

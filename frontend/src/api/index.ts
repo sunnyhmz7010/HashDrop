@@ -27,7 +27,15 @@ export async function api<T>(
 ): Promise<T> {
   const headers: Record<string, string> = {};
   if (options.body !== undefined) headers["Content-Type"] = "application/json";
-  if (options.token) headers.Authorization = `Bearer ${options.token}`;
+  if (options.token) {
+    // Header 仅传 ASCII，避免浏览器拒绝中文或规范化密钥首尾空格。
+    const bytes = new TextEncoder().encode(options.token);
+    const encoded = btoa(String.fromCharCode(...bytes))
+      .replaceAll("+", "-")
+      .replaceAll("/", "_")
+      .replace(/=+$/, "");
+    headers.Authorization = `ClaimKey ${encoded}`;
+  }
   if (csrf.value) headers["X-CSRF-Token"] = csrf.value;
   const response = await fetch(`/api${path}`, {
     method: options.method ?? "GET",
@@ -162,6 +170,9 @@ export interface DonationSettings {
   enabled: boolean;
   title: string;
   description: string;
+  currencies: DonationCurrencySettings[];
+}
+export interface DonationCurrencySettings {
   currency: string;
   amounts: number[];
   min_amount: number;
@@ -170,6 +181,8 @@ export interface DonationSettings {
 export interface Donation {
   id: string;
   title: string;
+  nickname: string;
+  show_public: boolean;
   amount: number;
   currency: string;
   gateway_id: string;
@@ -179,6 +192,17 @@ export interface Donation {
   paid_at: number;
   created_at: number;
   last_error: string;
+}
+export interface PublicDonation {
+  nickname: string;
+  amount: number;
+  currency: string;
+  paid_at: number;
+}
+export interface PublicDonationList {
+  items: PublicDonation[];
+  page: number;
+  has_more: boolean;
 }
 export interface DonationList {
   items: Donation[];
@@ -249,7 +273,10 @@ export function errorText(error: unknown): string {
         : t("errors.retry");
   return translateError(message);
 }
-export async function copyText(value: string): Promise<void> {
+export async function copyText(
+  value: string,
+  source: Element | null = document.activeElement,
+): Promise<void> {
   if (window.isSecureContext && navigator.clipboard) {
     await navigator.clipboard.writeText(value);
     return;
@@ -257,9 +284,13 @@ export async function copyText(value: string): Promise<void> {
   // 普通 HTTP 页面没有 Clipboard API，保留浏览器的用户操作复制能力。
   const input = document.createElement("textarea");
   input.value = value;
+  // 只读文本仍可选中复制，同时避免移动端唤起输入法。
+  input.readOnly = true;
   input.style.position = "fixed";
   input.style.opacity = "0";
-  document.body.appendChild(input);
+  // 留在当前弹窗内，避免焦点约束将焦点转回可编辑输入框。
+  const container = source?.closest('[role="dialog"]') ?? document.body;
+  container.appendChild(input);
   try {
     input.select();
     if (!document.execCommand("copy")) throw new Error(t("errors.copy_failed"));

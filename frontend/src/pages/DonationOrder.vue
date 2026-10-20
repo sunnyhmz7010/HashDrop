@@ -1,24 +1,9 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import {
-  NAlert,
-  NButton,
-  NCheckbox,
-  NInput,
-  NSkeleton,
-  NTag,
-  useMessage,
-} from "naive-ui";
+import { NAlert, NButton, NSkeleton, NTag } from "naive-ui";
 import StoreLayout from "../components/StoreLayout.vue";
-import {
-  api,
-  copyText,
-  errorText,
-  money,
-  paymentNames,
-  type Donation,
-} from "../api";
+import { api, errorText, money, paymentNames, type Donation } from "../api";
 import { formatTime, t } from "../i18n";
 import {
   donationToken,
@@ -29,22 +14,15 @@ const props = defineProps<{ embedded?: boolean }>();
 
 const route = useRoute(),
   router = useRouter(),
-  message = useMessage(),
   detail = ref<Donation>();
 const id = ref(""),
   token = ref(""),
   error = ref(""),
   busy = ref(false);
-const storageError = ref(false),
-  receiptSaved = ref(false);
+const storageError = ref(false);
 let timer: ReturnType<typeof setTimeout> | undefined,
   controller: AbortController | undefined,
   generation = 0;
-const receipt = computed(() =>
-  id.value && token.value
-    ? `${location.origin}/donate/orders/${id.value}#token=${token.value}`
-    : "",
-);
 const statusType = computed(() =>
   detail.value?.payment_status === "paid"
     ? "success"
@@ -103,7 +81,6 @@ watch(
     detail.value = undefined;
     error.value = "";
     storageError.value = false;
-    receiptSaved.value = false;
     id.value = String(route.params.id ?? "");
     const fromURL = new URLSearchParams(route.hash.slice(1)).get("token");
     try {
@@ -129,21 +106,10 @@ watch(donationsCleared, (ids) => {
   detail.value = undefined;
   token.value = "";
   error.value = "";
-  receiptSaved.value = false;
   if (props.embedded) void router.replace("/center/donations");
   else if (route.hash) void router.replace({ path: route.path });
 });
-async function copyReceipt() {
-  try {
-    await copyText(receipt.value);
-    receiptSaved.value = true;
-    message.success(t("common.copied"));
-  } catch {
-    message.warning(t("common.copy_manual"));
-  }
-}
 function pay() {
-  if (storageError.value && !receiptSaved.value) return;
   if (detail.value?.payment_status === "pending" && detail.value.checkout_url)
     location.assign(detail.value.checkout_url);
 }
@@ -171,9 +137,12 @@ function pay() {
             paymentNames[detail.payment_status]
           }}</n-tag>
         </div>
-        <n-alert v-if="!token" type="warning">{{
-          t("donation.missing_token")
-        }}</n-alert>
+        <n-alert v-if="!token" type="warning"
+          >{{ t("donation.missing_token") }}
+          <router-link to="/center/donations" class="text-link">{{
+            t("donation.lookup")
+          }}</router-link></n-alert
+        >
         <n-alert v-if="error" type="error"
           >{{ errorText(error) }}
           <n-button text :loading="busy" @click="load">{{
@@ -189,6 +158,18 @@ function pay() {
             money(detail.amount, detail.currency)
           }}</strong>
           <dl class="donation-meta">
+            <template v-if="detail.nickname">
+              <dt>{{ t("donation.nickname") }}</dt>
+              <dd>{{ detail.nickname }}</dd>
+              <dt>{{ t("donation.public_visibility") }}</dt>
+              <dd>
+                {{
+                  detail.show_public
+                    ? t("donation.public_yes")
+                    : t("donation.public_no")
+                }}
+              </dd>
+            </template>
             <dt>{{ t("orders.id") }}</dt>
             <dd>{{ detail.id }}</dd>
             <dt>{{ t("common.created_at") }}</dt>
@@ -210,33 +191,15 @@ function pay() {
             errorText(detail.last_error)
           }}</n-alert>
         </template>
-        <div v-if="receipt" class="field-stack">
-          <label class="field-label" for="donation-receipt-link">{{
-            t("donation.receipt_link")
-          }}</label>
-          <n-input
-            :value="receipt"
-            readonly
-            :input-props="{ id: 'donation-receipt-link' }"
-          />
-          <small class="field-help">{{ t("donation.private_help") }}</small>
-          <div class="row-actions">
-            <n-button @click="copyReceipt">{{ t("common.copy") }}</n-button>
-          </div>
-        </div>
-        <n-alert v-if="storageError && receipt" type="warning">{{
-          t("donation.storage_help")
+        <n-alert v-if="storageError && detail" type="warning">{{
+          detail.nickname
+            ? t("donation.storage_help")
+            : t("donation.legacy_storage_help")
         }}</n-alert>
-        <n-checkbox
-          v-if="storageError && receipt"
-          v-model:checked="receiptSaved"
-          >{{ t("donation.saved_receipt") }}</n-checkbox
-        >
         <div class="form-actions">
           <n-button
             v-if="detail?.payment_status === 'pending' && detail.checkout_url"
             type="primary"
-            :disabled="storageError && !receiptSaved"
             @click="pay"
             >{{ t("donation.pay") }}</n-button
           >

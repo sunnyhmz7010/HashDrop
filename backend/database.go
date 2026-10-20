@@ -42,7 +42,7 @@ func openDatabase(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, err
 	}
-	if version != 0 && version != 1 {
+	if version < 0 || version > 2 {
 		db.Close()
 		return nil, fmt.Errorf("数据库结构版本 %d 不受支持", version)
 	}
@@ -52,7 +52,33 @@ func openDatabase(path string) (*sql.DB, error) {
 			return nil, err
 		}
 	}
+	if version == 1 {
+		if err = migrateDatabaseV2(db); err != nil {
+			db.Close()
+			return nil, err
+		}
+	}
 	return db, nil
+}
+
+// 旧赞赏保持原凭证和隐私；新增字段默认不加入公开名单。
+func migrateDatabaseV2(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.Exec(`
+ALTER TABLE donations ADD COLUMN nickname TEXT NOT NULL DEFAULT '';
+ALTER TABLE donations ADD COLUMN show_public INTEGER NOT NULL DEFAULT 0 CHECK(show_public IN (0,1));
+ALTER TABLE donations ADD COLUMN request_id TEXT NOT NULL DEFAULT '';
+CREATE UNIQUE INDEX donations_nickname ON donations(nickname) WHERE nickname <> '';
+CREATE UNIQUE INDEX donations_request ON donations(request_id) WHERE request_id <> '';
+CREATE INDEX donations_public ON donations(payment_status,show_public,paid_at DESC,id DESC);
+PRAGMA user_version = 2;`); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func initializeDatabase(db *sql.DB) error {

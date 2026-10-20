@@ -63,6 +63,8 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /api/site", wrap(a.siteInfo))
 	mux.HandleFunc("GET /api/donation", wrap(a.publicDonationSettings))
 	mux.HandleFunc("POST /api/donations", wrap(a.createDonation))
+	mux.HandleFunc("POST /api/donations/lookup", wrap(a.lookupDonation))
+	mux.HandleFunc("GET /api/donations/public", wrap(a.publicDonations))
 	mux.HandleFunc("GET /api/donations/{id}", wrap(a.donationDetail))
 	mux.HandleFunc("GET /api/setup/status", wrap(a.setupStatus))
 	mux.HandleFunc("POST /api/setup", wrap(a.setup))

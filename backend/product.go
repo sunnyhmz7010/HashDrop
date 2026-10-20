@@ -148,13 +148,13 @@ func (a *App) saveProduct(w http.ResponseWriter, r *http.Request) error {
 	}
 	input.Name = strings.TrimSpace(input.Name)
 	input.Currency = strings.ToUpper(input.Currency)
-	if len(input.Name) == 0 || len(input.Name) > 120 || len(input.Description) > 4000 || input.Price <= 0 || input.Price > 9_000_000_000_000 {
+	if input.Name == "" || !utf8.ValidString(input.Name) || utf8.RuneCountInString(input.Name) > 120 || !utf8.ValidString(input.Description) || utf8.RuneCountInString(input.Description) > 4000 || input.Price <= 0 || input.Price > 9_000_000_000_000 {
 		return bad("商品名称、价格或内容长度无效")
 	}
 	if _, err := currencyScale(input.Currency); err != nil {
 		return bad(err.Error())
 	}
-	if input.Details != nil && utf8.RuneCountInString(*input.Details) > 65536 {
+	if input.Details != nil && (!utf8.ValidString(*input.Details) || utf8.RuneCountInString(*input.Details) > 65536) {
 		return bad("商品详情不能超过 65536 字符")
 	}
 	tx, err := a.db.BeginTx(r.Context(), nil)

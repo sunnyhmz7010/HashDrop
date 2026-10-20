@@ -26,7 +26,7 @@ const router = useRouter(),
 const page = ref(1),
   loading = ref(false),
   importing = ref(false),
-  link = ref(""),
+  nickname = ref(""),
   error = ref(""),
   importError = ref("");
 const items = computed(() =>
@@ -53,50 +53,51 @@ async function load(next = page.value) {
   const records = [...items.value];
   loading.value = true;
   error.value = "";
+  let failures = 0;
+  let lastError: unknown;
   try {
     for (const record of records) {
       if (signal.aborted) return;
-      const result = await api<Donation>(`/donations/${record.donation.id}`, {
-        token: record.token,
-        signal,
-      });
-      if (current !== generation) return;
-      rememberDonation(result, record.token);
+      try {
+        const result = await api<Donation>(`/donations/${record.donation.id}`, {
+          token: record.token,
+          signal,
+        });
+        if (current !== generation) return;
+        rememberDonation(result, record.token);
+      } catch (cause) {
+        if (signal.aborted || current !== generation) return;
+        failures++;
+        lastError = cause;
+      }
     }
-  } catch (cause) {
-    if (current === generation) error.value = errorText(cause);
+    if (failures && current === generation)
+      error.value = t("center.donation_refresh_error", {
+        count: failures,
+        error: errorText(lastError),
+      });
   } finally {
     if (current === generation) loading.value = false;
   }
 }
-async function importLink() {
+async function lookup() {
   if (importing.value) return;
   importing.value = true;
   importError.value = "";
   importController = new AbortController();
   const signal = importController.signal;
   try {
-    const url = new URL(link.value.trim());
-    const match =
-      /^\/(?:donate\/orders|center\/donations)\/(don_[A-Za-z0-9_-]{22,64})$/.exec(
-        url.pathname,
-      );
-    const token = new URLSearchParams(url.hash.slice(1)).get("token") ?? "";
-    if (
-      url.origin !== location.origin ||
-      url.username ||
-      url.password ||
-      !match ||
-      !/^[A-Za-z0-9_-]{43}$/.test(token)
-    )
-      throw new Error(t("center.donation_link_invalid"));
-    const result = await api<Donation>(`/donations/${match[1]}`, {
-      token,
+    const name = nickname.value.trim();
+    if (!name || Array.from(name).length > 128)
+      throw new Error(t("errors.donation_nickname"));
+    const result = await api<Donation>("/donations/lookup", {
+      method: "POST",
+      body: { nickname: name },
       signal,
     });
     if (signal.aborted) return;
-    rememberDonation(result, token);
-    link.value = "";
+    rememberDonation(result, result.nickname);
+    nickname.value = "";
     page.value = 1;
     await router.push(`/center/donations/${result.id}`);
   } catch (cause) {
@@ -124,7 +125,7 @@ function clear() {
 watch(donationsCleared, () => {
   stop();
   page.value = 1;
-  error.value = importError.value = link.value = "";
+  error.value = importError.value = nickname.value = "";
 });
 onMounted(() => load());
 onUnmounted(stop);
@@ -148,14 +149,17 @@ onUnmounted(stop);
     <n-alert v-if="donationStorageError" type="warning">{{
       t("center.donation_storage_error")
     }}</n-alert>
-    <form class="panel grid" @submit.prevent="importLink">
-      <label class="field-label" for="import-donation-link">{{
-        t("center.import_donation")
+    <form class="panel grid" @submit.prevent="lookup">
+      <label class="field-label" for="donation-query-nickname">{{
+        t("donation.lookup")
       }}</label>
       <n-input
-        v-model:value="link"
+        v-model:value="nickname"
         :disabled="importing"
-        :input-props="{ id: 'import-donation-link', autocomplete: 'off' }"
+        :input-props="{
+          id: 'donation-query-nickname',
+          autocomplete: 'nickname',
+        }"
       />
       <n-alert v-if="importError" type="error">{{ importError }}</n-alert>
       <div class="form-actions">
@@ -163,8 +167,8 @@ onUnmounted(stop);
           type="primary"
           attr-type="submit"
           :loading="importing"
-          :disabled="!link.trim() || importing"
-          >{{ t("common.import") }}</n-button
+          :disabled="!nickname.trim() || importing"
+          >{{ t("common.query") }}</n-button
         >
       </div>
     </form>
@@ -188,6 +192,9 @@ onUnmounted(stop);
             >{{ record.donation.id }}</n-button
           >
           <strong>{{ record.donation.title }}</strong>
+          <span v-if="record.donation.nickname">{{
+            record.donation.nickname
+          }}</span>
           <div class="row-actions">
             <span>{{
               money(record.donation.amount, record.donation.currency)

@@ -8,7 +8,7 @@ test("密钥生成、重复候选和跨设备领取", async ({ page, request, br
     await request.get(`${base}/api/products`)
   ).json();
   const product = products.find((item) => item.kind === "static")!;
-  const key = "自定密钥 AbC🔑-2026";
+  const key = "自定密钥 AbC🔑-2026 ";
   await page.goto(`${base}/products/${product.id}`);
   await page.getByRole("button", { name: "下单", exact: true }).click();
   const first = await placeTestOrder(page, key);
@@ -69,6 +69,13 @@ test("密钥生成、重复候选和跨设备领取", async ({ page, request, br
   await other.getByRole("button", { name: "查看订单", exact: true }).click();
   await expect(other.locator(".delivery-item pre")).toContainText("购买时内容");
   expect(other.url()).toBe(`${base}/center/query`);
+  // 会话失败不能阻断游客历史；详情 Header 需保留中文、emoji 和尾空格。
+  await other.route("**/api/admin/session", (route) => route.abort());
+  await other.goto(`${base}/center/history`);
+  await other.getByRole("button", { name: first.orderID, exact: true }).click();
+  await expect(other.locator(".delivery-item pre")).toContainText("购买时内容");
+  await other.reload();
+  await expect(other.locator(".delivery-item pre")).toContainText("购买时内容");
   await other.setViewportSize({ width: 390, height: 900 });
   await otherContext.close();
 });

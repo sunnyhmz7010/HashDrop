@@ -21,7 +21,12 @@ function read(): SavedDonation[] {
           /^don_[A-Za-z0-9_-]{22,64}$/.test(record.donation?.id) &&
           key === prefix + record.donation.id &&
           typeof record.token === "string" &&
-          /^[A-Za-z0-9_-]{43}$/.test(record.token) &&
+          (typeof record.donation.nickname === "string" &&
+          record.donation.nickname
+            ? record.token === record.donation.nickname &&
+              record.token.trim() === record.token &&
+              Array.from(record.token).length <= 128
+            : /^[A-Za-z0-9_-]{43}$/.test(record.token)) &&
           typeof record.donation.title === "string" &&
           typeof record.donation.currency === "string" &&
           typeof record.donation.payment_status === "string" &&
@@ -29,7 +34,14 @@ function read(): SavedDonation[] {
           record.donation.amount > 0 &&
           Number.isSafeInteger(record.donation.created_at)
         )
-          records.push(record);
+          records.push({
+            ...record,
+            donation: {
+              ...record.donation,
+              nickname: record.donation.nickname ?? "",
+              show_public: record.donation.show_public === true,
+            },
+          });
         else donationStorageError.value = true;
       } catch {
         donationStorageError.value = true;
@@ -61,6 +73,16 @@ export function rememberDonation(donation: Donation, token: string): boolean {
       b.donation.created_at - a.donation.created_at ||
       b.donation.id.localeCompare(a.donation.id),
   );
+  const intent = restoreDonationIntent();
+  if (
+    intent &&
+    donation.nickname === intent.nickname &&
+    donation.amount === intent.amount &&
+    donation.currency === intent.currency &&
+    donation.show_public === intent.show_public
+  )
+    // 昵称查询、详情或历史刷新已恢复同一笔记录，结束未知结果状态。
+    forgetDonationIntent();
   let saved = false;
   try {
     sessionStorage.setItem(`hashdrop:donation:${donation.id}`, token);
@@ -118,3 +140,58 @@ window.addEventListener("storage", (event) => {
     donationsCleared.value = ids;
   }
 });
+
+export interface DonationIntent {
+  request_id: string;
+  nickname: string;
+  show_public: boolean;
+  amount: number;
+  currency: string;
+}
+const intentStorage = "hashdrop:donation-intent";
+let pendingIntent: DonationIntent | undefined;
+
+export function restoreDonationIntent(): DonationIntent | undefined {
+  if (pendingIntent) return { ...pendingIntent };
+  try {
+    const value = JSON.parse(sessionStorage.getItem(intentStorage) ?? "null");
+    if (
+      value &&
+      /^[A-Za-z0-9_-]{22,64}$/.test(value.request_id) &&
+      typeof value.nickname === "string" &&
+      value.nickname.trim() === value.nickname &&
+      value.nickname.length > 0 &&
+      Array.from(value.nickname).length <= 128 &&
+      typeof value.show_public === "boolean" &&
+      Number.isSafeInteger(value.amount) &&
+      value.amount > 0 &&
+      value.amount <= 9_000_000_000_000 &&
+      typeof value.currency === "string"
+    ) {
+      pendingIntent = value;
+      return { ...value };
+    }
+  } catch {
+    console.warn("无法恢复待确认赞赏，请使用昵称查询已有记录");
+  }
+  return undefined;
+}
+
+export function rememberDonationIntent(intent: DonationIntent): boolean {
+  pendingIntent = { ...intent };
+  try {
+    sessionStorage.setItem(intentStorage, JSON.stringify(intent));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function forgetDonationIntent(): void {
+  pendingIntent = undefined;
+  try {
+    sessionStorage.removeItem(intentStorage);
+  } catch {
+    console.warn("无法清除待确认赞赏记录");
+  }
+}

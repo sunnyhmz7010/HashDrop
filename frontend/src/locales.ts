@@ -10,15 +10,16 @@ const zh = {
   "center.donations": "捐赠记录",
   "center.back_donations": "返回捐赠记录",
   "center.donations_help":
-    "这里仅保存此浏览器的捐赠记录，与商品订单分开。其他设备可通过完整捐赠查询链接导入；清除前请备份链接。",
+    "这里保存此浏览器的捐赠记录，与商品订单分开。其他设备或清理浏览器后可凭赞赏昵称查询。旧版无昵称记录仍可在原浏览器查看。",
   "center.donations_empty": "此浏览器还没有捐赠记录",
-  "center.import_donation": "导入捐赠查询链接",
-  "center.donation_link_invalid": "请输入本站完整的捐赠查询链接（含查询凭证）",
   "center.clear_donations": "清除本地捐赠记录",
   "center.clear_donations_warning":
-    "将清除此浏览器的捐赠记录与查询凭证，不影响商品订单或服务器记录。请先备份完整查询链接。",
+    "将清除此浏览器的捐赠记录，不影响商品订单或服务器记录。新记录可凭昵称恢复，旧版记录请先确认仍保留原有凭证。",
   "center.donation_storage_error":
-    "浏览器无法可靠保存或读取捐赠记录，请备份完整查询链接。",
+    "浏览器无法可靠保存或读取捐赠记录，请记住赞赏昵称；旧版记录请保留原有凭证。",
+  "center.donation_refresh_error":
+    "有 {count} 项赞赏记录未能刷新，已保留本地记录并继续刷新其余项目。{error}",
+  "common.query": "查询",
   "center.history": "订单历史",
   "center.query": "查询交付",
   "center.order_detail": "订单详情",
@@ -57,6 +58,28 @@ const zh = {
   "nav.donation": "赞赏页",
   "donation.unavailable": "赞赏页暂未开启。",
   "donation.amount": "自定义赞赏金额",
+  "donation.nickname": "赞赏昵称",
+  "donation.nickname_help":
+    "请自行填写 1–128 个字符的昵称，不能重复。昵称用于查询赞赏，请勿填写商品领取密钥、密码或其他私密信息。",
+  "donation.show_public": "在公开名单显示我的昵称和金额",
+  "donation.public_help":
+    "仅决定是否进入公开名单。知道昵称的人仍可查询对应记录。",
+  "donation.suggestions": "昵称已被使用，可选择推荐昵称",
+  "donation.lookup": "使用赞赏昵称查询",
+  "donation.retry_help":
+    "上次提交结果尚未确认。再次提交会继续同一笔赞赏，也可先用昵称查询。",
+  "donation.intent_storage_help":
+    "浏览器无法保存待确认请求，请保持此页并记住昵称。离开页面后可先凭昵称查询，避免重复提交。",
+  "donation.supporters": "感谢支持",
+  "donation.supporters_help": "仅展示赞赏者选择公开且已核验到账的记录。",
+  "donation.no_public_records": "暂无公开赞赏记录",
+  "donation.public_visibility": "公开展示",
+  "donation.public_yes": "加入公开名单",
+  "donation.public_no": "不加入公开名单",
+  "donation.add_currency": "添加币种",
+  "donation.remove_currency": "移除币种",
+  "donation.add_amount": "添加金额",
+  "donation.remove_amount": "移除金额",
   "donation.range": "金额范围：{min} – {max}",
   "donation.payment_help": "通过 HashPay 付款，付款结果以服务端核验为准。",
   "donation.submit": "确认金额并赞赏",
@@ -73,13 +96,12 @@ const zh = {
   "donation.waiting_help":
     "页面会自动查询付款状态，过期记录仍会补查可能迟到的付款。",
   "donation.paid_at": "到账时间",
-  "donation.receipt_link": "赞赏查询链接",
-  "donation.private_help":
-    "请保存完整链接。链接包含私密查询凭证，不会发送给 HashPay。",
-  "donation.missing_token": "缺少查询凭证，请使用已保存的完整赞赏查询链接。",
+  "donation.missing_token":
+    "此浏览器尚未保存这笔记录，请使用赞赏昵称查询。旧版记录仍需原有凭证。",
   "donation.storage_help":
-    "浏览器无法保存查询凭证。请先复制或手动保存完整查询链接，再前往付款。",
-  "donation.saved_receipt": "我已保存完整查询链接",
+    "浏览器无法保存这笔记录，请记住上方昵称，之后可凭昵称查询付款结果。",
+  "donation.legacy_storage_help":
+    "浏览器无法保存这笔旧版记录，请保留原有查询凭证。",
   "donation.pay": "前往 HashPay 付款",
   "donation.back": "返回赞赏页",
   "donation.open_page": "打开赞赏页",
@@ -90,7 +112,8 @@ const zh = {
   "donation.description": "赞赏说明（Markdown）",
   "donation.currency": "赞赏币种",
   "donation.presets": "预设金额",
-  "donation.presets_help": "最多 8 个，用逗号分隔；留空时仅提供自定义金额。",
+  "donation.presets_help":
+    "每个币种最多 8 个金额，可逐项添加或移除；全部移除后仅提供自定义金额。",
   "donation.min": "最低金额",
   "donation.max": "最高金额",
   "donation.gateway_help":
@@ -109,6 +132,13 @@ const zh = {
   "errors.donation_amount": "赞赏金额不在允许范围内",
   "errors.donation_token": "请输入有效的查询凭证",
   "errors.donation_missing": "赞赏记录或凭证无效",
+  "errors.donation_nickname": "赞赏昵称须为 1–128 个字符，不能全部为空白",
+  "errors.donation_request_id": "赞赏请求标识无效，请重新打开赞赏页面",
+  "errors.donation_request_changed": "赞赏请求内容已变化，请使用新的请求标识",
+  "errors.donation_nickname_used": "赞赏昵称已被使用，请更换或选择推荐昵称",
+  "errors.donation_nickname_missing": "赞赏昵称不存在",
+  "errors.donation_currencies": "请设置 1–8 个不重复的赞赏币种",
+  "errors.donation_currency_duplicate": "赞赏币种不能重复",
   "errors.donation_gateway_protected":
     "存在待核验付款的赞赏，暂不能更换支付网关或商户",
   "errors.donation_gateway_identity":
@@ -578,16 +608,16 @@ const en: Record<MessageKey, string> = {
   "center.donations": "Donation history",
   "center.back_donations": "Back to donation history",
   "center.donations_help":
-    "Only donations saved in this browser appear here, separately from product orders. Import donations from another device using their full receipt links. Back up the links before clearing history.",
+    "Donations saved in this browser appear separately from product orders. Use your donation nickname to find records on another device or after clearing browser data. Legacy records without nicknames remain available in their original browser.",
   "center.donations_empty": "No donations saved in this browser",
-  "center.import_donation": "Import donation receipt link",
-  "center.donation_link_invalid":
-    "Enter a full donation receipt link for this site, including its credential",
   "center.clear_donations": "Clear local donation history",
   "center.clear_donations_warning":
-    "This removes donation records and credentials from this browser, without affecting product orders or server records. Back up full receipt links first.",
+    "This removes local donation history without affecting product orders or server records. New records can be recovered by nickname. Keep the original credentials for legacy records.",
   "center.donation_storage_error":
-    "This browser cannot reliably save or read donation history. Back up full receipt links.",
+    "This browser cannot reliably save or read donation history. Remember donation nicknames and keep original credentials for legacy records.",
+  "center.donation_refresh_error":
+    "Could not refresh {count} donation records. Saved records are retained and other records have been refreshed. {error}",
+  "common.query": "Find",
   "center.history": "Order history",
   "center.query": "Find delivery",
   "center.order_detail": "Order details",
@@ -628,6 +658,29 @@ const en: Record<MessageKey, string> = {
   "nav.donation": "Donation page",
   "donation.unavailable": "Donations are currently unavailable.",
   "donation.amount": "Donation amount",
+  "donation.nickname": "Donation nickname",
+  "donation.nickname_help":
+    "Choose a unique nickname of 1–128 characters to find your donation later. Do not enter a product claim key, password or other private information.",
+  "donation.show_public": "Show my nickname and amount in the public list",
+  "donation.public_help":
+    "This only controls inclusion in the public list. Anyone who knows the nickname can still look up this record.",
+  "donation.suggestions": "Nickname taken. Choose an available suggestion",
+  "donation.lookup": "Find by donation nickname",
+  "donation.retry_help":
+    "The previous submission is unconfirmed. Submitting again continues the same donation. You can also look it up by nickname first.",
+  "donation.intent_storage_help":
+    "Your browser cannot save this pending request. Keep this page open and remember the nickname. Look up the nickname before submitting again after leaving.",
+  "donation.supporters": "Thank you for your support",
+  "donation.supporters_help":
+    "Only verified payments from supporters who chose to appear publicly are listed.",
+  "donation.no_public_records": "No public donations yet",
+  "donation.public_visibility": "Public list",
+  "donation.public_yes": "Included in the public list",
+  "donation.public_no": "Excluded from the public list",
+  "donation.add_currency": "Add currency",
+  "donation.remove_currency": "Remove currency",
+  "donation.add_amount": "Add amount",
+  "donation.remove_amount": "Remove amount",
   "donation.range": "Amount range: {min} – {max}",
   "donation.payment_help":
     "Pay with HashPay. Payment is confirmed by the server.",
@@ -648,14 +701,12 @@ const en: Record<MessageKey, string> = {
   "donation.waiting_help":
     "Payment status updates automatically. Expired payments are still checked for late arrivals.",
   "donation.paid_at": "Payment received",
-  "donation.receipt_link": "Private donation link",
-  "donation.private_help":
-    "Save the full link. It contains a private query token that is never sent to HashPay.",
   "donation.missing_token":
-    "Missing query token. Open the full donation link you saved.",
+    "This record is not saved in this browser. Find it using the donation nickname. Legacy records still require their original credentials.",
   "donation.storage_help":
-    "Your browser cannot store the query token. Copy or save the full link before paying.",
-  "donation.saved_receipt": "I have saved the full donation link",
+    "Your browser cannot save this record. Remember the nickname above to find the payment result later.",
+  "donation.legacy_storage_help":
+    "Your browser cannot save this legacy record. Keep its original query credential.",
   "donation.pay": "Pay with HashPay",
   "donation.back": "Back to donations",
   "donation.open_page": "Open donation page",
@@ -667,7 +718,7 @@ const en: Record<MessageKey, string> = {
   "donation.currency": "Donation currency",
   "donation.presets": "Preset amounts",
   "donation.presets_help":
-    "Up to 8 amounts, separated by commas. Leave blank for custom amounts only.",
+    "Add or remove up to 8 amounts per currency. Remove all for custom amounts only.",
   "donation.min": "Minimum amount",
   "donation.max": "Maximum amount",
   "donation.gateway_help":
@@ -689,6 +740,17 @@ const en: Record<MessageKey, string> = {
   "errors.donation_amount": "The donation amount is outside the allowed range",
   "errors.donation_token": "Enter a valid query token",
   "errors.donation_missing": "Donation record or query token is invalid",
+  "errors.donation_nickname":
+    "Enter a nickname of 1–128 characters that is not entirely whitespace",
+  "errors.donation_request_id":
+    "Invalid donation request ID. Reopen the donation page.",
+  "errors.donation_request_changed":
+    "Donation request details changed. Use a new request ID.",
+  "errors.donation_nickname_used":
+    "This donation nickname is taken. Choose another or use a suggestion.",
+  "errors.donation_nickname_missing": "Donation nickname not found",
+  "errors.donation_currencies": "Configure 1–8 distinct donation currencies",
+  "errors.donation_currency_duplicate": "Donation currencies must be unique",
   "errors.donation_gateway_protected":
     "Pending donations must be verified before changing the payment gateway or merchant",
   "errors.donation_gateway_identity":

@@ -4,6 +4,7 @@ import App from "./App.vue";
 import Shop from "./pages/Shop.vue";
 import {
   api,
+  csrf,
   initialized,
   loadSession,
   adminAuthenticated,
@@ -49,6 +50,7 @@ router.beforeEach(async (to) => {
     try {
       await loadSession();
     } catch (error) {
+      csrf.value = "";
       adminAuthenticated.value = undefined;
       sessionError.value = errorText(error);
       return;

@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 type promotionInput struct {
@@ -125,7 +126,7 @@ func (a *App) savePromotion(w http.ResponseWriter, r *http.Request) error {
 	if input.Kind == "automatic" {
 		input.Code = ""
 	}
-	if input.Name == "" || len(input.Name) > 120 || (input.Kind != "automatic" && input.Kind != "code") ||
+	if input.Name == "" || !utf8.ValidString(input.Name) || utf8.RuneCountInString(input.Name) > 120 || (input.Kind != "automatic" && input.Kind != "code") ||
 		(input.Kind == "code" && !couponPattern.MatchString(input.Code)) ||
 		(input.DiscountType != "percentage" && input.DiscountType != "fixed") || input.Value <= 0 || input.Value > 9_000_000_000_000 ||
 		(input.DiscountType == "percentage" && input.Value > 9999) || input.MinTotal < 0 || input.MinTotal > 9_000_000_000_000 ||

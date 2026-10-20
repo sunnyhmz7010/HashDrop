@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http/httptest"
@@ -14,7 +15,7 @@ func donationRequest(a *App, method, path, body, token string) *httptest.Respons
 	r := httptest.NewRequest(method, path, strings.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")
 	if token != "" {
-		r.Header.Set("Authorization", "Bearer "+token)
+		r.Header.Set("Authorization", "ClaimKey "+base64.RawURLEncoding.EncodeToString([]byte(token)))
 	}
 	w := httptest.NewRecorder()
 	a.routes().ServeHTTP(w, r)
@@ -24,7 +25,7 @@ func donationRequest(a *App, method, path, body, token string) *httptest.Respons
 func enableDonations(t *testing.T, a *App) func(string, string, ...string) *httptest.ResponseRecorder {
 	t.Helper()
 	request := adminSessionRequest(t, a)
-	result := request("PUT", "/api/admin/donation", `{"enabled":true,"title":"支持开发","description":"**感谢支持**","currency":"CNY","amounts":[500,1000,2000],"min_amount":100,"max_amount":100000}`)
+	result := request("PUT", "/api/admin/donation", `{"enabled":true,"title":"支持开发","description":"**感谢支持**","currencies":[{"currency":"CNY","amounts":[500,1000,2000],"min_amount":100,"max_amount":100000}]}`)
 	if result.Code != 200 {
 		t.Fatalf("启用赞赏失败: %s", result.Body)
 	}
@@ -33,18 +34,17 @@ func enableDonations(t *testing.T, a *App) func(string, string, ...string) *http
 
 func newDonation(t *testing.T, a *App, amount int64, currency string) (Donation, string) {
 	t.Helper()
-	w := donationRequest(a, "POST", "/api/donations", fmt.Sprintf(`{"amount":%d,"currency":%q}`, amount, currency), "")
+	w := donationRequest(a, "POST", "/api/donations", fmt.Sprintf(`{"request_id":%q,"nickname":%q,"show_public":false,"amount":%d,"currency":%q}`, newID(), "赞赏者-"+newID(), amount, currency), "")
 	if w.Code != 201 {
 		t.Fatalf("创建赞赏失败: %d %s", w.Code, w.Body)
 	}
 	var result struct {
 		Donation Donation `json:"donation"`
-		Token    string   `json:"token"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	return result.Donation, result.Token
+	return result.Donation, result.Donation.Nickname
 }
 
 func TestDonationSettingsAmountsAndPrivateQuery(t *testing.T) {
@@ -68,7 +68,8 @@ func TestDonationSettingsAmountsAndPrivateQuery(t *testing.T) {
 		{`{"amount":500,"currency":"USD"}`, 409},
 		{`{"amount":500,"currency":"CNY","coupon_code":"FREE"}`, 400},
 	} {
-		if w := donationRequest(a, "POST", "/api/donations", sample.body, ""); w.Code != sample.status {
+		body := strings.Replace(sample.body, "{", fmt.Sprintf(`{"request_id":%q,"nickname":%q,"show_public":false,`, newID(), "金额校验-"+newID()), 1)
+		if w := donationRequest(a, "POST", "/api/donations", body, ""); w.Code != sample.status {
 			t.Fatalf("无效金额或请求未拒绝: %s: %d %s", sample.body, w.Code, w.Body)
 		}
 	}
@@ -91,7 +92,7 @@ func TestDonationSettingsAmountsAndPrivateQuery(t *testing.T) {
 	if w := admin("PUT", "/api/admin/donation", string(payload)); w.Code != 200 {
 		t.Fatal(w.Body)
 	}
-	if w := donationRequest(a, "POST", "/api/donations", `{"amount":500,"currency":"CNY"}`, ""); w.Code != 404 {
+	if w := donationRequest(a, "POST", "/api/donations", fmt.Sprintf(`{"request_id":%q,"nickname":"停用后新增","show_public":false,"amount":500,"currency":"CNY"}`, newID()), ""); w.Code != 404 {
 		t.Fatal("停用后仍可创建赞赏")
 	}
 	if w := donationRequest(a, "GET", "/api/donations/"+d.ID, "", token); w.Code != 200 {
@@ -111,13 +112,15 @@ func TestDonationSettingsRejectInvalidValues(t *testing.T) {
 	original := admin("GET", "/api/admin/donation").Body.String()
 	for _, change := range []func(*DonationSettings){
 		func(s *DonationSettings) { s.Title = " " },
-		func(s *DonationSettings) { s.MinAmount = 0 },
-		func(s *DonationSettings) { s.MinAmount = s.MaxAmount + 1 },
-		func(s *DonationSettings) { s.MaxAmount = 9_000_000_000_001 },
-		func(s *DonationSettings) { s.Amounts = []int64{500, 500} },
-		func(s *DonationSettings) { s.Amounts = []int64{1} },
-		func(s *DonationSettings) { s.Currency = "INVALID" },
-		func(s *DonationSettings) { s.Amounts = make([]int64, 9) },
+		func(s *DonationSettings) { s.Currencies[0].MinAmount = 0 },
+		func(s *DonationSettings) { s.Currencies[0].MinAmount = s.Currencies[0].MaxAmount + 1 },
+		func(s *DonationSettings) { s.Currencies[0].MaxAmount = 9_000_000_000_001 },
+		func(s *DonationSettings) { s.Currencies[0].Amounts = []int64{500, 500} },
+		func(s *DonationSettings) { s.Currencies[0].Amounts = []int64{1} },
+		func(s *DonationSettings) { s.Currencies[0].Currency = "INVALID" },
+		func(s *DonationSettings) { s.Currencies[0].Amounts = make([]int64, 9) },
+		func(s *DonationSettings) { s.Currencies = nil },
+		func(s *DonationSettings) { s.Currencies = append(s.Currencies, s.Currencies[0]) },
 	} {
 		var s DonationSettings
 		if err := json.Unmarshal([]byte(original), &s); err != nil {

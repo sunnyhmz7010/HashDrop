@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -67,7 +68,7 @@ func TestClaimKeyLookupAndPayment(t *testing.T) {
 }
 
 func TestOrderDetailAcceptsClaimKeys(t *testing.T) {
-	for _, key := range []string{strings.Repeat("a1", 12), strings.Repeat("b2", 13), strings.Repeat("c", 43), "a", strings.Repeat("钥", 128)} {
+	for _, key := range []string{strings.Repeat("a1", 12), strings.Repeat("b2", 13), strings.Repeat("c", 43), "a", strings.Repeat("钥", 128), " 订单密钥🔑 ", "legacy%20key%25"} {
 		t.Run(key, func(t *testing.T) {
 			a, g := newTestApp(t)
 			product := insertProduct(t, a, "card", 1)
@@ -85,9 +86,16 @@ func TestOrderDetailAcceptsClaimKeys(t *testing.T) {
 			if w := get("Bearer " + key); w.Code != 200 || strings.Contains(w.Body.String(), "卡密-0") {
 				t.Fatalf("付款前查询失败或泄漏交付: %d %s", w.Code, w.Body)
 			}
+			encoded := "ClaimKey " + base64.RawURLEncoding.EncodeToString([]byte(key))
+			if w := get(encoded); w.Code != 200 || strings.Contains(w.Body.String(), "卡密-0") {
+				t.Fatalf("编码凭证查询失败或泄漏交付: %d %s", w.Code, w.Body)
+			}
 			syncPaid(t, a, g, o)
 			if w := get("Bearer " + key); w.Code != 200 || !strings.Contains(w.Body.String(), "卡密-0") {
 				t.Fatalf("领取链接未返回交付: %d %s", w.Code, w.Body)
+			}
+			if w := get(encoded); w.Code != 200 || !strings.Contains(w.Body.String(), "卡密-0") {
+				t.Fatalf("编码凭证未返回交付: %d %s", w.Code, w.Body)
 			}
 			for _, auth := range []string{"Bearer wrong", "Bearer " + strings.ToUpper(key)} {
 				if auth == "Bearer "+key {
@@ -103,6 +111,24 @@ func TestOrderDetailAcceptsClaimKeys(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestClaimKeyAuthorizationRejectsMalformedEncoding(t *testing.T) {
+	for _, authorization := range []string{
+		"ClaimKey ",
+		"ClaimKey !!!",
+		"ClaimKey /w", // 不接受标准 base64 字符或无效 UTF-8。
+		"ClaimKey _w",
+		"ClaimKey YQ==",
+		"ClaimKey " + base64.RawURLEncoding.EncodeToString([]byte("   ")),
+		"ClaimKey " + base64.RawURLEncoding.EncodeToString([]byte(strings.Repeat("钥", 129))),
+	} {
+		r := httptest.NewRequest("GET", "/", nil)
+		r.Header.Set("Authorization", authorization)
+		if _, valid := claimKeyFromAuthorization(r); valid {
+			t.Fatalf("接受了无效凭证编码: %q", authorization)
+		}
 	}
 }
 

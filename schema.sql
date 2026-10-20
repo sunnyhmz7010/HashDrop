@@ -82,9 +82,11 @@ CREATE TABLE donation_settings (
  id INTEGER PRIMARY KEY CHECK(id = 1), document TEXT NOT NULL
 );
 INSERT INTO donation_settings(id,document) VALUES(1,
- '{"enabled":false,"title":"赞赏支持","description":"","currency":"CNY","amounts":[500,1000,2000],"min_amount":100,"max_amount":100000}');
+ '{"enabled":false,"title":"赞赏支持","description":"","currencies":[{"currency":"CNY","amounts":[500,1000,2000],"min_amount":100,"max_amount":100000}]}');
 CREATE TABLE donations (
  id TEXT PRIMARY KEY, title TEXT NOT NULL,
+ nickname TEXT NOT NULL DEFAULT '', show_public INTEGER NOT NULL DEFAULT 0 CHECK(show_public IN (0,1)),
+ request_id TEXT NOT NULL DEFAULT '',
  amount INTEGER NOT NULL CHECK(amount > 0 AND amount <= 9000000000000), currency TEXT NOT NULL,
  token_hash TEXT NOT NULL UNIQUE, gateway_id TEXT UNIQUE,
  gateway_url TEXT NOT NULL, gateway_merchant_id TEXT NOT NULL,
@@ -96,4 +98,7 @@ CREATE TABLE donations (
 );
 CREATE INDEX donations_schedule ON donations(payment_status,next_check);
 CREATE INDEX donations_created ON donations(created_at DESC,id DESC);
-PRAGMA user_version = 1;
+CREATE UNIQUE INDEX donations_nickname ON donations(nickname) WHERE nickname <> '';
+CREATE UNIQUE INDEX donations_request ON donations(request_id) WHERE request_id <> '';
+CREATE INDEX donations_public ON donations(payment_status,show_public,paid_at DESC,id DESC);
+PRAGMA user_version = 2;

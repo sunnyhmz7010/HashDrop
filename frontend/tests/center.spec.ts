@@ -187,7 +187,21 @@ test("同一框架按会话展示权限并允许重试会话错误", async ({ pa
   await expect(page.getByRole("alert")).toContainText("无法确认");
   await expect(
     page.getByRole("heading", { name: "订单历史", exact: true }),
+  ).toBeVisible();
+  await page.goto(`${base}/center/query`);
+  await expect(page.locator("#claim-key")).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText("无法确认");
+  await page.goto(`${base}/center/donations`);
+  await expect(page.locator("#donation-query-nickname")).toBeVisible();
+  await page.goto(`${base}/center/products`);
+  await expect(page.getByRole("alert")).toContainText("无法确认");
+  await expect(
+    page.getByRole("heading", { name: "商品", exact: true }),
   ).toHaveCount(0);
+  await expect(
+    page.getByRole("menuitem", { name: "商品", exact: true }),
+  ).toHaveCount(0);
+  await page.goto(`${base}/center`);
   await page.unroute("**/api/admin/session");
   await page.getByRole("button", { name: "重试", exact: true }).click();
   await expect(

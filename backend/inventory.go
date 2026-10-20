@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 )
 
 type Inventory struct {
@@ -66,7 +67,7 @@ func (a *App) saveInventory(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	input.Name = strings.TrimSpace(input.Name)
-	if input.Name == "" || len(input.Name) > 120 || !validDeliveryKind(input.Kind) || len(input.StaticContent) > 65536 {
+	if input.Name == "" || !utf8.ValidString(input.Name) || utf8.RuneCountInString(input.Name) > 120 || !validDeliveryKind(input.Kind) || !utf8.ValidString(input.StaticContent) || utf8.RuneCountInString(input.StaticContent) > 65536 {
 		return bad("库存池名称、交付类型或内容长度无效")
 	}
 	if input.Kind != "static" && input.StaticContent != "" {

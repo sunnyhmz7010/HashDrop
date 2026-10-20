@@ -38,6 +38,11 @@ const route = useRoute(),
   loginOpen = ref(false);
 const section = computed(() => String(route.params.section ?? "history"));
 const personalSections = ["history", "query", "donations"];
+const personalPage = computed(
+  () =>
+    personalSections.includes(section.value) ||
+    (section.value === "orders" && !!route.params.id),
+);
 const menuOptions = computed(() => [
   { key: "history", label: t("center.history") },
   { key: "query", label: t("center.query") },
@@ -156,13 +161,13 @@ async function logout() {
           </div>
         </n-layout-sider>
         <n-layout-content class="workspace-content">
-          <n-alert v-if="sessionError" type="error"
+          <n-alert v-if="sessionError" type="error" class="space-bottom"
             >{{ t("center.session_error", { error: errorText(sessionError) })
             }}<n-button text @click="router.go(0)">{{
               t("common.retry")
             }}</n-button></n-alert
           >
-          <template v-else>
+          <template v-if="!sessionError || personalPage">
             <n-alert
               v-if="
                 historyStorageError &&
@@ -177,7 +182,11 @@ async function logout() {
               embedded
             />
             <GuestDonations v-else-if="section === 'donations'" />
-            <Order v-else-if="route.params.id || section === 'query'" />
+            <Order
+              v-else-if="
+                (section === 'orders' && route.params.id) || section === 'query'
+              "
+            />
             <GuestOrders v-else-if="section === 'history'" />
             <template v-else-if="adminAuthenticated">
               <Products v-if="section === 'products'" />

@@ -219,10 +219,10 @@ function chooseKey(value: string) {
   suggestions.value = [];
   error.value = "";
 }
-async function copyKey() {
+async function copyKey(event: MouseEvent) {
   const value = key.value;
   try {
-    await copyText(value);
+    await copyText(value, event.currentTarget as HTMLElement);
     copiedKey.value = value;
     message.success(t("common.copied"));
   } catch {
@@ -405,8 +405,9 @@ async function buy() {
               spellcheck: false,
             }"
           >
+            <!-- 阻止后缀按钮触发输入框聚焦，避免移动端弹出键盘。 -->
             <template #suffix
-              ><div class="key-actions">
+              ><div class="key-actions" @mousedown.stop>
                 <n-button
                   text
                   type="primary"

@@ -1,78 +1,181 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { NAlert, NButton, NInput, NSkeleton } from "naive-ui";
+import {
+  NAlert,
+  NButton,
+  NCheckbox,
+  NEmpty,
+  NInput,
+  NSelect,
+  NSkeleton,
+} from "naive-ui";
 import StoreLayout from "../components/StoreLayout.vue";
 import MarkdownContent from "../components/MarkdownContent.vue";
 import {
   api,
+  APIError,
   errorText,
   money,
   priceText,
   toMinor,
   type Donation,
   type DonationSettings,
+  type PublicDonationList,
 } from "../api";
-import { t } from "../i18n";
-import { rememberDonation } from "../donationHistory";
+import { newPurchaseID } from "../claim";
+import { formatTime, t } from "../i18n";
+import {
+  forgetDonationIntent,
+  rememberDonation,
+  rememberDonationIntent,
+  restoreDonationIntent,
+  type DonationIntent,
+} from "../donationHistory";
 
-const router = useRouter(),
-  settings = ref<DonationSettings>(),
-  amount = ref("");
+const router = useRouter();
+const settings = ref<DonationSettings>();
+const intent = ref<DonationIntent | undefined>(restoreDonationIntent());
+const nickname = ref(intent.value?.nickname ?? "");
+const showPublic = ref(intent.value?.show_public ?? false);
+const currency = ref(intent.value?.currency ?? "");
+const amount = ref(
+  intent.value ? priceText(intent.value.amount, intent.value.currency) : "",
+);
 const loading = ref(true),
   busy = ref(false),
   error = ref(""),
   receiptPath = ref("");
+const suggestions = ref<string[]>([]),
+  storageError = ref(false);
+const publicRecords = ref<PublicDonationList>({
+  items: [],
+  page: 1,
+  has_more: false,
+});
+const publicLoading = ref(false),
+  publicError = ref("");
 const controller = new AbortController();
+const locked = computed(
+  () => busy.value || !!intent.value || !!receiptPath.value,
+);
+const group = computed(() =>
+  settings.value?.currencies?.find((item) => item.currency === currency.value),
+);
+const currencyOptions = computed(() => {
+  const values = settings.value?.currencies?.map((item) => item.currency) ?? [];
+  if (intent.value && !values.includes(intent.value.currency))
+    values.push(intent.value.currency);
+  return values.map((value) => ({ label: value, value }));
+});
+function chooseCurrency(value: string) {
+  currency.value = value;
+  const selected = settings.value?.currencies.find(
+    (item) => item.currency === value,
+  );
+  if (selected)
+    amount.value = priceText(selected.amounts[0] ?? selected.min_amount, value);
+}
 async function load() {
   if (busy.value) return;
   loading.value = true;
   error.value = "";
   try {
-    const result = await api<DonationSettings>("/donation", {
+    settings.value = await api<DonationSettings>("/donation", {
       signal: controller.signal,
     });
-    settings.value = result;
-    if (result.enabled)
-      amount.value = priceText(
-        result.amounts[0] ?? result.min_amount,
-        result.currency,
+    if (settings.value.enabled && !intent.value && !receiptPath.value)
+      chooseCurrency(
+        currency.value &&
+          settings.value.currencies.some(
+            (item) => item.currency === currency.value,
+          )
+          ? currency.value
+          : settings.value.currencies[0]!.currency,
       );
-  } catch (e) {
-    if (!controller.signal.aborted) error.value = errorText(e);
+  } catch (cause) {
+    if (!controller.signal.aborted) error.value = errorText(cause);
   } finally {
     loading.value = false;
   }
 }
-onMounted(load);
+async function loadPublic(page = publicRecords.value.page) {
+  if (publicLoading.value) return;
+  publicLoading.value = true;
+  publicError.value = "";
+  try {
+    const result = await api<PublicDonationList>(
+      `/donations/public?page=${page}`,
+      { signal: controller.signal },
+    );
+    if (!controller.signal.aborted) publicRecords.value = result;
+  } catch (cause) {
+    if (!controller.signal.aborted) publicError.value = errorText(cause);
+  } finally {
+    publicLoading.value = false;
+  }
+}
+onMounted(() => {
+  void load();
+  void loadPublic();
+});
 onUnmounted(() => controller.abort());
+function chooseNickname(value: string) {
+  nickname.value = value;
+  suggestions.value = [];
+  error.value = "";
+}
 async function submit() {
-  if (busy.value || !settings.value?.enabled) return;
+  if (busy.value) return;
   if (receiptPath.value) {
     await router.push(receiptPath.value);
     return;
   }
   busy.value = true;
   error.value = "";
+  suggestions.value = [];
   try {
-    const value = toMinor(amount.value, settings.value.currency);
-    if (value < settings.value.min_amount || value > settings.value.max_amount)
-      throw new Error(t("errors.donation_amount"));
-    const result = await api<{ donation: Donation; token: string }>(
-      "/donations",
-      {
-        method: "POST",
-        body: { amount: value, currency: settings.value.currency },
-        signal: controller.signal,
-      },
-    );
+    if (!intent.value) {
+      const name = nickname.value.trim();
+      if (!name || Array.from(name).length > 128)
+        throw new Error(t("errors.donation_nickname"));
+      if (!settings.value?.enabled || !group.value)
+        throw new Error(t("errors.donation_changed"));
+      const value = toMinor(amount.value, currency.value);
+      if (value < group.value.min_amount || value > group.value.max_amount)
+        throw new Error(t("errors.donation_amount"));
+      nickname.value = name;
+      // 请求发出前固定快照；未知结果和页面刷新都继续同一笔赞赏。
+      intent.value = {
+        request_id: newPurchaseID(),
+        nickname: name,
+        show_public: showPublic.value,
+        amount: value,
+        currency: currency.value,
+      };
+      storageError.value = !rememberDonationIntent(intent.value);
+    }
+    const result = await api<{ donation: Donation }>("/donations", {
+      method: "POST",
+      body: intent.value,
+      signal: controller.signal,
+    });
     if (controller.signal.aborted) return;
-    rememberDonation(result.donation, result.token);
-    // 创建成功后保留凭证入口，导航失败时继续同一笔赞赏。
-    receiptPath.value = `/donate/orders/${result.donation.id}#token=${result.token}`;
+    rememberDonation(result.donation, result.donation.nickname);
+    receiptPath.value = `/donate/orders/${result.donation.id}`;
+    forgetDonationIntent();
+    intent.value = undefined;
     await router.push(receiptPath.value);
-  } catch (e) {
-    if (!controller.signal.aborted) error.value = errorText(e);
+  } catch (cause) {
+    if (controller.signal.aborted) return;
+    // 明确业务拒绝允许修改输入；网络和服务端未知结果仍复用原请求。
+    if (cause instanceof APIError && [400, 404, 409].includes(cause.status)) {
+      forgetDonationIntent();
+      intent.value = undefined;
+      if (cause.code === "donation_nickname_used")
+        suggestions.value = cause.suggestions;
+    }
+    error.value = errorText(cause);
   } finally {
     busy.value = false;
   }
@@ -88,81 +191,174 @@ async function submit() {
           t("common.refresh")
         }}</n-button></n-alert
       >
-      <section v-if="loading && !settings" class="panel grid" aria-busy="true">
+      <section
+        v-if="loading && !settings && !intent"
+        class="panel grid"
+        aria-busy="true"
+      >
         <n-skeleton text width="50%" /><n-skeleton
           text
           :repeat="2"
         /><n-skeleton height="40px" />
       </section>
-      <section v-else-if="settings && !settings.enabled" class="panel grid">
-        <div class="section-title">
-          <h1>{{ t("nav.donation") }}</h1>
-        </div>
+      <section
+        v-else-if="settings && !settings.enabled && !intent"
+        class="panel grid"
+      >
+        <h1>{{ t("nav.donation") }}</h1>
         <p class="muted">{{ t("donation.unavailable") }}</p>
       </section>
       <form
-        v-else-if="settings?.enabled"
+        v-else-if="settings?.enabled || intent"
         class="panel grid"
         @submit.prevent="submit"
       >
         <div class="section-title">
-          <h1>{{ settings.title }}</h1>
+          <h1>{{ settings?.title || t("nav.donation") }}</h1>
         </div>
         <MarkdownContent
-          v-if="settings.description"
+          v-if="settings?.description"
           :content="settings.description"
         />
+        <div class="field-stack">
+          <label class="field-label" for="donate-nickname">{{
+            t("donation.nickname")
+          }}</label>
+          <n-input
+            v-model:value="nickname"
+            :disabled="locked"
+            :input-props="{ id: 'donate-nickname', autocomplete: 'nickname' }"
+          />
+          <small class="field-help">{{ t("donation.nickname_help") }}</small>
+        </div>
+        <div v-if="suggestions.length" class="field-stack">
+          <span class="field-label">{{ t("donation.suggestions") }}</span>
+          <div class="nickname-suggestions">
+            <n-button
+              v-for="candidate in suggestions"
+              :key="candidate"
+              @click="chooseNickname(candidate)"
+              >{{ candidate }}</n-button
+            >
+          </div>
+        </div>
+        <n-checkbox v-model:checked="showPublic" :disabled="locked">{{
+          t("donation.show_public")
+        }}</n-checkbox>
+        <small class="field-help">{{ t("donation.public_help") }}</small>
+        <div class="field-stack">
+          <label id="donate-currency-label" class="field-label">{{
+            t("donation.currency")
+          }}</label>
+          <n-select
+            :value="currency"
+            :options="currencyOptions"
+            :disabled="locked"
+            aria-labelledby="donate-currency-label"
+            @update:value="chooseCurrency"
+          />
+        </div>
         <div
-          v-if="settings.amounts.length"
+          v-if="group?.amounts.length"
           class="donate-amounts"
           role="group"
           :aria-label="t('donation.presets')"
         >
           <n-button
-            v-for="value in settings.amounts"
+            v-for="value in group.amounts"
             :key="value"
-            :disabled="busy || !!receiptPath"
+            :disabled="locked"
             :type="
-              amount === priceText(value, settings.currency)
-                ? 'primary'
-                : 'default'
+              amount === priceText(value, currency) ? 'primary' : 'default'
             "
-            :aria-pressed="amount === priceText(value, settings.currency)"
-            @click="amount = priceText(value, settings.currency)"
-            >{{ money(value, settings.currency) }}</n-button
+            :aria-pressed="amount === priceText(value, currency)"
+            @click="amount = priceText(value, currency)"
+            >{{ money(value, currency) }}</n-button
           >
         </div>
         <div class="field-stack">
           <label class="field-label" for="donate-amount"
-            >{{ t("donation.amount") }} · {{ settings.currency }}</label
+            >{{ t("donation.amount") }} · {{ currency }}</label
           >
           <n-input
             v-model:value="amount"
-            :disabled="busy || !!receiptPath"
+            :disabled="locked"
             :input-props="{
               id: 'donate-amount',
               inputmode: 'decimal',
               autocomplete: 'off',
             }"
           />
-          <small class="field-help">{{
+          <small v-if="group" class="field-help">{{
             t("donation.range", {
-              min: money(settings.min_amount, settings.currency),
-              max: money(settings.max_amount, settings.currency),
+              min: money(group.min_amount, currency),
+              max: money(group.max_amount, currency),
             })
           }}</small>
         </div>
+        <n-alert v-if="intent && !busy" type="warning">{{
+          t("donation.retry_help")
+        }}</n-alert>
+        <n-alert v-if="storageError" type="warning">{{
+          t("donation.intent_storage_help")
+        }}</n-alert>
         <p class="helper">{{ t("donation.payment_help") }}</p>
         <n-button
           type="primary"
           attr-type="submit"
           :loading="busy"
-          :disabled="loading"
+          :disabled="loading && !intent"
           >{{
             receiptPath ? t("donation.view_record") : t("donation.submit")
           }}</n-button
         >
+        <router-link to="/center/donations" class="text-link">{{
+          t("donation.lookup")
+        }}</router-link>
       </form>
+      <section class="panel grid public-donations" :aria-busy="publicLoading">
+        <div class="section-title">
+          <h2>{{ t("donation.supporters") }}</h2>
+          <n-button :loading="publicLoading" @click="loadPublic()">{{
+            t("common.refresh")
+          }}</n-button>
+        </div>
+        <p class="muted">{{ t("donation.supporters_help") }}</p>
+        <n-alert v-if="publicError" type="warning">{{ publicError }}</n-alert>
+        <n-skeleton
+          v-if="publicLoading && !publicRecords.items.length"
+          text
+          :repeat="2"
+        />
+        <n-empty
+          v-else-if="!publicRecords.items.length && !publicError"
+          :description="t('donation.no_public_records')"
+        />
+        <article
+          v-for="(record, index) in publicRecords.items"
+          :key="`${record.nickname}-${record.paid_at}-${index}`"
+          class="public-donation"
+        >
+          <strong>{{ record.nickname }}</strong
+          ><span>{{ money(record.amount, record.currency) }}</span
+          ><small class="muted">{{ formatTime(record.paid_at) }}</small>
+        </article>
+        <div
+          v-if="publicRecords.page > 1 || publicRecords.has_more"
+          class="form-actions"
+        >
+          <n-button
+            :disabled="publicLoading || publicRecords.page <= 1"
+            @click="loadPublic(publicRecords.page - 1)"
+            >{{ t("pagination.previous") }}</n-button
+          ><span>{{ t("pagination.page", { page: publicRecords.page }) }}</span
+          ><n-button
+            :disabled="publicLoading || !publicRecords.has_more"
+            @click="loadPublic(publicRecords.page + 1)"
+            >{{ t("pagination.next") }}</n-button
+          >
+        </div>
+      </section>
     </main>
   </StoreLayout>
 </template>
@@ -171,15 +367,38 @@ async function submit() {
 .donate-page {
   max-width: 640px;
 }
-h1 {
+h1,
+.public-donation strong {
   overflow-wrap: anywhere;
 }
-.donate-amounts {
+.donate-amounts,
+.nickname-suggestions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
-.helper {
+.nickname-suggestions :deep(.n-button) {
+  max-width: 100%;
+  height: auto;
+  min-height: 34px;
+}
+.nickname-suggestions :deep(.n-button__content) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.public-donation {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+.public-donation small {
+  grid-column: 1 / -1;
+}
+.helper,
+p,
+h1 {
   margin: 0;
 }
 </style>

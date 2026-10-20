@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
+	"encoding/base64"
 	"errors"
 	"math/big"
 	"net/http"
@@ -20,6 +21,21 @@ func validateClaimKey(key string) error {
 		return bad("领取密钥须为 1–128 个字符，不能全部为空白")
 	}
 	return nil
+}
+
+func claimKeyFromAuthorization(r *http.Request) (string, bool) {
+	authorization := r.Header.Get("Authorization")
+	if encoded, ok := strings.CutPrefix(authorization, "ClaimKey "); ok {
+		// 独立 scheme 避免旧 Bearer 中的百分号被当作转义；编码保留 UTF-8 和首尾空格。
+		decoded, err := base64.RawURLEncoding.Strict().DecodeString(encoded)
+		if err != nil {
+			return "", false
+		}
+		key := string(decoded)
+		return key, validateClaimKey(key) == nil
+	}
+	key, ok := strings.CutPrefix(authorization, "Bearer ")
+	return key, ok && validateClaimKey(key) == nil
 }
 
 func validRequestID(id string) bool {

@@ -42,10 +42,12 @@ const model = reactive({
   enabled: false,
   title: "",
   description: "",
-  currency: "CNY",
-  amounts: "",
-  min: "",
-  max: "",
+  currencies: [] as {
+    currency: string;
+    amounts: string[];
+    min: string;
+    max: string;
+  }[],
 });
 const currencies = [
   "CNY",
@@ -62,10 +64,34 @@ const controller = new AbortController();
 function setModel(s: DonationSettings) {
   Object.assign(model, {
     ...s,
-    amounts: s.amounts.map((n) => priceText(n, s.currency)).join(", "),
-    min: priceText(s.min_amount, s.currency),
-    max: priceText(s.max_amount, s.currency),
+    currencies: s.currencies.map((group) => ({
+      currency: group.currency,
+      amounts: group.amounts.map((n) => priceText(n, group.currency)),
+      min: priceText(group.min_amount, group.currency),
+      max: priceText(group.max_amount, group.currency),
+    })),
   });
+}
+function addCurrency() {
+  const next = currencies.find(
+    (option) =>
+      !model.currencies.some((group) => group.currency === option.value),
+  );
+  if (next)
+    model.currencies.push({
+      currency: next.value,
+      amounts: ["5", "10", "20"],
+      min: "1",
+      max: "1000",
+    });
+}
+function currencyOptions(index: number) {
+  return currencies.map((option) => ({
+    ...option,
+    disabled: model.currencies.some(
+      (group, other) => other !== index && group.currency === option.value,
+    ),
+  }));
 }
 async function loadSettings() {
   loadingSettings.value = true;
@@ -110,15 +136,12 @@ async function save() {
       enabled: model.enabled,
       title: model.title,
       description: model.description,
-      currency: model.currency,
-      amounts: model.amounts.trim()
-        ? model.amounts
-            .trim()
-            .split(/[,，\s]+/)
-            .map((value) => toMinor(value, model.currency))
-        : [],
-      min_amount: toMinor(model.min, model.currency),
-      max_amount: toMinor(model.max, model.currency),
+      currencies: model.currencies.map((group) => ({
+        currency: group.currency,
+        amounts: group.amounts.map((value) => toMinor(value, group.currency)),
+        min_amount: toMinor(group.min, group.currency),
+        max_amount: toMinor(group.max, group.currency),
+      })),
     };
     await api("/admin/donation", {
       method: "PUT",
@@ -209,29 +232,16 @@ async function recheck(id: string) {
           aria-labelledby="donation-enabled-label"
         />
       </div>
-      <div class="form-grid two">
-        <div class="field-stack">
-          <label class="field-label" for="donation-title">{{
-            t("donation.title")
-          }}</label
-          ><n-input
-            v-model:value="model.title"
-            :disabled="saving"
-            :maxlength="120"
-            :input-props="{ id: 'donation-title' }"
-          />
-        </div>
-        <div class="field-stack">
-          <label class="field-label" id="donation-currency-label">{{
-            t("donation.currency")
-          }}</label
-          ><n-select
-            v-model:value="model.currency"
-            :disabled="saving"
-            :options="currencies"
-            aria-labelledby="donation-currency-label"
-          />
-        </div>
+      <div class="field-stack">
+        <label class="field-label" for="donation-title">{{
+          t("donation.title")
+        }}</label
+        ><n-input
+          v-model:value="model.title"
+          :disabled="saving"
+          :maxlength="120"
+          :input-props="{ id: 'donation-title' }"
+        />
       </div>
       <div class="field-stack">
         <label class="field-label" for="donation-description">{{
@@ -246,35 +256,91 @@ async function recheck(id: string) {
           :input-props="{ id: 'donation-description' }"
         />
       </div>
-      <div class="field-stack">
-        <label class="field-label" for="donation-presets"
-          >{{ t("donation.presets") }} · {{ model.currency }}</label
-        ><n-input
-          v-model:value="model.amounts"
+      <section
+        v-for="(group, index) in model.currencies"
+        :key="index"
+        class="grid donation-currency-group"
+      >
+        <div class="section-title">
+          <label class="field-label" :id="`donation-currency-label-${index}`">{{
+            t("donation.currency")
+          }}</label>
+          <n-button
+            :disabled="saving || model.currencies.length <= 1"
+            @click="model.currencies.splice(index, 1)"
+            >{{ t("donation.remove_currency") }}</n-button
+          >
+        </div>
+        <n-select
+          v-model:value="group.currency"
           :disabled="saving"
-          :input-props="{ id: 'donation-presets' }"
-        /><small class="field-help">{{ t("donation.presets_help") }}</small>
-      </div>
-      <div class="form-grid two">
+          :options="currencyOptions(index)"
+          :aria-labelledby="`donation-currency-label-${index}`"
+        />
         <div class="field-stack">
-          <label class="field-label" for="donation-min"
-            >{{ t("donation.min") }} · {{ model.currency }}</label
-          ><n-input
-            v-model:value="model.min"
-            :disabled="saving"
-            :input-props="{ id: 'donation-min', inputmode: 'decimal' }"
-          />
+          <span class="field-label"
+            >{{ t("donation.presets") }} · {{ group.currency }}</span
+          >
+          <div
+            v-for="(_, amountIndex) in group.amounts"
+            :key="amountIndex"
+            class="donation-preset"
+          >
+            <n-input
+              v-model:value="group.amounts[amountIndex]"
+              :disabled="saving"
+              :input-props="{
+                inputmode: 'decimal',
+                'aria-label': `${t('donation.presets')} ${amountIndex + 1} · ${group.currency}`,
+              }"
+            />
+            <n-button
+              :disabled="saving"
+              @click="group.amounts.splice(amountIndex, 1)"
+              >{{ t("donation.remove_amount") }}</n-button
+            >
+          </div>
+          <n-button
+            class="add-amount"
+            :disabled="saving || group.amounts.length >= 8"
+            @click="group.amounts.push('')"
+            >{{ t("donation.add_amount") }}</n-button
+          >
+          <small class="field-help">{{ t("donation.presets_help") }}</small>
         </div>
-        <div class="field-stack">
-          <label class="field-label" for="donation-max"
-            >{{ t("donation.max") }} · {{ model.currency }}</label
-          ><n-input
-            v-model:value="model.max"
-            :disabled="saving"
-            :input-props="{ id: 'donation-max', inputmode: 'decimal' }"
-          />
+        <div class="form-grid two">
+          <div class="field-stack">
+            <label class="field-label" :for="`donation-min-${index}`"
+              >{{ t("donation.min") }} · {{ group.currency }}</label
+            ><n-input
+              v-model:value="group.min"
+              :disabled="saving"
+              :input-props="{
+                id: `donation-min-${index}`,
+                inputmode: 'decimal',
+              }"
+            />
+          </div>
+          <div class="field-stack">
+            <label class="field-label" :for="`donation-max-${index}`"
+              >{{ t("donation.max") }} · {{ group.currency }}</label
+            ><n-input
+              v-model:value="group.max"
+              :disabled="saving"
+              :input-props="{
+                id: `donation-max-${index}`,
+                inputmode: 'decimal',
+              }"
+            />
+          </div>
         </div>
-      </div>
+      </section>
+      <n-button
+        class="add-currency"
+        :disabled="saving || model.currencies.length >= currencies.length"
+        @click="addCurrency"
+        >{{ t("donation.add_currency") }}</n-button
+      >
       <p class="helper">
         {{ t("donation.gateway_help") }}
         <router-link to="/center/settings" class="text-link">{{
@@ -320,6 +386,11 @@ async function recheck(id: string) {
       >
         <div class="grid donation-identity">
           <strong>{{ d.title }}</strong
+          ><span v-if="d.nickname"
+            >{{ d.nickname }} ·
+            {{
+              d.show_public ? t("donation.public_yes") : t("donation.public_no")
+            }}</span
           ><span class="code-cell">{{ d.id }}</span
           ><small class="muted">{{ formatTime(d.created_at) }}</small
           ><small v-if="d.last_error" class="helper">{{
@@ -364,6 +435,23 @@ async function recheck(id: string) {
 .helper {
   margin: 0;
 }
+.donation-currency-group {
+  padding: 16px 0;
+  border-top: 1px solid #e5e7eb;
+}
+.donation-preset {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.donation-preset > .n-input {
+  flex: 1;
+  min-width: 0;
+}
+.add-amount,
+.add-currency {
+  justify-self: start;
+}
 .donation-totals {
   display: flex;
   flex-wrap: wrap;
@@ -383,7 +471,8 @@ async function recheck(id: string) {
   min-width: 0;
   gap: 6px;
 }
-.donation-identity strong {
+.donation-identity strong,
+.donation-identity span {
   overflow-wrap: anywhere;
 }
 .donation-identity span {

@@ -171,12 +171,6 @@ async function save() {
             {{ t("settings.callback") }}
             {{ data.public_url }}/api/webhooks/hashpay
           </p>
-          <p v-else class="helper">{{ t("settings.http_help") }}</p>
-          <n-alert :type="data.key_configured ? 'success' : 'warning'">{{
-            data.key_configured
-              ? t("settings.key_saved")
-              : t("settings.key_missing")
-          }}</n-alert>
         </section>
       </form>
     </n-spin>

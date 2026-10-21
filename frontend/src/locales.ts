@@ -349,9 +349,6 @@ const zh = {
   "settings.private_key": "商户 RSA 私钥",
   "settings.key_placeholder": "留空保留现有私钥；填写 PEM 私钥以配置或替换",
   "settings.callback": "回调地址：",
-  "settings.http_help": "HTTP 站点使用签名查询补查付款，无需设置回调地址。",
-  "settings.key_saved": "商户私钥已保存；请通过小额订单验证接入。",
-  "settings.key_missing": "商户私钥尚未配置。请在上方填写并保存。",
   "common.enabled": "已启用",
   "common.disabled": "未启用",
   "nav.orders": "订单",
@@ -1023,12 +1020,6 @@ const en: Record<MessageKey, string> = {
   "settings.key_placeholder":
     "Leave blank to keep the current key; enter a PEM private key to configure or replace it",
   "settings.callback": "Callback URL:",
-  "settings.http_help":
-    "HTTP sites check payment through signed queries; no callback URL is needed.",
-  "settings.key_saved":
-    "Merchant private key saved. Verify the integration with a small test order.",
-  "settings.key_missing":
-    "Merchant private key is not configured. Enter it above and save.",
   "common.enabled": "Enabled",
   "common.disabled": "Disabled",
   "nav.orders": "Orders",

@@ -117,9 +117,6 @@ test("网页初始化、自动登录与只写私钥", async ({ page, request }) 
   await expect(page.getByLabel("商户 RSA 私钥", { exact: true })).toHaveValue(
     "",
   );
-  await expect(
-    page.getByText("商户私钥已保存；请通过小额订单验证接入。", { exact: true }),
-  ).toBeVisible();
   const settings = await page.evaluate(async () =>
     (await fetch("/api/admin/settings")).text(),
   );

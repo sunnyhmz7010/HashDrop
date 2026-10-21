@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import {
   NAlert,
@@ -12,6 +12,7 @@ import {
 } from "naive-ui";
 import StoreLayout from "../components/StoreLayout.vue";
 import MarkdownContent from "../components/MarkdownContent.vue";
+import FormDialog from "../components/FormDialog.vue";
 import {
   api,
   APIError,
@@ -47,7 +48,8 @@ const loading = ref(true),
   error = ref(""),
   receiptPath = ref("");
 const suggestions = ref<string[]>([]),
-  storageError = ref(false);
+  storageError = ref(false),
+  repeatOpen = ref(false);
 const publicRecords = ref<PublicDonationList>({
   items: [],
   page: 1,
@@ -125,6 +127,19 @@ function chooseNickname(value: string) {
   suggestions.value = [];
   error.value = "";
 }
+watch(repeatOpen, (open) => {
+  if (!open && !busy.value) {
+    forgetDonationIntent();
+    intent.value = undefined;
+  }
+});
+function confirmRepeat() {
+  if (!intent.value || busy.value) return;
+  intent.value = { ...intent.value, confirm_repeat: true };
+  storageError.value = !rememberDonationIntent(intent.value);
+  void submit();
+  repeatOpen.value = false;
+}
 async function submit() {
   if (busy.value) return;
   if (receiptPath.value) {
@@ -168,6 +183,14 @@ async function submit() {
     await router.push(receiptPath.value);
   } catch (cause) {
     if (controller.signal.aborted) return;
+    if (
+      cause instanceof APIError &&
+      cause.code === "donation_repeat_confirmation_required"
+    ) {
+      repeatOpen.value = true;
+      suggestions.value = cause.suggestions;
+      return;
+    }
     // 明确业务拒绝允许修改输入；网络和服务端未知结果仍复用原请求。
     if (cause instanceof APIError && [400, 404, 409].includes(cause.status)) {
       forgetDonationIntent();
@@ -296,7 +319,7 @@ async function submit() {
             })
           }}</small>
         </div>
-        <n-alert v-if="intent && !busy" type="warning">{{
+        <n-alert v-if="intent && !busy && !repeatOpen" type="warning">{{
           t("donation.retry_help")
         }}</n-alert>
         <n-alert v-if="storageError" type="warning">{{
@@ -360,6 +383,26 @@ async function submit() {
         </div>
       </section>
     </main>
+    <FormDialog
+      v-model:show="repeatOpen"
+      :title="t('donation.repeat_title')"
+      :busy="busy"
+      width="min(440px, calc(100vw - 28px))"
+    >
+      <p class="repeat-message">
+        {{
+          t("donation.repeat_help", { nickname: intent?.nickname || nickname })
+        }}
+      </p>
+      <template #footer>
+        <n-button :disabled="busy" @click="repeatOpen = false">{{
+          t("donation.change_nickname")
+        }}</n-button>
+        <n-button type="primary" :loading="busy" @click="confirmRepeat">{{
+          t("donation.confirm_repeat")
+        }}</n-button>
+      </template>
+    </FormDialog>
   </StoreLayout>
 </template>
 
@@ -400,5 +443,9 @@ h1,
 p,
 h1 {
   margin: 0;
+}
+.repeat-message {
+  overflow-wrap: anywhere;
+  line-height: 1.7;
 }
 </style>

@@ -3,41 +3,27 @@ import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import {
   NAlert,
   NButton,
-  NEmpty,
   NInput,
   NSelect,
   NSkeleton,
   NSwitch,
-  NTag,
   useMessage,
 } from "naive-ui";
 import {
   api,
   copyText,
   errorText,
-  money,
-  paymentNames,
   priceText,
   toMinor,
-  type DonationList,
   type DonationSettings,
 } from "../api";
-import { formatTime, t } from "../i18n";
+import { t } from "../i18n";
 
 const message = useMessage(),
   loaded = ref(false),
   loadingSettings = ref(false),
   saving = ref(false);
-const error = ref(""),
-  recordsError = ref(""),
-  loadingRecords = ref(false),
-  checking = ref("");
-const records = ref<DonationList>({
-  items: [],
-  page: 1,
-  has_more: false,
-  totals: [],
-});
+const error = ref("");
 const model = reactive({
   enabled: false,
   title: "",
@@ -108,24 +94,7 @@ async function loadSettings() {
     loadingSettings.value = false;
   }
 }
-async function loadRecords(page = records.value.page) {
-  if (loadingRecords.value) return;
-  loadingRecords.value = true;
-  recordsError.value = "";
-  try {
-    records.value = await api<DonationList>(`/admin/donations?page=${page}`, {
-      signal: controller.signal,
-    });
-  } catch (e) {
-    if (!controller.signal.aborted) recordsError.value = errorText(e);
-  } finally {
-    loadingRecords.value = false;
-  }
-}
-onMounted(() => {
-  void loadSettings();
-  void loadRecords();
-});
+onMounted(loadSettings);
 onUnmounted(() => controller.abort());
 async function save() {
   if (saving.value || !loaded.value) return;
@@ -165,23 +134,6 @@ async function copyURL() {
     message.success(t("common.copied"));
   } catch {
     message.warning(t("common.copy_manual"));
-  }
-}
-async function recheck(id: string) {
-  if (checking.value || loadingRecords.value) return;
-  checking.value = id;
-  recordsError.value = "";
-  try {
-    await api(`/admin/donations/${id}/recheck`, {
-      method: "POST",
-      body: {},
-      signal: controller.signal,
-    });
-    await loadRecords();
-  } catch (e) {
-    if (!controller.signal.aborted) recordsError.value = errorText(e);
-  } finally {
-    checking.value = "";
   }
 }
 </script>
@@ -348,83 +300,6 @@ async function recheck(id: string) {
         }}</router-link>
       </p>
     </form>
-    <section class="panel grid">
-      <div class="section-title">
-        <h2>{{ t("donation.records") }}</h2>
-        <n-button
-          :loading="loadingRecords"
-          :disabled="!!checking"
-          @click="loadRecords()"
-          >{{ t("orders.refresh_list") }}</n-button
-        >
-      </div>
-      <n-alert v-if="recordsError" type="error"
-        >{{ errorText(recordsError) }}
-        <n-button text :disabled="!!checking" @click="loadRecords()">{{
-          t("common.retry")
-        }}</n-button></n-alert
-      >
-      <div v-if="records.totals.length" class="donation-totals">
-        <span>{{ t("donation.verified_total") }}</span
-        ><span v-for="total in records.totals" :key="total.currency"
-          ><strong>{{ money(total.amount, total.currency) }}</strong> ·
-          {{ t("donation.count", { count: total.count }) }}</span
-        >
-      </div>
-      <template v-if="loadingRecords && !records.items.length"
-        ><n-skeleton text :repeat="3"
-      /></template>
-      <n-empty
-        v-else-if="!records.items.length && !recordsError"
-        :description="t('donation.no_records')"
-      />
-      <div
-        v-for="d in records.items"
-        :key="d.id"
-        class="donation-record"
-        :aria-label="d.id"
-      >
-        <div class="grid donation-identity">
-          <strong>{{ d.title }}</strong
-          ><span v-if="d.nickname"
-            >{{ d.nickname }} ·
-            {{
-              d.show_public ? t("donation.public_yes") : t("donation.public_no")
-            }}</span
-          ><span class="code-cell">{{ d.id }}</span
-          ><small class="muted">{{ formatTime(d.created_at) }}</small
-          ><small v-if="d.last_error" class="helper">{{
-            errorText(d.last_error)
-          }}</small>
-        </div>
-        <div class="grid donation-status">
-          <strong>{{ money(d.amount, d.currency) }}</strong
-          ><n-tag
-            :type="d.payment_status === 'paid' ? 'success' : 'default'"
-            :bordered="false"
-            >{{ paymentNames[d.payment_status] }}</n-tag
-          >
-        </div>
-        <n-button
-          :loading="checking === d.id"
-          :disabled="!!checking || loadingRecords"
-          @click="recheck(d.id)"
-          >{{ t("orders.refresh_status") }}</n-button
-        >
-      </div>
-      <div v-if="records.page > 1 || records.has_more" class="form-actions">
-        <n-button
-          :disabled="records.page <= 1 || loadingRecords || !!checking"
-          @click="loadRecords(records.page - 1)"
-          >{{ t("pagination.previous") }}</n-button
-        ><span>{{ t("pagination.page", { page: records.page }) }}</span
-        ><n-button
-          :disabled="!records.has_more || loadingRecords || !!checking"
-          @click="loadRecords(records.page + 1)"
-          >{{ t("pagination.next") }}</n-button
-        >
-      </div>
-    </section>
   </div>
 </template>
 
@@ -451,40 +326,5 @@ async function recheck(id: string) {
 .add-amount,
 .add-currency {
   justify-self: start;
-}
-.donation-totals {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  font-size: 13px;
-}
-.donation-record {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 0;
-  border-top: 1px solid #e5e7eb;
-}
-.donation-identity,
-.donation-status {
-  min-width: 0;
-  gap: 6px;
-}
-.donation-identity strong,
-.donation-identity span {
-  overflow-wrap: anywhere;
-}
-.donation-identity span {
-  font-size: 12px;
-}
-@media (max-width: 820px) {
-  .donation-record {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-  .donation-record > .n-button {
-    grid-column: 1 / -1;
-    justify-self: start;
-  }
 }
 </style>

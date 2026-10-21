@@ -105,7 +105,7 @@ CREATE TABLE donations (
 );
 CREATE INDEX donations_schedule ON donations(payment_status,next_check);
 CREATE INDEX donations_created ON donations(created_at DESC,id DESC);
-CREATE UNIQUE INDEX donations_nickname ON donations(nickname) WHERE nickname <> '';
+CREATE INDEX donations_nickname ON donations(nickname,created_at DESC,id DESC) WHERE nickname <> '';
 CREATE UNIQUE INDEX donations_request ON donations(request_id) WHERE request_id <> '';
 CREATE INDEX donations_public ON donations(payment_status,show_public,paid_at DESC,id DESC);
-PRAGMA user_version = 3;
+PRAGMA user_version = 4;

@@ -4,6 +4,7 @@ import { t } from "../i18n";
 import { computed, onMounted, ref } from "vue";
 import { NAlert, NButton, NSpin } from "naive-ui";
 import { api, errorText } from "../api";
+import DonationWall from "./DonationWall.vue";
 const data = ref<Record<string, number>>(),
   error = ref(""),
   busy = ref(false);
@@ -46,5 +47,6 @@ onMounted(load);
         </article>
       </div></n-spin
     >
+    <DonationWall />
   </div>
 </template>

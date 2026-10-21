@@ -42,7 +42,7 @@ func openDatabase(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, err
 	}
-	if version < 0 || version > 3 {
+	if version < 0 || version > 4 {
 		db.Close()
 		return nil, fmt.Errorf("数据库结构版本 %d 不受支持", version)
 	}
@@ -68,8 +68,31 @@ func openDatabase(path string) (*sql.DB, error) {
 			db.Close()
 			return nil, fmt.Errorf("升级交付结构失败: %w", err)
 		}
+		version = 3
+	}
+	if version == 3 {
+		if err = migrateDatabaseV4(db); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("升级重复赞赏结构失败: %w", err)
+		}
 	}
 	return db, nil
+}
+
+// 只放宽昵称索引，保留逐笔请求、旧凭证和付款记录。
+func migrateDatabaseV4(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.Exec(`
+DROP INDEX donations_nickname;
+CREATE INDEX donations_nickname ON donations(nickname,created_at DESC,id DESC) WHERE nickname <> '';
+PRAGMA user_version = 4;`); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // 按 SQLite 的建新表、复制、替换顺序修改上架约束，保留所有历史外键。

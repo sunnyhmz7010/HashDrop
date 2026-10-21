@@ -33,7 +33,7 @@ func TestDatabaseInitializesAndReopens(t *testing.T) {
 	}
 	defer db.Close()
 	var version, foreignKeys, sessions int
-	if err = db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 3 {
+	if err = db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 4 {
 		t.Fatal("数据库初始化版本无效", err)
 	}
 	if err = db.QueryRow("PRAGMA foreign_keys").Scan(&foreignKeys); err != nil || foreignKeys != 1 {
@@ -140,9 +140,9 @@ func TestDatabaseMigratesV1DonationsWithoutRewritingHistory(t *testing.T) {
 		var version int
 		var nickname, requestID, hash, document, orderHash, cipher string
 		var shown bool
-		if err := db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 3 {
+		if err := db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 4 {
 			db.Close()
-			t.Fatal("迁移未升级到版本3", version, err)
+			t.Fatal("迁移未升级到版本4", version, err)
 		}
 		if err := db.QueryRow("SELECT nickname,show_public,request_id,token_hash FROM donations WHERE id='legacy-donation'").Scan(&nickname, &shown, &requestID, &hash); err != nil || nickname != "" || shown || requestID != "" || hash != "legacy-token-hash" {
 			db.Close()
@@ -178,8 +178,8 @@ func TestDatabaseMigratesV1DonationsWithoutRewritingHistory(t *testing.T) {
 	if err := insert("named", "唯一昵称", "unique-request"); err != nil {
 		t.Fatal(err)
 	}
-	if err := insert("nickname-conflict", "唯一昵称", "another-request"); err == nil {
-		t.Fatal("迁移后的唯一索引允许重复非空昵称")
+	if err := insert("nickname-repeat", "唯一昵称", "another-request"); err != nil {
+		t.Fatal("迁移后仍不允许同昵称再次赞赏", err)
 	}
 	if err := insert("request-conflict", "另一个昵称", "unique-request"); err == nil {
 		t.Fatal("迁移后的唯一索引允许重复非空请求标识")
@@ -296,5 +296,64 @@ func TestDeliveryV3MigrationFailureRollsBackAndRestoresForeignKeys(t *testing.T)
 	}
 	if err = db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('products') WHERE name='delivery_mode'").Scan(&columns); err != nil || columns != 0 {
 		t.Fatal("失败迁移留下了新表", err)
+	}
+}
+
+func TestDonationV4MigrationPreservesCredentialsAndAllowsRepeatNames(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "v3.db")
+	db, err := sql.Open("sqlite", databaseURI(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(schemaV2ForTest(t)); err != nil {
+		t.Fatal(err)
+	}
+	if err = migrateDatabaseV3(db); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(`INSERT INTO donations(id,title,nickname,amount,currency,token_hash,gateway_url,gateway_merchant_id,payment_status,created_at,updated_at)
+VALUES('old-named','原赞赏','同一昵称',500,'CNY','saved-credential','https://pay.example','merchant-test','paid',1,1)`); err != nil {
+		t.Fatal(err)
+	}
+	if err = db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db, err = openDatabase(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var version int
+	var hash, status string
+	if err = db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 4 {
+		t.Fatal("没有完成版本4迁移", version, err)
+	}
+	if err = db.QueryRow("SELECT token_hash,payment_status FROM donations WHERE id='old-named'").Scan(&hash, &status); err != nil || hash != "saved-credential" || status != "paid" {
+		t.Fatal("昵称索引迁移改变了旧凭证或付款状态", hash, status, err)
+	}
+	if _, err = db.Exec(`INSERT INTO donations(id,title,nickname,amount,currency,token_hash,gateway_url,gateway_merchant_id,payment_status,created_at,updated_at)
+VALUES('repeat','再次赞赏','同一昵称',500,'CNY','another-credential','https://pay.example','merchant-test','creating',2,2)`); err != nil {
+		t.Fatal("迁移后重复昵称仍被拒绝", err)
+	}
+}
+
+func TestDonationV4MigrationFailureRestoresUniqueIndex(t *testing.T) {
+	db, err := sql.Open("sqlite", databaseURI(filepath.Join(t.TempDir(), "v4-failure.db")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err = db.Exec(`CREATE TABLE donations(nickname TEXT); CREATE UNIQUE INDEX donations_nickname ON donations(nickname); PRAGMA user_version=3;`); err != nil {
+		t.Fatal(err)
+	}
+	if err = migrateDatabaseV4(db); err == nil {
+		t.Fatal("迁移未拒绝缺少排序字段的异常旧库")
+	}
+	var unique, version int
+	if err = db.QueryRow(`SELECT "unique" FROM pragma_index_list('donations') WHERE name='donations_nickname'`).Scan(&unique); err != nil || unique != 1 {
+		t.Fatal("失败迁移丢失原索引", unique, err)
+	}
+	if err = db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 3 {
+		t.Fatal("失败迁移仍升级了版本", version, err)
 	}
 }

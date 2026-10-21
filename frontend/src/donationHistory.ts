@@ -73,16 +73,6 @@ export function rememberDonation(donation: Donation, token: string): boolean {
       b.donation.created_at - a.donation.created_at ||
       b.donation.id.localeCompare(a.donation.id),
   );
-  const intent = restoreDonationIntent();
-  if (
-    intent &&
-    donation.nickname === intent.nickname &&
-    donation.amount === intent.amount &&
-    donation.currency === intent.currency &&
-    donation.show_public === intent.show_public
-  )
-    // 昵称查询、详情或历史刷新已恢复同一笔记录，结束未知结果状态。
-    forgetDonationIntent();
   let saved = false;
   try {
     sessionStorage.setItem(`hashdrop:donation:${donation.id}`, token);
@@ -147,6 +137,7 @@ export interface DonationIntent {
   show_public: boolean;
   amount: number;
   currency: string;
+  confirm_repeat?: boolean;
 }
 const intentStorage = "hashdrop:donation-intent";
 let pendingIntent: DonationIntent | undefined;
@@ -166,7 +157,9 @@ export function restoreDonationIntent(): DonationIntent | undefined {
       Number.isSafeInteger(value.amount) &&
       value.amount > 0 &&
       value.amount <= 9_000_000_000_000 &&
-      typeof value.currency === "string"
+      typeof value.currency === "string" &&
+      (value.confirm_repeat === undefined ||
+        typeof value.confirm_repeat === "boolean")
     ) {
       pendingIntent = value;
       return { ...value };

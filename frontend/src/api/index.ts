@@ -218,6 +218,12 @@ export interface DonationList {
   has_more: boolean;
   totals: { currency: string; count: number; amount: number }[];
 }
+export interface DonationLookupList {
+  items: Donation[];
+  page: number;
+  has_more: boolean;
+  matched_request_id: string;
+}
 const scales: Record<string, number> = {
   CNY: 2,
   USD: 2,

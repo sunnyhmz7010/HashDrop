@@ -250,7 +250,7 @@ test("多币种逐项配置、昵称付款与公开选择，停用后仍可查�
       await (await page.request.get(`${base()}/api/admin/overview`)).json(),
     ).toEqual(shopBefore);
 
-    // 昵称冲突保留用户输入，并让用户主动选择派生推荐。
+    // 重复昵称先确认；更换昵称时保留输入并提供派生推荐。
     await page.goto(`${base()}/donate`);
     await page.locator("#donate-nickname").fill(privateName);
     const conflict = page.waitForResponse(
@@ -262,8 +262,12 @@ test("多币种逐项配置、昵称付款与公开选择，停用后仍可查�
       .getByRole("button", { name: "确认金额并赞赏", exact: true })
       .click();
     const conflictBody = await (await conflict).json();
-    expect(conflictBody.code).toBe("donation_nickname_used");
+    expect(conflictBody.code).toBe("donation_repeat_confirmation_required");
     await expect(page.locator("#donate-nickname")).toHaveValue(privateName);
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "更换昵称", exact: true })
+      .click();
     const suggestion = page
       .locator(".nickname-suggestions")
       .getByRole("button")
@@ -320,13 +324,25 @@ test("多币种逐项配置、昵称付款与公开选择，停用后仍可查�
     ).toHaveCount(0);
 
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.goto(`${base()}/center/donation`);
+    await page.goto(`${base()}/center/overview`);
+    await page.locator(".supporter-field").hover({ position: { x: 8, y: 8 } });
+    await page
+      .locator(".supporter-card")
+      .filter({
+        has: page.getByRole("heading", { name: privateName, exact: true }),
+      })
+      .locator("summary")
+      .click();
     await expect(
       page
         .locator(".donation-record")
         .filter({ hasText: donation.id })
         .getByText("已付款", { exact: true }),
     ).toBeVisible();
+    await page.goto(`${base()}/center/donation`);
+    await expect(
+      page.getByRole("heading", { name: "赞赏记录", exact: true }),
+    ).toHaveCount(0);
     await page.getByRole("switch", { name: "启用赞赏页" }).uncheck();
     await page.getByRole("button", { name: "保存设置", exact: true }).click();
     await expect(

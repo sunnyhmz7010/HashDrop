@@ -98,10 +98,16 @@ const zh = {
   "donation.amount": "自定义赞赏金额",
   "donation.nickname": "赞赏昵称",
   "donation.nickname_help":
-    "请自行填写 1–128 个字符的昵称，不能重复。昵称用于查询赞赏，请勿填写商品领取密钥、密码或其他私密信息。",
+    "请填写 1–128 个字符的昵称。同昵称再次赞赏需确认，记录会归入该昵称的历史。昵称用于公开查询，请勿填写领取密钥、密码或其他私密信息。",
+  "donation.repeat_title": "是否为再次赞赏？",
+  "donation.repeat_help":
+    "昵称“{nickname}”已有赞赏记录。这是你再次赞赏吗？确认后，新记录将归入同一昵称，知道该昵称的人可以查询全部记录。若不是你之前使用的昵称，请更换昵称。",
+  "donation.confirm_repeat": "确认再次赞赏",
+  "donation.change_nickname": "更换昵称",
+  "donation.history_found": "已找回该昵称的 {count} 笔赞赏记录",
   "donation.show_public": "在公开名单显示我的昵称和金额",
   "donation.public_help":
-    "仅决定是否进入公开名单。知道昵称的人仍可查询对应记录。",
+    "仅决定是否进入公开名单。知道昵称的人仍可查询该昵称的全部记录。",
   "donation.suggestions": "昵称已被使用，可选择推荐昵称",
   "donation.lookup": "使用赞赏昵称查询",
   "donation.retry_help":
@@ -157,6 +163,9 @@ const zh = {
   "donation.gateway_help":
     "复用现有 HashPay 配置。停用页面后，历史记录和付款补查继续保留。",
   "donation.records": "赞赏记录",
+  "donation.legacy_supporter": "旧版匿名赞赏",
+  "donation.not_verified": "暂无已核验收款",
+  "donation.history_count": "{count} 笔赞赏 · 查看历史",
   "donation.verified_total": "已核验收款",
   "donation.count": "{count} 笔",
   "donation.no_records": "暂无赞赏记录",
@@ -174,6 +183,8 @@ const zh = {
   "errors.donation_request_id": "赞赏请求标识无效，请重新打开赞赏页面",
   "errors.donation_request_changed": "赞赏请求内容已变化，请使用新的请求标识",
   "errors.donation_nickname_used": "赞赏昵称已被使用，请更换或选择推荐昵称",
+  "errors.donation_repeat_confirmation":
+    "昵称已有赞赏记录，请确认是否为再次赞赏",
   "errors.donation_nickname_missing": "赞赏昵称不存在",
   "errors.donation_currencies": "请设置 1–8 个不重复的赞赏币种",
   "errors.donation_currency_duplicate": "赞赏币种不能重复",
@@ -746,10 +757,16 @@ const en: Record<MessageKey, string> = {
   "donation.amount": "Donation amount",
   "donation.nickname": "Donation nickname",
   "donation.nickname_help":
-    "Choose a unique nickname of 1–128 characters to find your donation later. Do not enter a product claim key, password or other private information.",
+    "Choose a nickname of 1–128 characters. Repeat donations require confirmation and share the nickname's history. Nicknames allow public lookup; do not enter claim keys, passwords, or other private information.",
+  "donation.repeat_title": "Is this a repeat donation?",
+  "donation.repeat_help":
+    "The nickname “{nickname}” already has donation records. Are you donating again? Once confirmed, the new donation will share this nickname's history, which anyone who knows it can look up. Choose another nickname if you have not used this one before.",
+  "donation.confirm_repeat": "Confirm repeat donation",
+  "donation.change_nickname": "Change nickname",
+  "donation.history_found": "Recovered {count} donations for this nickname",
   "donation.show_public": "Show my nickname and amount in the public list",
   "donation.public_help":
-    "This only controls inclusion in the public list. Anyone who knows the nickname can still look up this record.",
+    "This only controls inclusion in the public list. Anyone who knows the nickname can still look up all its records.",
   "donation.suggestions": "Nickname taken. Choose an available suggestion",
   "donation.lookup": "Find by donation nickname",
   "donation.retry_help":
@@ -810,6 +827,9 @@ const en: Record<MessageKey, string> = {
   "donation.gateway_help":
     "Uses the existing HashPay configuration. Disabling donations preserves historical records and payment checks.",
   "donation.records": "Donation records",
+  "donation.legacy_supporter": "Legacy anonymous donation",
+  "donation.not_verified": "No verified payments yet",
+  "donation.history_count": "{count} donations · View history",
   "donation.verified_total": "Verified donations",
   "donation.count": "{count} donations",
   "donation.no_records": "No donations yet",
@@ -834,6 +854,8 @@ const en: Record<MessageKey, string> = {
     "Donation request details changed. Use a new request ID.",
   "errors.donation_nickname_used":
     "This donation nickname is taken. Choose another or use a suggestion.",
+  "errors.donation_repeat_confirmation":
+    "This nickname has donation records. Please confirm this is a repeat donation.",
   "errors.donation_nickname_missing": "Donation nickname not found",
   "errors.donation_currencies": "Configure 1–8 distinct donation currencies",
   "errors.donation_currency_duplicate": "Donation currencies must be unique",

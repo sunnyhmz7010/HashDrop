@@ -158,11 +158,12 @@ func (a *App) updateDonationSettings(w http.ResponseWriter, r *http.Request) err
 
 func (a *App) createDonation(w http.ResponseWriter, r *http.Request) error {
 	var input struct {
-		RequestID  string `json:"request_id"`
-		Nickname   string `json:"nickname"`
-		ShowPublic bool   `json:"show_public"`
-		Amount     int64  `json:"amount"`
-		Currency   string `json:"currency"`
+		RequestID     string `json:"request_id"`
+		Nickname      string `json:"nickname"`
+		ShowPublic    bool   `json:"show_public"`
+		Amount        int64  `json:"amount"`
+		Currency      string `json:"currency"`
+		ConfirmRepeat bool   `json:"confirm_repeat"`
 	}
 	if err := readJSON(w, r, &input); err != nil {
 		return err
@@ -193,16 +194,20 @@ func (a *App) createDonation(w http.ResponseWriter, r *http.Request) error {
 	if !a.limits.allow("donation-create:"+clientIP(r), 10, time.Minute) {
 		return &apiError{429, "下单过于频繁，请稍后再试"}
 	}
-	var used bool
-	if err := a.db.QueryRowContext(r.Context(), "SELECT EXISTS(SELECT 1 FROM donations WHERE nickname=? OR token_hash=?)", input.Nickname, tokenHash(input.Nickname)).Scan(&used); err != nil {
+	var used, legacyCredential bool
+	if err := a.db.QueryRowContext(r.Context(), "SELECT EXISTS(SELECT 1 FROM donations WHERE nickname=?),EXISTS(SELECT 1 FROM donations WHERE nickname='' AND token_hash=?)", input.Nickname, tokenHash(input.Nickname)).Scan(&used, &legacyCredential); err != nil {
 		return err
 	}
-	if used {
+	if legacyCredential || (used && !input.ConfirmRepeat) {
 		suggestions, err := a.suggestDonationNicknames(r.Context(), input.Nickname)
 		if err != nil {
 			return err
 		}
-		reply(w, 409, map[string]any{"error": "赞赏昵称已被使用，请更换或选择推荐昵称", "code": "donation_nickname_used", "suggestions": suggestions})
+		if legacyCredential {
+			reply(w, 409, map[string]any{"error": "赞赏昵称已被使用，请更换或选择推荐昵称", "code": "donation_nickname_used", "suggestions": suggestions})
+		} else {
+			reply(w, 409, map[string]any{"error": "昵称已有赞赏记录，请确认是否为再次赞赏", "code": "donation_repeat_confirmation_required", "suggestions": suggestions})
+		}
 		return nil
 	}
 	c := a.settings()
@@ -234,7 +239,7 @@ func (a *App) createDonation(w http.ResponseWriter, r *http.Request) error {
 	if input.Amount < group.MinAmount || input.Amount > group.MaxAmount {
 		return bad("赞赏金额不在允许范围内")
 	}
-	d := Donation{ID: "don_" + newID(), Title: s.Title, Nickname: input.Nickname, ShowPublic: input.ShowPublic, RequestID: input.RequestID, Amount: input.Amount, Currency: input.Currency, TokenHash: tokenHash(input.Nickname), GatewayURL: strings.TrimRight(c.HashPay.BaseURL, "/"), GatewayMerchantID: c.HashPay.MerchantID, PaymentStatus: "creating", CreatedAt: unixNow()}
+	d := Donation{ID: "don_" + newID(), Title: s.Title, Nickname: input.Nickname, ShowPublic: input.ShowPublic, RequestID: input.RequestID, Amount: input.Amount, Currency: input.Currency, TokenHash: tokenHash(randomToken()), GatewayURL: strings.TrimRight(c.HashPay.BaseURL, "/"), GatewayMerchantID: c.HashPay.MerchantID, PaymentStatus: "creating", CreatedAt: unixNow()}
 	if _, err = tx.ExecContext(r.Context(), `INSERT INTO donations(id,title,nickname,show_public,request_id,amount,currency,token_hash,gateway_url,gateway_merchant_id,payment_status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`, d.ID, d.Title, d.Nickname, d.ShowPublic, d.RequestID, d.Amount, d.Currency, d.TokenHash, d.GatewayURL, d.GatewayMerchantID, d.PaymentStatus, d.CreatedAt, d.CreatedAt); err != nil {
 		return err
 	}
@@ -256,7 +261,11 @@ func (a *App) donationDetail(w http.ResponseWriter, r *http.Request) error {
 		return &apiError{401, "请输入有效的查询凭证"}
 	}
 	d, err := a.loadDonation(r.Context(), r.PathValue("id"))
-	if err == sql.ErrNoRows || (err == nil && !constantEqual(d.TokenHash, tokenHash(token))) {
+	credentialHash := d.TokenHash
+	if d.Nickname != "" {
+		credentialHash = tokenHash(d.Nickname)
+	}
+	if err == sql.ErrNoRows || (err == nil && !constantEqual(credentialHash, tokenHash(token))) {
 		return &apiError{404, "赞赏记录或凭证无效"}
 	}
 	if err != nil {
@@ -305,7 +314,9 @@ func donationResponse(d Donation) map[string]any {
 
 func (a *App) lookupDonation(w http.ResponseWriter, r *http.Request) error {
 	var input struct {
-		Nickname string `json:"nickname"`
+		Nickname  string `json:"nickname"`
+		Page      int    `json:"page"`
+		RequestID string `json:"request_id"`
 	}
 	if err := readJSON(w, r, &input); err != nil {
 		return err
@@ -314,7 +325,50 @@ func (a *App) lookupDonation(w http.ResponseWriter, r *http.Request) error {
 	if err := validateDonationNickname(input.Nickname); err != nil {
 		return err
 	}
-	d, err := scanDonation(a.db.QueryRowContext(r.Context(), donationSelect+" WHERE nickname=? AND nickname<>''", input.Nickname))
+	if input.Page < 0 || input.Page > 100000 {
+		return bad("页码超限")
+	}
+	if input.Page > 0 {
+		rows, err := a.db.QueryContext(r.Context(), donationSelect+" WHERE nickname=? AND nickname<>'' ORDER BY created_at DESC,id DESC LIMIT 21 OFFSET ?", input.Nickname, (input.Page-1)*20)
+		if err != nil {
+			return err
+		}
+		items := []map[string]any{}
+		for rows.Next() {
+			d, err := scanDonation(rows)
+			if err != nil {
+				rows.Close()
+				return err
+			}
+			items = append(items, donationResponse(d))
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return err
+		}
+		if len(items) == 0 && input.Page == 1 {
+			return &apiError{404, "赞赏昵称不存在"}
+		}
+		more := len(items) > 20
+		if more {
+			items = items[:20]
+		}
+		matched := ""
+		if input.RequestID != "" {
+			var exists bool
+			if err := a.db.QueryRowContext(r.Context(), "SELECT EXISTS(SELECT 1 FROM donations WHERE nickname=? AND request_id=?)", input.Nickname, input.RequestID).Scan(&exists); err != nil {
+				return err
+			}
+			if exists {
+				matched = input.RequestID
+			}
+		}
+		reply(w, 200, map[string]any{"items": items, "page": input.Page, "has_more": more, "matched_request_id": matched})
+		return nil
+	}
+	// 保留原单笔接口；未指定分页时返回该昵称最新的一笔。
+	d, err := scanDonation(a.db.QueryRowContext(r.Context(), donationSelect+" WHERE nickname=? AND nickname<>'' ORDER BY created_at DESC,id DESC LIMIT 1", input.Nickname))
 	if err == sql.ErrNoRows {
 		return &apiError{404, "赞赏昵称不存在"}
 	}
@@ -489,7 +543,18 @@ func (a *App) adminDonations(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	defer tx.Rollback()
-	rows, err := tx.QueryContext(r.Context(), donationSelect+" ORDER BY created_at DESC,id DESC LIMIT 21 OFFSET ?", (page-1)*20)
+	grouped := r.URL.Query().Get("group_by") == "nickname"
+	query := donationSelect + " ORDER BY created_at DESC,id DESC LIMIT 21 OFFSET ?"
+	const groupKey = "CASE WHEN donations.nickname='' THEN 'id:'||donations.id ELSE 'nickname:'||donations.nickname END"
+	if grouped {
+		// 先按昵称分页，再取完整历史，避免同一个人被拆到不同页；匿名旧记录单独保留。
+		query = `WITH supporter_page AS (
+SELECT ` + groupKey + ` AS supporter,MAX(created_at) AS latest FROM donations
+GROUP BY supporter ORDER BY latest DESC,supporter DESC LIMIT 21 OFFSET ?
+) ` + donationSelect + ` WHERE ` + groupKey + ` IN (SELECT supporter FROM supporter_page)
+ORDER BY (SELECT latest FROM supporter_page WHERE supporter=` + groupKey + `) DESC,` + groupKey + ` DESC,created_at DESC,id DESC`
+	}
+	rows, err := tx.QueryContext(r.Context(), query, (page-1)*20)
 	if err != nil {
 		return err
 	}
@@ -528,8 +593,23 @@ func (a *App) adminDonations(w http.ResponseWriter, r *http.Request) error {
 	if err = tx.Commit(); err != nil {
 		return err
 	}
-	more := len(items) > 20
-	if more {
+	more := false
+	if grouped {
+		seen := map[string]bool{}
+		for i, item := range items {
+			key := "nickname:" + item.Nickname
+			if item.Nickname == "" {
+				key = "id:" + item.ID
+			}
+			seen[key] = true
+			if len(seen) > 20 {
+				more = true
+				items = items[:i]
+				break
+			}
+		}
+	} else if len(items) > 20 {
+		more = true
 		items = items[:20]
 	}
 	reply(w, 200, map[string]any{"items": items, "page": page, "has_more": more, "totals": totals})

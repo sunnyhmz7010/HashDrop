@@ -97,8 +97,8 @@ func TestDonationNicknameConflictAndCharacterLimit(t *testing.T) {
 		Code        string   `json:"code"`
 		Suggestions []string `json:"suggestions"`
 	}
-	if response.Code != 409 || json.Unmarshal(response.Body.Bytes(), &conflict) != nil || conflict.Code != "donation_nickname_used" || len(conflict.Suggestions) != 3 {
-		t.Fatalf("昵称冲突未提供可用的派生建议: %d %s", response.Code, response.Body)
+	if response.Code != 409 || json.Unmarshal(response.Body.Bytes(), &conflict) != nil || conflict.Code != "donation_repeat_confirmation_required" || len(conflict.Suggestions) != 3 {
+		t.Fatalf("重复昵称未要求确认或未提供派生建议: %d %s", response.Code, response.Body)
 	}
 	seen := map[string]bool{nickname: true}
 	for _, suggestion := range conflict.Suggestions {

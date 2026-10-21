@@ -2,13 +2,15 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { NAlert, NButton, NInput, useDialog, useMessage } from "naive-ui";
-import { api, errorText, type Donation } from "../api";
+import { api, errorText, type Donation, type DonationLookupList } from "../api";
 import {
   clearDonationHistory,
   donationHistory,
   donationsCleared,
   donationStorageError,
   rememberDonation,
+  forgetDonationIntent,
+  restoreDonationIntent,
 } from "../donationHistory";
 import { t } from "../i18n";
 import FormDialog from "./FormDialog.vue";
@@ -90,17 +92,33 @@ async function lookup() {
     const name = nickname.value.trim();
     if (!name || Array.from(name).length > 128)
       throw new Error(t("errors.donation_nickname"));
-    const result = await api<Donation>("/donations/lookup", {
-      method: "POST",
-      body: { nickname: name },
-      signal,
-    });
-    if (signal.aborted) return;
-    rememberDonation(result, result.nickname);
+    const pending = restoreDonationIntent();
+    const requestID =
+      pending?.nickname === name ? pending.request_id : undefined;
+    const found: Donation[] = [];
+    let next = 1,
+      matched = false;
+    for (;;) {
+      const result = await api<DonationLookupList>("/donations/lookup", {
+        method: "POST",
+        body: { nickname: name, page: next, request_id: requestID },
+        signal,
+      });
+      if (signal.aborted) return;
+      found.push(...result.items);
+      matched ||= !!requestID && result.matched_request_id === requestID;
+      if (!result.has_more) break;
+      next++;
+    }
+    for (const donation of found) rememberDonation(donation, donation.nickname);
+    // 同昵称、同金额的旧记录不能解除另一笔结果未知的请求。
+    if (matched) forgetDonationIntent();
     nickname.value = "";
     page.value = 1;
     queryOpen.value = false;
-    await router.push(`/center/donations/${result.id}`);
+    if (found.length === 1)
+      await router.push(`/center/donations/${found[0]!.id}`);
+    else message.success(t("donation.history_found", { count: found.length }));
   } catch (cause) {
     if (!signal.aborted) importError.value = errorText(cause);
   } finally {

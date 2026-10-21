@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { t } from "../i18n";
 
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import {
   NAlert,
   NButton,
@@ -9,7 +9,7 @@ import {
   NInput,
   NInputNumber,
   NSelect,
-  NSpin,
+  NSkeleton,
   NSwitch,
   useDialog,
   useMessage,
@@ -31,6 +31,7 @@ const message = useMessage(),
   products = ref<Product[]>([]),
   inventories = ref<Inventory[]>([]),
   loading = ref(false),
+  loaded = ref(false),
   error = ref(""),
   editor = ref(false),
   saving = ref(false),
@@ -70,18 +71,22 @@ const inventoryOptions = computed(() =>
   })),
 );
 let loadGeneration = 0;
+let loadController: AbortController | undefined;
 async function load() {
   const current = ++loadGeneration;
+  loadController?.abort();
+  loadController = new AbortController();
   loading.value = true;
   error.value = "";
   try {
     const [items, pools] = await Promise.all([
-      api<Product[]>("/admin/products"),
-      api<Inventory[]>("/admin/inventories"),
+      api<Product[]>("/admin/products", { signal: loadController.signal }),
+      api<Inventory[]>("/admin/inventories", { signal: loadController.signal }),
     ]);
     if (current === loadGeneration) {
       products.value = items;
       inventories.value = pools;
+      loaded.value = true;
     }
   } catch (e) {
     if (current === loadGeneration) error.value = errorText(e);
@@ -90,6 +95,10 @@ async function load() {
   }
 }
 onMounted(load);
+onUnmounted(() => {
+  loadGeneration++;
+  loadController?.abort();
+});
 function edit(product?: Product) {
   Object.assign(
     model,
@@ -137,29 +146,40 @@ async function save() {
   saving.value = true;
   formError.value = "";
   try {
-    await api(`/admin/products${model.id ? `/${model.id}` : ""}`, {
-      method: model.id ? "PUT" : "POST",
-      body: {
-        name: model.name,
-        description: model.description,
-        details: model.details,
-        price: toMinor(model.price, model.currency),
-        currency: model.currency,
-        inventory_id: model.inventory_id ?? "",
-        active: model.active,
-        hidden: model.hidden,
-        delivery_mode: model.delivery_mode,
-        delivery_note: model.delivery_note,
-        buyer_note_label: model.buyer_note_label,
-        buyer_note_required:
-          !!model.buyer_note_label.trim() && model.buyer_note_required,
-        min_quantity: model.min_quantity,
-        max_quantity: model.max_quantity,
+    const saved = await api<Product>(
+      `/admin/products${model.id ? `/${model.id}` : ""}`,
+      {
+        method: model.id ? "PUT" : "POST",
+        body: {
+          name: model.name,
+          description: model.description,
+          details: model.details,
+          price: toMinor(model.price, model.currency),
+          currency: model.currency,
+          inventory_id: model.inventory_id ?? "",
+          active: model.active,
+          hidden: model.hidden,
+          delivery_mode: model.delivery_mode,
+          delivery_note: model.delivery_note,
+          buyer_note_label: model.buyer_note_label,
+          buyer_note_required:
+            !!model.buyer_note_label.trim() && model.buyer_note_required,
+          min_quantity: model.min_quantity,
+          max_quantity: model.max_quantity,
+        },
       },
-    });
+    );
+    // 保存响应已包含库存统计与关联名称，直接提交服务端结果，避免再等一轮刷新。
+    loadGeneration++;
+    loadController?.abort();
+    loading.value = false;
+    loaded.value = true;
+    error.value = "";
+    products.value = model.id
+      ? products.value.map((item) => (item.id === saved.id ? saved : item))
+      : [saved, ...products.value];
     editor.value = false;
     message.success(t("product.saved"));
-    await load();
   } catch (e) {
     formError.value = errorText(e);
   } finally {
@@ -220,8 +240,11 @@ function removeProduct(product: Product) {
     >{{ errorText(error) }}
     <n-button text @click="load">{{ t("common.retry") }}</n-button></n-alert
   >
-  <n-spin :show="loading"
-    ><div v-if="products.length" class="panel table-panel">
+  <div :aria-busy="loading">
+    <div
+      v-if="products.length || (loading && !loaded)"
+      class="panel table-panel"
+    >
       <div class="table-scroll">
         <table>
           <thead>
@@ -235,6 +258,11 @@ function removeProduct(product: Product) {
             </tr>
           </thead>
           <tbody>
+            <template v-if="loading && !loaded">
+              <tr v-for="row in 3" :key="row" aria-hidden="true">
+                <td v-for="column in 6" :key="column"><n-skeleton text /></td>
+              </tr>
+            </template>
             <tr v-for="p in products" :key="p.id">
               <td class="name-cell">
                 <router-link v-if="p.active" :to="`/products/${p.id}`">{{
@@ -291,9 +319,10 @@ function removeProduct(product: Product) {
         </table>
       </div>
     </div>
-    <div v-else-if="!loading && !error" class="panel empty-panel">
-      <n-empty :description="t('product.empty')" /></div
-  ></n-spin>
+    <div v-else-if="loaded && !error" class="panel empty-panel">
+      <n-empty :description="t('product.empty')" />
+    </div>
+  </div>
   <FormDialog
     v-model:show="editor"
     :title="model.id ? t('product.edit') : t('product.add')"

@@ -47,14 +47,16 @@ router.beforeEach(async (to) => {
   if (initialized.value === true && to.path === "/setup")
     return { path: "/center", query: { login: "1" } };
   if (to.meta.center) {
-    sessionError.value = "";
-    try {
-      await loadSession();
-    } catch (error) {
-      csrf.value = "";
-      adminAuthenticated.value = undefined;
-      sessionError.value = errorText(error);
-      return;
+    // 与 HashPay 一样只在会话未知时确认登录；页面接口仍逐次鉴权并处理 401。
+    if (adminAuthenticated.value === undefined) {
+      sessionError.value = "";
+      try {
+        await loadSession();
+      } catch (error) {
+        csrf.value = "";
+        sessionError.value = errorText(error);
+        return;
+      }
     }
     const section = String(to.params.section ?? "");
     if (

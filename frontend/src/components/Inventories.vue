@@ -6,7 +6,7 @@ import {
   NEmpty,
   NInput,
   NSelect,
-  NSpin,
+  NSkeleton,
   useDialog,
   useMessage,
 } from "naive-ui";
@@ -18,6 +18,7 @@ const message = useMessage(),
   dialog = useDialog();
 const inventories = ref<Inventory[]>([]),
   loading = ref(false),
+  loaded = ref(false),
   error = ref("");
 const editor = ref(false),
   saving = ref(false),
@@ -37,13 +38,21 @@ const stockNames = computed<Record<string, string>>(() => ({
 }));
 
 let loadGeneration = 0;
+let loadController: AbortController | undefined;
 async function load() {
   const current = ++loadGeneration;
+  loadController?.abort();
+  loadController = new AbortController();
   loading.value = true;
   error.value = "";
   try {
-    const pools = await api<Inventory[]>("/admin/inventories");
-    if (current === loadGeneration) inventories.value = pools;
+    const pools = await api<Inventory[]>("/admin/inventories", {
+      signal: loadController.signal,
+    });
+    if (current === loadGeneration) {
+      inventories.value = pools;
+      loaded.value = true;
+    }
   } catch (e) {
     if (current === loadGeneration) error.value = errorText(e);
   } finally {
@@ -51,6 +60,10 @@ async function load() {
   }
 }
 onMounted(load);
+onUnmounted(() => {
+  loadGeneration++;
+  loadController?.abort();
+});
 
 function edit(pool?: Inventory) {
   Object.assign(model, {
@@ -67,18 +80,28 @@ async function save() {
   saving.value = true;
   formError.value = "";
   try {
-    await api(`/admin/inventories${model.id ? `/${model.id}` : ""}`, {
-      method: model.id ? "PUT" : "POST",
-      body: {
-        name: model.name,
-        kind: model.kind,
-        static_content: model.kind === "static" ? model.static_content : "",
+    const saved = await api<Inventory>(
+      `/admin/inventories${model.id ? `/${model.id}` : ""}`,
+      {
+        method: model.id ? "PUT" : "POST",
+        body: {
+          name: model.name,
+          kind: model.kind,
+          static_content: model.kind === "static" ? model.static_content : "",
+        },
       },
-    });
+    );
+    loadGeneration++;
+    loadController?.abort();
+    loading.value = false;
+    loaded.value = true;
+    error.value = "";
+    inventories.value = model.id
+      ? inventories.value.map((item) => (item.id === saved.id ? saved : item))
+      : [saved, ...inventories.value];
     editor.value = false;
     model.static_content = "";
     message.success(t("inventory.saved"));
-    await load();
   } catch (e) {
     formError.value = errorText(e);
   } finally {
@@ -179,8 +202,9 @@ async function viewStock(pool: Inventory) {
   cancelStock();
   const current = stockGeneration;
   stockController = new AbortController();
+  if (!stockDialog.value || stockPool.value?.id !== pool.id)
+    stockItems.value = [];
   stockPool.value = pool;
-  stockItems.value = [];
   stockError.value = "";
   stockDialog.value = true;
   stockLoading.value = true;
@@ -244,7 +268,7 @@ function removeStock(id: string) {
       <n-button :loading="loading" @click="load">{{
         t("common.refresh")
       }}</n-button>
-      <n-button type="primary" @click="edit()">{{
+      <n-button type="primary" :disabled="loading || !!error" @click="edit()">{{
         t("inventory.add")
       }}</n-button>
     </div>
@@ -253,8 +277,11 @@ function removeStock(id: string) {
     {{ errorText(error) }}
     <n-button text @click="load">{{ t("common.retry") }}</n-button>
   </n-alert>
-  <n-spin :show="loading">
-    <div v-if="inventories.length" class="panel table-panel">
+  <div :aria-busy="loading">
+    <div
+      v-if="inventories.length || (loading && !loaded)"
+      class="panel table-panel"
+    >
       <div class="table-scroll">
         <table>
           <thead>
@@ -267,6 +294,11 @@ function removeStock(id: string) {
             </tr>
           </thead>
           <tbody>
+            <template v-if="loading && !loaded">
+              <tr v-for="row in 3" :key="row" aria-hidden="true">
+                <td v-for="column in 5" :key="column"><n-skeleton text /></td>
+              </tr>
+            </template>
             <tr v-for="pool in inventories" :key="pool.id">
               <td class="name-cell">
                 {{ pool.name
@@ -335,10 +367,10 @@ function removeStock(id: string) {
         </table>
       </div>
     </div>
-    <div v-else-if="!loading && !error" class="panel empty-panel">
+    <div v-else-if="loaded && !error" class="panel empty-panel">
       <n-empty :description="t('inventory.empty')" />
     </div>
-  </n-spin>
+  </div>
 
   <FormDialog
     v-model:show="editor"
@@ -445,8 +477,8 @@ function removeStock(id: string) {
         >{{ t("common.recheck") }}</n-button
       >
     </n-alert>
-    <n-spin :show="stockLoading">
-      <div v-if="stockItems.length" class="table-scroll">
+    <div :aria-busy="stockLoading">
+      <div v-if="stockItems.length || stockLoading" class="table-scroll">
         <table>
           <thead>
             <tr>
@@ -456,6 +488,11 @@ function removeStock(id: string) {
             </tr>
           </thead>
           <tbody>
+            <template v-if="stockLoading && !stockItems.length">
+              <tr v-for="row in 3" :key="row" aria-hidden="true">
+                <td v-for="column in 3" :key="column"><n-skeleton text /></td>
+              </tr>
+            </template>
             <tr v-for="item in stockItems" :key="item.id">
               <td class="code-cell">{{ item.id }}</td>
               <td>{{ stockNames[item.status] }}</td>
@@ -479,7 +516,7 @@ function removeStock(id: string) {
         v-if="!stockItems.length && !stockLoading && !stockError"
         :description="t('stock.empty')"
       />
-    </n-spin>
+    </div>
     <p class="helper">{{ t("stock.list_help") }}</p>
   </FormDialog>
 </template>

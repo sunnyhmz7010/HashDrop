@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { t } from "../i18n";
 
-import { computed, onMounted, ref } from "vue";
-import { NAlert, NButton, NSpin } from "naive-ui";
+import { computed, onMounted, onUnmounted, ref } from "vue";
+import { NAlert, NButton, NSkeleton } from "naive-ui";
 import { api, errorText } from "../api";
 import DonationWall from "./DonationWall.vue";
 const data = ref<Record<string, number>>(),
@@ -15,18 +15,24 @@ const labels = computed(() => [
   ["paid", t("overview.paid")],
   ["manual", t("overview.manual")],
 ]);
+const controller = new AbortController();
 async function load() {
+  if (busy.value) return;
   busy.value = true;
   error.value = "";
   try {
-    data.value = await api("/admin/overview");
+    const result = await api<Record<string, number>>("/admin/overview", {
+      signal: controller.signal,
+    });
+    if (!controller.signal.aborted) data.value = result;
   } catch (e) {
-    error.value = errorText(e);
+    if (!controller.signal.aborted) error.value = errorText(e);
   } finally {
     busy.value = false;
   }
 }
 onMounted(load);
+onUnmounted(() => controller.abort());
 </script>
 <template>
   <div class="grid overview-page">
@@ -39,14 +45,14 @@ onMounted(load);
     <n-alert v-if="error" type="error" class="space-bottom"
       >{{ errorText(error) }}
       <n-button text @click="load">{{ t("common.retry") }}</n-button></n-alert
-    ><n-spin :show="busy"
-      ><div class="metric-row">
-        <article v-for="[key, label] in labels" :key="key" class="metric">
-          <span class="muted">{{ label }}</span
-          ><strong>{{ data?.[key!] ?? "—" }}</strong>
-        </article>
-      </div></n-spin
     >
+    <div class="metric-row" :aria-busy="busy">
+      <article v-for="[key, label] in labels" :key="key" class="metric">
+        <span class="muted">{{ label }}</span>
+        <n-skeleton v-if="busy && !data" text width="60%" />
+        <strong v-else>{{ data?.[key!] ?? "—" }}</strong>
+      </article>
+    </div>
     <DonationWall />
   </div>
 </template>

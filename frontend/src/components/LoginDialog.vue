@@ -5,7 +5,7 @@ import { t } from "../i18n";
 
 import { ref, watch } from "vue";
 import { NAlert, NButton, NInput } from "naive-ui";
-import { api, csrf, errorText, loadSession, sessionError } from "../api";
+import { api, csrf, errorText, adminAuthenticated, sessionError } from "../api";
 import FormDialog from "./FormDialog.vue";
 const show = defineModel<boolean>("show", { required: true });
 const username = ref("admin"),
@@ -29,8 +29,8 @@ async function login() {
       },
     });
     csrf.value = result.csrf;
+    adminAuthenticated.value = true;
     password.value = "";
-    if (!(await loadSession())) throw new Error(t("errors.request_failed"));
     sessionError.value = "";
     show.value = false;
   } catch (e) {

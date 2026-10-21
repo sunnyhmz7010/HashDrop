@@ -65,7 +65,7 @@ watch(adminAuthenticated, (value) => {
     !personalSections.includes(section.value) &&
     !route.params.id
   )
-    void router.replace("/center");
+    void router.replace({ path: "/center", query: { login: "1" } });
 });
 watch(
   () => route.query.login,
@@ -89,10 +89,10 @@ async function logout() {
   busy.value = true;
   try {
     await api("/admin/logout", { method: "POST" });
-    csrf.value = "";
-    adminAuthenticated.value = false;
     if (!personalSections.includes(section.value) && !route.params.id)
       await router.push("/center");
+    csrf.value = "";
+    adminAuthenticated.value = false;
   } catch (e) {
     message.error(errorText(e));
   } finally {

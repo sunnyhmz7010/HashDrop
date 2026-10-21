@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { t } from "../i18n";
 
-import { onMounted, reactive, ref } from "vue";
-import { NAlert, NButton, NInput, NSpin, useMessage } from "naive-ui";
+import { onMounted, onUnmounted, reactive, ref } from "vue";
+import { NAlert, NButton, NInput, NSkeleton, useMessage } from "naive-ui";
 import { api, errorText, site, type Settings } from "../api";
 import MarkdownEditor from "./MarkdownEditor.vue";
 const message = useMessage(),
@@ -25,11 +25,16 @@ const form = reactive({
   merchant_id: "",
   private_key: "",
 });
+const controller = new AbortController();
 async function load() {
   loading.value = true;
   error.value = "";
   try {
-    data.value = await api<Settings>("/admin/settings");
+    const result = await api<Settings>("/admin/settings", {
+      signal: controller.signal,
+    });
+    if (controller.signal.aborted) return;
+    data.value = result;
     site.value = { title: data.value.title, notice: data.value.notice };
     Object.assign(form, {
       title: data.value.title,
@@ -40,22 +45,28 @@ async function load() {
     });
     loaded.value = true;
   } catch (e) {
-    error.value = errorText(e);
+    if (!controller.signal.aborted) error.value = errorText(e);
   } finally {
     loading.value = false;
   }
 }
 onMounted(load);
+onUnmounted(() => controller.abort());
 async function save() {
-  if (saving.value || !loaded.value) return;
+  if (saving.value || loading.value || !loaded.value) return;
   saving.value = true;
   error.value = "";
   try {
-    await api("/admin/settings", { method: "PUT", body: form });
-    message.success(t("settings.saved"));
+    await api("/admin/settings", {
+      method: "PUT",
+      body: { ...form },
+      signal: controller.signal,
+    });
+    form.private_key = "";
     await load();
+    if (!controller.signal.aborted) message.success(t("settings.saved"));
   } catch (e) {
-    error.value = errorText(e);
+    if (!controller.signal.aborted) error.value = errorText(e);
   } finally {
     saving.value = false;
   }
@@ -81,99 +92,112 @@ async function save() {
         t("common.retry")
       }}</n-button></n-alert
     >
-    <n-spin :show="loading">
-      <form
-        v-if="loaded"
-        id="settings-form"
-        class="grid"
-        @submit.prevent="save"
-      >
-        <section class="panel grid">
-          <div class="section-title">
-            <h2>{{ t("settings.site") }}</h2>
+    <div v-if="loading && !loaded" class="grid" aria-busy="true">
+      <section v-for="section in 2" :key="section" class="panel grid">
+        <n-skeleton text width="30%" />
+        <div class="form-grid two">
+          <n-skeleton height="34px" :repeat="2" />
+          <n-skeleton class="settings-wide" height="80px" />
+        </div>
+      </section>
+    </div>
+    <form
+      v-if="loaded"
+      id="settings-form"
+      class="grid"
+      :aria-busy="loading || saving"
+      @submit.prevent="save"
+    >
+      <section class="panel grid">
+        <div class="section-title">
+          <h2>{{ t("settings.site") }}</h2>
+        </div>
+        <div class="form-grid two">
+          <div class="field-stack">
+            <label class="field-label" for="site-title-input">{{
+              t("settings.site_name")
+            }}</label>
+            <n-input
+              id="site-title"
+              :disabled="saving || loading"
+              v-model:value="form.title"
+              :maxlength="120"
+              :input-props="{ id: 'site-title-input' }"
+            />
           </div>
-          <div class="form-grid two">
-            <div class="field-stack">
-              <label class="field-label" for="site-title-input">{{
-                t("settings.site_name")
-              }}</label>
-              <n-input
-                id="site-title"
-                v-model:value="form.title"
-                :maxlength="120"
-                :input-props="{ id: 'site-title-input' }"
-              />
-            </div>
-            <div class="field-stack">
-              <label class="field-label" for="site-url">{{
-                t("settings.site_url")
-              }}</label>
-              <n-input
-                :value="data.public_url"
-                readonly
-                :input-props="{ id: 'site-url' }"
-              />
-            </div>
-            <div class="field-stack settings-wide">
-              <label class="field-label" for="notice-input">{{
-                t("settings.notice")
-              }}</label>
-              <MarkdownEditor
-                id="notice"
-                input-id="notice-input"
-                v-model="form.notice"
-                :maxlength="2000"
-              />
-            </div>
+          <div class="field-stack">
+            <label class="field-label" for="site-url">{{
+              t("settings.site_url")
+            }}</label>
+            <n-input
+              :value="data.public_url"
+              readonly
+              :input-props="{ id: 'site-url' }"
+            />
           </div>
-        </section>
-        <section class="panel grid">
-          <div class="section-title"><h2>HashPay</h2></div>
-          <div class="form-grid two">
-            <div class="field-stack">
-              <label class="field-label" for="hashpay-url-input">{{
-                t("settings.gateway_url")
-              }}</label>
-              <n-input
-                id="hashpay-url"
-                v-model:value="form.hashpay_url"
-                placeholder="https://pay.example.com"
-                :input-props="{ id: 'hashpay-url-input' }"
-              />
-            </div>
-            <div class="field-stack">
-              <label class="field-label" for="merchant-id-input">{{
-                t("settings.merchant_id")
-              }}</label>
-              <n-input
-                id="merchant-id"
-                v-model:value="form.merchant_id"
-                :input-props="{ id: 'merchant-id-input' }"
-              />
-            </div>
-            <div class="field-stack settings-wide">
-              <label class="field-label" for="merchant-key">{{
-                t("settings.private_key")
-              }}</label>
-              <n-input
-                v-model:value="form.private_key"
-                type="textarea"
-                :placeholder="t('settings.key_placeholder')"
-                :input-props="{
-                  id: 'merchant-key',
-                  autocomplete: 'off',
-                  spellcheck: false,
-                }"
-              />
-            </div>
+          <div class="field-stack settings-wide">
+            <label class="field-label" for="notice-input">{{
+              t("settings.notice")
+            }}</label>
+            <MarkdownEditor
+              id="notice"
+              :disabled="saving || loading"
+              input-id="notice-input"
+              v-model="form.notice"
+              :maxlength="2000"
+            />
           </div>
-          <p v-if="data.public_url.startsWith('https://')" class="helper">
-            {{ t("settings.callback") }}
-            {{ data.public_url }}/api/webhooks/hashpay
-          </p>
-        </section>
-      </form>
-    </n-spin>
+        </div>
+      </section>
+      <section class="panel grid">
+        <div class="section-title"><h2>HashPay</h2></div>
+        <div class="form-grid two">
+          <div class="field-stack">
+            <label class="field-label" for="hashpay-url-input">{{
+              t("settings.gateway_url")
+            }}</label>
+            <n-input
+              id="hashpay-url"
+              :disabled="saving || loading"
+              v-model:value="form.hashpay_url"
+              placeholder="https://pay.example.com"
+              :input-props="{ id: 'hashpay-url-input' }"
+            />
+          </div>
+          <div class="field-stack">
+            <label class="field-label" for="merchant-id-input">{{
+              t("settings.merchant_id")
+            }}</label>
+            <n-input
+              id="merchant-id"
+              :disabled="saving || loading"
+              v-model:value="form.merchant_id"
+              :input-props="{ id: 'merchant-id-input' }"
+            />
+          </div>
+          <div class="field-stack settings-wide">
+            <label class="field-label" for="merchant-key">{{
+              t("settings.private_key")
+            }}</label>
+            <n-input
+              v-model:value="form.private_key"
+              :disabled="saving || loading"
+              type="textarea"
+              :placeholder="t('settings.key_placeholder')"
+              :input-props="{
+                id: 'merchant-key',
+                autocomplete: 'off',
+                spellcheck: false,
+              }"
+            />
+          </div>
+        </div>
+        <p v-if="data.public_url.startsWith('https://')" class="helper">
+          {{ t("settings.callback") }}
+          {{ data.public_url }}/api/webhooks/hashpay
+        </p>
+      </section>
+    </form>
   </div>
 </template>
 

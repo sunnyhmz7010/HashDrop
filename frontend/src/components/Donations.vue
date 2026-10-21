@@ -112,12 +112,9 @@ async function save() {
         max_amount: toMinor(group.max, group.currency),
       })),
     };
-    await api("/admin/donation", {
+    const result = await api<DonationSettings>("/admin/donation", {
       method: "PUT",
       body,
-      signal: controller.signal,
-    });
-    const result = await api<DonationSettings>("/admin/donation", {
       signal: controller.signal,
     });
     setModel(result);

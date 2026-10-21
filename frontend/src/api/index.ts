@@ -48,14 +48,19 @@ export async function api<T>(
     if (options.signal?.aborted) throw error;
     throw new APIError(0, t("errors.network"));
   });
+  // 即使代理返回的 401 不是 JSON，也必须及时失效前端会话。
+  if (
+    response.status === 401 &&
+    path.startsWith("/admin/") &&
+    path !== "/admin/login"
+  ) {
+    csrf.value = "";
+    adminAuthenticated.value = false;
+  }
   const value = await response.json().catch(() => {
     throw new APIError(response.status, t("errors.response_json"));
   });
   if (!response.ok) {
-    if (response.status === 401 && path.startsWith("/admin/")) {
-      csrf.value = "";
-      if (path !== "/admin/login") adminAuthenticated.value = false;
-    }
     throw new APIError(
       response.status,
       value.error ?? t("errors.request_failed"),

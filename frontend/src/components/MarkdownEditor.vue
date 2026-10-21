@@ -3,7 +3,12 @@ import { NInput, NTabPane, NTabs } from "naive-ui";
 import { t } from "../i18n";
 import MarkdownContent from "./MarkdownContent.vue";
 
-defineProps<{ id: string; inputId: string; maxlength: number }>();
+defineProps<{
+  id: string;
+  inputId: string;
+  maxlength: number;
+  disabled?: boolean;
+}>();
 const content = defineModel<string>({ required: true });
 </script>
 
@@ -19,6 +24,7 @@ const content = defineModel<string>({ required: true });
         v-model:value="content"
         type="textarea"
         :maxlength="maxlength"
+        :disabled="disabled"
         :input-props="{ id: inputId }"
       />
     </n-tab-pane>

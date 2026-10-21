@@ -231,3 +231,133 @@ test("同一框架按会话展示权限并允许重试会话错误", async ({ pa
     page.getByRole("heading", { name: "订单历史", exact: true }),
   ).toBeVisible();
 });
+
+test("后台切页先显示内容，刷新保留记录且过期会话可重新登录", async ({
+  page,
+}) => {
+  const base = process.env.HASHDROP_TEST_URL!;
+  await loginAdmin(page);
+  const documentOrigin = await page.evaluate(() => performance.timeOrigin);
+  const products: Product[] = await (
+    await page.request.get(`${base}/api/admin/products`)
+  ).json();
+  expect(products.length).toBeGreaterThan(0);
+  let sessionRequests = 0;
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/api/admin/session")
+      sessionRequests++;
+  });
+  await page.route("**/api/admin/session", (route) => route.abort());
+
+  let releaseProducts!: () => void;
+  const productsGate = new Promise<void>((resolve) => {
+    releaseProducts = resolve;
+  });
+  await page.route("**/api/admin/products", async (route) => {
+    await productsGate;
+    await route.continue();
+  });
+  try {
+    await page.getByRole("menuitem", { name: "商品", exact: true }).click();
+    // 数据响应仍挂起时页面已经可见，不应等认证或出现“没有商品”。
+    await expect(
+      page.getByRole("heading", { name: "商品", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("columnheader", { name: "商品", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText("还没有商品", { exact: true })).toHaveCount(0);
+  } finally {
+    releaseProducts();
+  }
+  const productRow = page
+    .getByRole("row")
+    .filter({ hasText: products[0]!.name })
+    .first();
+  await expect(productRow).toBeVisible();
+  await page.unroute("**/api/admin/products");
+
+  let releaseRefresh!: () => void;
+  const refreshGate = new Promise<void>((resolve) => {
+    releaseRefresh = resolve;
+  });
+  await page.route("**/api/admin/products", async (route) => {
+    await refreshGate;
+    await route.continue();
+  });
+  try {
+    await page.getByRole("button", { name: "刷新", exact: true }).click();
+    await expect(productRow).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "新增商品", exact: true }),
+    ).toBeDisabled();
+  } finally {
+    releaseRefresh();
+  }
+  await expect(
+    page.getByRole("button", { name: "新增商品", exact: true }),
+  ).toBeEnabled();
+  await page.unroute("**/api/admin/products");
+
+  let releaseInventories!: () => void;
+  const inventoriesGate = new Promise<void>((resolve) => {
+    releaseInventories = resolve;
+  });
+  await page.route("**/api/admin/inventories", async (route) => {
+    await inventoriesGate;
+    await route.continue();
+  });
+  try {
+    await page.getByRole("menuitem", { name: "库存", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "库存", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "新增库存池", exact: true }),
+    ).toBeDisabled();
+  } finally {
+    releaseInventories();
+  }
+  await expect(
+    page.getByRole("button", { name: "新增库存池", exact: true }),
+  ).toBeEnabled();
+  await page.unroute("**/api/admin/inventories");
+  await page.getByRole("menuitem", { name: "商品", exact: true }).click();
+  await expect(productRow).toBeVisible();
+  expect(sessionRequests).toBe(0);
+  expect(await page.evaluate(() => performance.timeOrigin)).toBe(
+    documentOrigin,
+  );
+
+  // 覆盖代理返回非 JSON 的 401：不能留下已登录状态或继续展示管理数据。
+  await page.route("**/api/admin/products", (route) =>
+    route.fulfill({
+      status: 401,
+      contentType: "text/plain",
+      body: "Session expired",
+    }),
+  );
+  await page.getByRole("button", { name: "刷新", exact: true }).click();
+  await expect(
+    page.getByRole("dialog", { name: "登录后台", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "商品", exact: true }),
+  ).toHaveCount(0);
+  await page.unroute("**/api/admin/products");
+  await page.locator("#password input").fill("test-password-only");
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(
+    page.getByRole("menuitem", { name: "商品", exact: true }),
+  ).toBeVisible();
+
+  await page.getByRole("menuitem", { name: "商品", exact: true }).click();
+  await expect(productRow).toBeVisible();
+  await page.getByRole("button", { name: "退出登录", exact: true }).click();
+  await expect(
+    page.getByRole("menuitem", { name: "商品", exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(sessionRequests).toBe(0);
+});

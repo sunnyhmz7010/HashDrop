@@ -12,7 +12,7 @@ import {
   NPagination,
   NInput,
   NSelect,
-  NSpin,
+  NSkeleton,
   NTag,
   useDialog,
   useMessage,
@@ -44,7 +44,8 @@ const message = useMessage(),
   busy = ref(false),
   detailError = ref("");
 const editingDelivery = ref(""),
-  deliveryContent = ref("");
+  deliveryContent = ref(""),
+  activeAction = ref("");
 const statusOptions = computed(() => [
   { label: t("orders.all_statuses"), value: "" },
   ...Object.entries(paymentNames.value).map(([value, label]) => ({
@@ -85,6 +86,7 @@ const currencies = computed(() => [
 let listGeneration = 0;
 let listController: AbortController | undefined;
 let lastRequest = { page: 1, query: { ...filters } };
+let queryTimer: ReturnType<typeof setTimeout> | undefined;
 const compactQuery = window.matchMedia("(max-width: 600px)");
 const compact = ref(compactQuery.matches);
 const updateCompact = () => {
@@ -143,12 +145,33 @@ function resetFilters() {
     from: null,
     to: null,
   });
+  applyFilters();
+}
+function applyFilters() {
+  clearTimeout(queryTimer);
   void load(1, filters);
 }
+// 对齐 HashPay 的搜索防抖；金额、时间等高级条件仍以显式筛选为准。
+watch(
+  () => [filters.q, filters.status, filters.delivery_status],
+  () => {
+    clearTimeout(queryTimer);
+    queryTimer = setTimeout(() => {
+      void load(1, {
+        ...lastRequest.query,
+        q: filters.q,
+        status: filters.status,
+        delivery_status: filters.delivery_status,
+      });
+    }, 250);
+  },
+  { flush: "sync" },
+);
 function retryList() {
   void load(lastRequest.page, lastRequest.query);
 }
 onUnmounted(() => {
+  clearTimeout(queryTimer);
   listGeneration++;
   listController?.abort();
 });
@@ -159,26 +182,28 @@ function cancelDetail() {
   generation++;
   controller?.abort();
   busy.value = false;
+  activeAction.value = "";
 }
 watch(show, (value) => {
   if (!value) cancelDetail();
 });
 onUnmounted(cancelDetail);
-async function open(order: Order) {
+async function open(order: Order | string) {
+  const id = typeof order === "string" ? order : order.id;
   cancelDetail();
   const current = generation;
   controller = new AbortController();
-  selectedID.value = order.id;
+  selectedID.value = id;
   selected.value = undefined;
   editingDelivery.value = deliveryContent.value = "";
   show.value = true;
   detailError.value = "";
   busy.value = true;
   try {
-    const result = await api<OrderDetail>(`/admin/orders/${order.id}`, {
+    const result = await api<OrderDetail>(`/admin/orders/${id}`, {
       signal: controller.signal,
     });
-    if (current === generation && selectedID.value === order.id)
+    if (current === generation && selectedID.value === id)
       selected.value = result;
   } catch (e) {
     if (current === generation) detailError.value = errorText(e);
@@ -192,6 +217,7 @@ async function action(name: string, body: unknown = {}) {
     current = generation;
   controller = new AbortController();
   busy.value = true;
+  activeAction.value = name;
   detailError.value = "";
   try {
     const result = await api<OrderDetail>(`/admin/orders/${id}/${name}`, {
@@ -207,7 +233,10 @@ async function action(name: string, body: unknown = {}) {
   } catch (e) {
     if (current === generation) detailError.value = errorText(e);
   } finally {
-    if (current === generation) busy.value = false;
+    if (current === generation) {
+      busy.value = false;
+      activeAction.value = "";
+    }
   }
 }
 async function fulfill() {
@@ -297,7 +326,7 @@ async function copy(value: string) {
       }}</n-button></n-alert
     >
     <div class="orders-workbench">
-      <form class="orders-filter" @submit.prevent="load(1, filters)">
+      <form class="orders-filter" @submit.prevent="applyFilters">
         <div class="field-stack orders-search">
           <label class="field-label" for="orders-search">{{
             t("orders.search")
@@ -412,7 +441,11 @@ async function copy(value: string) {
       </div>
     </div>
   </div>
-  <FormDialog v-model:show="show" :title="t('orders.detail')" :busy="busy">
+  <FormDialog
+    v-model:show="show"
+    :title="t('orders.detail')"
+    :busy="busy && !!selected"
+  >
     <template #header>
       <div class="order-modal-title">
         <span>{{ t("orders.detail") }}</span>
@@ -421,255 +454,264 @@ async function copy(value: string) {
         </n-tag>
       </div>
     </template>
-    <n-spin :show="busy">
-      <div v-if="selected" class="order-modal-body">
-        <div class="order-modal-tools">
-          <n-button
-            :disabled="busy"
-            secondary
-            size="small"
-            @click="action('recheck')"
-          >
-            <span class="tool-button-content">
-              <span class="tool-icon tool-icon-check" aria-hidden="true"></span>
-              <span>{{ t("orders.refresh_status") }}</span>
-            </span>
-          </n-button>
-          <n-button
-            v-if="
-              selected.order.payment_status === 'paid' &&
-              selected.order.delivery_status !== 'done' &&
-              selected.order.kind !== 'manual' &&
-              kindNames[selected.order.kind]
-            "
-            :disabled="busy"
-            secondary
-            size="small"
-            @click="action('retry')"
-          >
-            <span class="tool-button-content">
-              <span
-                class="tool-icon tool-icon-notify"
-                aria-hidden="true"
-              ></span>
-              <span>{{ t("orders.retry_delivery") }}</span>
-            </span>
-          </n-button>
-          <n-button
-            :disabled="busy"
-            secondary
-            size="small"
-            type="error"
-            @click="remove"
-          >
-            <span class="tool-button-content">
-              <span
-                class="tool-icon tool-icon-delete"
-                aria-hidden="true"
-              ></span>
-              <span>{{ t("orders.delete") }}</span>
-            </span>
-          </n-button>
+    <div v-if="busy && !selected" class="order-modal-body" aria-busy="true">
+      <div class="row-actions">
+        <n-skeleton width="74px" height="56px" :repeat="3" />
+      </div>
+      <section v-for="section in 2" :key="section" class="order-modal-section">
+        <div class="detail-grid">
+          <div v-for="field in 4" :key="field" class="detail-item">
+            <n-skeleton text width="40%" /><n-skeleton text width="80%" />
+          </div>
         </div>
+      </section>
+    </div>
+    <div v-if="selected" class="order-modal-body">
+      <div class="order-modal-tools">
+        <n-button
+          :disabled="busy"
+          :loading="activeAction === 'recheck'"
+          secondary
+          size="small"
+          @click="action('recheck')"
+        >
+          <span class="tool-button-content">
+            <span class="tool-icon tool-icon-check" aria-hidden="true"></span>
+            <span>{{ t("orders.refresh_status") }}</span>
+          </span>
+        </n-button>
+        <n-button
+          v-if="
+            selected.order.payment_status === 'paid' &&
+            selected.order.delivery_status !== 'done' &&
+            selected.order.kind !== 'manual' &&
+            kindNames[selected.order.kind]
+          "
+          :disabled="busy"
+          :loading="activeAction === 'retry'"
+          secondary
+          size="small"
+          @click="action('retry')"
+        >
+          <span class="tool-button-content">
+            <span class="tool-icon tool-icon-notify" aria-hidden="true"></span>
+            <span>{{ t("orders.retry_delivery") }}</span>
+          </span>
+        </n-button>
+        <n-button
+          :disabled="busy"
+          secondary
+          size="small"
+          type="error"
+          @click="remove"
+        >
+          <span class="tool-button-content">
+            <span class="tool-icon tool-icon-delete" aria-hidden="true"></span>
+            <span>{{ t("orders.delete") }}</span>
+          </span>
+        </n-button>
+      </div>
 
-        <n-alert v-if="selected.order.last_error" type="warning">
-          {{ errorText(selected.order.last_error) }}
-        </n-alert>
+      <n-alert v-if="selected.order.last_error" type="warning">
+        {{ errorText(selected.order.last_error) }}
+      </n-alert>
 
-        <section class="order-modal-section">
-          <div class="detail-grid">
-            <div class="detail-item">
-              <span>{{ t("orders.id") }}</span>
-              <div class="detail-copy-row">
-                <strong>{{ selected.order.id }}</strong>
-                <n-button
-                  size="small"
-                  secondary
-                  @click="copy(selected.order.id)"
-                  >{{ t("common.copy") }}</n-button
-                >
-              </div>
-            </div>
-            <div class="detail-item">
-              <span>{{ t("orders.gateway_id") }}</span>
-              <div class="detail-copy-row">
-                <strong>{{ selected.order.gateway_id || "--" }}</strong>
-                <n-button
-                  v-if="selected.order.gateway_id"
-                  size="small"
-                  secondary
-                  @click="copy(selected.order.gateway_id)"
-                  >{{ t("common.copy") }}</n-button
-                >
-              </div>
-            </div>
-            <div class="detail-item detail-item-wide">
-              <span>{{ t("orders.info") }}</span>
-              <strong
-                >{{ selected.order.product_name }} ×
-                {{ selected.order.quantity }}</strong
-              >
-            </div>
-            <div class="detail-item">
-              <span>{{ t("common.created_at") }}</span>
-              <strong>{{ formatTime(selected.order.created_at) }}</strong>
-            </div>
-            <div class="detail-item">
-              <span>{{ t("product.kind") }}</span>
-              <strong>{{
-                kindNames[selected.order.kind] || t("kind.unsupported")
-              }}</strong>
-            </div>
-          </div>
-        </section>
-
-        <section class="order-modal-section">
-          <h3>{{ t("orders.payment_info") }}</h3>
-          <div class="detail-grid">
-            <div v-if="selected.order.discount_total > 0" class="detail-item">
-              <span>{{ t("promotion.original_total") }}</span
-              ><strong>{{
-                money(selected.order.original_total, selected.order.currency)
-              }}</strong>
-            </div>
-            <div
-              v-for="discount in selected.order.discounts"
-              :key="discount.id"
-              class="detail-item"
-            >
-              <span
-                >{{ discount.name
-                }}<small v-if="discount.code">
-                  · {{ discount.code }}</small
-                ></span
-              ><strong
-                >−{{ money(discount.amount, selected.order.currency) }}</strong
-              >
-            </div>
-            <div class="detail-item">
-              <span>{{ t("orders.amount") }}</span>
-              <strong>{{
-                money(selected.order.total, selected.order.currency)
-              }}</strong>
-            </div>
-            <div class="detail-item">
-              <span>{{ t("product.unit_price") }}</span>
-              <strong>{{
-                money(selected.order.unit_price, selected.order.currency)
-              }}</strong>
-            </div>
-            <div class="detail-item detail-item-wide">
-              <span>{{ t("orders.deadline") }}</span>
-              <strong>{{
-                selected.order.expires_at
-                  ? formatTime(selected.order.expires_at)
-                  : "--"
-              }}</strong>
-            </div>
-          </div>
-        </section>
-
-        <section class="order-modal-section">
-          <template v-if="selected.order.buyer_note">
-            <h3>{{ t("orders.buyer_note") }}</h3>
-            <pre class="order-note">{{ selected.order.buyer_note }}</pre>
-          </template>
-          <template v-if="selected.order.delivery_note">
-            <h3>{{ t("product.delivery_note") }}</h3>
-            <p class="order-note">{{ selected.order.delivery_note }}</p>
-          </template>
-        </section>
-        <section class="order-modal-section">
-          <div class="order-delivery-title">
-            <h3>{{ t("delivery.content") }}</h3>
-            <n-tag size="small">{{
-              deliveryNames[selected.order.delivery_status]
-            }}</n-tag>
-          </div>
-          <article
-            v-for="delivery in selected.deliveries"
-            :key="delivery.id"
-            class="delivery-item"
-          >
-            <div class="section-title">
-              <span
-                >{{ t("delivery.item", { ordinal: delivery.ordinal }) }} ·
-                {{ deliveryNames[delivery.status] }}</span
-              >
+      <section class="order-modal-section">
+        <div class="detail-grid">
+          <div class="detail-item">
+            <span>{{ t("orders.id") }}</span>
+            <div class="detail-copy-row">
+              <strong>{{ selected.order.id }}</strong>
               <n-button
-                v-if="delivery.content"
                 size="small"
                 secondary
-                @click="copy(delivery.content)"
+                @click="copy(selected.order.id)"
                 >{{ t("common.copy") }}</n-button
               >
             </div>
-            <pre v-if="delivery.content">{{ delivery.content }}</pre>
-            <form
-              v-else-if="editingDelivery === delivery.id"
-              class="grid"
-              @submit.prevent="fulfill"
-            >
-              <label
-                class="field-label"
-                :for="'delivery-content-' + delivery.id"
-                >{{ t("delivery.content") }}</label
+          </div>
+          <div class="detail-item">
+            <span>{{ t("orders.gateway_id") }}</span>
+            <div class="detail-copy-row">
+              <strong>{{ selected.order.gateway_id || "--" }}</strong>
+              <n-button
+                v-if="selected.order.gateway_id"
+                size="small"
+                secondary
+                @click="copy(selected.order.gateway_id)"
+                >{{ t("common.copy") }}</n-button
               >
-              <n-input
-                v-model:value="deliveryContent"
-                type="textarea"
-                :maxlength="65536"
-                :autosize="{ minRows: 4, maxRows: 12 }"
-                :disabled="busy"
-                :input-props="{ id: 'delivery-content-' + delivery.id }"
-                :placeholder="t('delivery.fulfill_help')"
-              />
-              <small class="field-help">{{
-                t("delivery.immutable_help")
-              }}</small>
-              <div class="row-actions">
-                <n-button
-                  type="primary"
-                  attr-type="submit"
-                  :loading="busy"
-                  :disabled="!deliveryContent.trim() || busy"
-                  >{{ t("delivery.fulfill") }}</n-button
-                >
-                <n-button
-                  :disabled="busy"
-                  @click="
-                    editingDelivery = '';
-                    deliveryContent = '';
-                  "
-                  >{{ t("common.cancel") }}</n-button
-                >
-              </div>
-            </form>
-            <n-button
-              v-else-if="
-                selected.order.payment_status === 'paid' &&
-                delivery.status !== 'done'
-              "
-              secondary
-              size="small"
-              :disabled="busy || !!editingDelivery"
-              @click="
-                editingDelivery = delivery.id;
-                deliveryContent = '';
-              "
-              >{{ t("delivery.fulfill") }}</n-button
+            </div>
+          </div>
+          <div class="detail-item detail-item-wide">
+            <span>{{ t("orders.info") }}</span>
+            <strong
+              >{{ selected.order.product_name }} ×
+              {{ selected.order.quantity }}</strong
             >
-          </article>
-          <n-empty
-            v-if="!selected.deliveries.length"
-            :description="t('delivery.empty')"
-          />
-        </section>
-      </div>
-    </n-spin>
-    <n-alert v-if="detailError" type="error" class="space-top">{{
-      errorText(detailError)
-    }}</n-alert>
+          </div>
+          <div class="detail-item">
+            <span>{{ t("common.created_at") }}</span>
+            <strong>{{ formatTime(selected.order.created_at) }}</strong>
+          </div>
+          <div class="detail-item">
+            <span>{{ t("product.kind") }}</span>
+            <strong>{{
+              kindNames[selected.order.kind] || t("kind.unsupported")
+            }}</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="order-modal-section">
+        <h3>{{ t("orders.payment_info") }}</h3>
+        <div class="detail-grid">
+          <div v-if="selected.order.discount_total > 0" class="detail-item">
+            <span>{{ t("promotion.original_total") }}</span
+            ><strong>{{
+              money(selected.order.original_total, selected.order.currency)
+            }}</strong>
+          </div>
+          <div
+            v-for="discount in selected.order.discounts"
+            :key="discount.id"
+            class="detail-item"
+          >
+            <span
+              >{{ discount.name
+              }}<small v-if="discount.code"> · {{ discount.code }}</small></span
+            ><strong
+              >−{{ money(discount.amount, selected.order.currency) }}</strong
+            >
+          </div>
+          <div class="detail-item">
+            <span>{{ t("orders.amount") }}</span>
+            <strong>{{
+              money(selected.order.total, selected.order.currency)
+            }}</strong>
+          </div>
+          <div class="detail-item">
+            <span>{{ t("product.unit_price") }}</span>
+            <strong>{{
+              money(selected.order.unit_price, selected.order.currency)
+            }}</strong>
+          </div>
+          <div class="detail-item detail-item-wide">
+            <span>{{ t("orders.deadline") }}</span>
+            <strong>{{
+              selected.order.expires_at
+                ? formatTime(selected.order.expires_at)
+                : "--"
+            }}</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="order-modal-section">
+        <template v-if="selected.order.buyer_note">
+          <h3>{{ t("orders.buyer_note") }}</h3>
+          <pre class="order-note">{{ selected.order.buyer_note }}</pre>
+        </template>
+        <template v-if="selected.order.delivery_note">
+          <h3>{{ t("product.delivery_note") }}</h3>
+          <p class="order-note">{{ selected.order.delivery_note }}</p>
+        </template>
+      </section>
+      <section class="order-modal-section">
+        <div class="order-delivery-title">
+          <h3>{{ t("delivery.content") }}</h3>
+          <n-tag size="small">{{
+            deliveryNames[selected.order.delivery_status]
+          }}</n-tag>
+        </div>
+        <article
+          v-for="delivery in selected.deliveries"
+          :key="delivery.id"
+          class="delivery-item"
+        >
+          <div class="section-title">
+            <span
+              >{{ t("delivery.item", { ordinal: delivery.ordinal }) }} ·
+              {{ deliveryNames[delivery.status] }}</span
+            >
+            <n-button
+              v-if="delivery.content"
+              size="small"
+              secondary
+              @click="copy(delivery.content)"
+              >{{ t("common.copy") }}</n-button
+            >
+          </div>
+          <pre v-if="delivery.content">{{ delivery.content }}</pre>
+          <form
+            v-else-if="editingDelivery === delivery.id"
+            class="grid"
+            @submit.prevent="fulfill"
+          >
+            <label
+              class="field-label"
+              :for="'delivery-content-' + delivery.id"
+              >{{ t("delivery.content") }}</label
+            >
+            <n-input
+              v-model:value="deliveryContent"
+              type="textarea"
+              :maxlength="65536"
+              :autosize="{ minRows: 4, maxRows: 12 }"
+              :disabled="busy"
+              :input-props="{ id: 'delivery-content-' + delivery.id }"
+              :placeholder="t('delivery.fulfill_help')"
+            />
+            <small class="field-help">{{ t("delivery.immutable_help") }}</small>
+            <div class="row-actions">
+              <n-button
+                type="primary"
+                attr-type="submit"
+                :loading="busy"
+                :disabled="!deliveryContent.trim() || busy"
+                >{{ t("delivery.fulfill") }}</n-button
+              >
+              <n-button
+                :disabled="busy"
+                @click="
+                  editingDelivery = '';
+                  deliveryContent = '';
+                "
+                >{{ t("common.cancel") }}</n-button
+              >
+            </div>
+          </form>
+          <n-button
+            v-else-if="
+              selected.order.payment_status === 'paid' &&
+              delivery.status !== 'done'
+            "
+            secondary
+            size="small"
+            :disabled="busy || !!editingDelivery"
+            @click="
+              editingDelivery = delivery.id;
+              deliveryContent = '';
+            "
+            >{{ t("delivery.fulfill") }}</n-button
+          >
+        </article>
+        <n-empty
+          v-if="!selected.deliveries.length"
+          :description="t('delivery.empty')"
+        />
+      </section>
+    </div>
+    <n-alert v-if="detailError" type="error" class="space-top">
+      {{ errorText(detailError) }}
+      <n-button
+        v-if="!selected"
+        text
+        :loading="busy"
+        @click="open(selectedID)"
+        >{{ t("common.retry") }}</n-button
+      >
+    </n-alert>
   </FormDialog>
 </template>
 

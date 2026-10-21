@@ -1,6 +1,7 @@
 <script setup lang="ts" generic="T extends { id: string }">
-import { NAlert, NButton, NEmpty, NPagination, NSpin } from "naive-ui";
+import { NAlert, NButton, NEmpty, NPagination } from "naive-ui";
 import { t } from "../i18n";
+import HistoryRowsSkeleton from "./HistoryRowsSkeleton.vue";
 
 defineProps<{
   title: string;
@@ -46,13 +47,17 @@ defineEmits<{
       }}</n-button></n-alert
     >
     <div class="orders-workbench">
-      <n-spin :show="loading">
+      <div :aria-busy="loading">
         <div class="orders-table">
           <div class="orders-table-head order-row--plain">
             <span v-for="(column, index) in columns" :key="index">{{
               column
             }}</span>
           </div>
+          <HistoryRowsSkeleton
+            v-if="loading && !items.length"
+            :columns="columns.length"
+          />
           <slot v-for="item in items" :key="item.id" name="row" :item="item" />
           <div
             v-if="!items.length && !loading && !error"
@@ -61,7 +66,7 @@ defineEmits<{
             <n-empty :description="emptyText" />
           </div>
         </div>
-      </n-spin>
+      </div>
       <div class="orders-pagination">
         <span>{{ totalText }}</span>
         <n-pagination

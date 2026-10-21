@@ -162,24 +162,35 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   await expect(
     page.locator(".order-row").filter({ hasText: orderID }),
   ).toContainText("交付完成");
-  // 详情加载中不能通过 Esc 丢弃请求并把旧结果提交给另一订单。
+  // 只读详情允许取消；关闭时必须中止旧请求，重新打开只提交当前请求的结果。
   await page.route(`**/api/admin/orders/${orderID}`, async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 600));
-    await route.continue();
+    if (!route.request().failure()) await route.continue();
   });
+  const cancelledDetail = page.waitForEvent(
+    "requestfailed",
+    (request) =>
+      new URL(request.url()).pathname === `/api/admin/orders/${orderID}`,
+  );
   await page
     .locator(".order-row")
     .filter({ hasText: orderID })
     .getByRole("button", { name: orderID, exact: true })
     .click();
   await page.keyboard.press("Escape");
-  await expect(page.locator(".form-modal")).toBeVisible();
+  await expect(page.locator(".form-modal")).toHaveCount(0);
+  await cancelledDetail;
+  await page.unroute(`**/api/admin/orders/${orderID}`);
+  await page
+    .locator(".order-row")
+    .filter({ hasText: orderID })
+    .getByRole("button", { name: orderID, exact: true })
+    .click();
   await expect(
     page
       .getByRole("dialog", { name: "订单详情" })
       .getByText(orderID, { exact: true }),
   ).toBeVisible();
-  await page.unroute(`**/api/admin/orders/${orderID}`);
   await page.keyboard.press("Escape");
   await expect(page.locator(".form-modal")).toHaveCount(0);
   await page.getByRole("menuitem", { name: "系统设置", exact: true }).click();

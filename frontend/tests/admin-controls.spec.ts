@@ -108,6 +108,39 @@ test("订单金额筛选、数字分页与失败查询重试", async ({ page }) 
   await expect(page.getByLabel("最低订单金额", { exact: true })).toHaveValue(
     "",
   );
+  await expect(page.getByText("共 161 笔订单", { exact: true })).toBeVisible();
+
+  // 已提交的高级筛选失败后继续搜索，不能悄悄退回上次成功的筛选范围。
+  await page.getByLabel("订单币种", { exact: true }).click();
+  await page
+    .locator(".n-base-select-option")
+    .getByText("JPY", { exact: true })
+    .click();
+  await page.getByLabel("最低订单金额", { exact: true }).fill("988");
+  await page.getByLabel("最高订单金额", { exact: true }).fill("988");
+  await page.route("**/api/admin/orders?*", (route) => route.abort(), {
+    times: 1,
+  });
+  await page.getByRole("button", { name: "筛选", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "重试", exact: true }),
+  ).toBeVisible();
+  const searched = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      url.pathname === "/api/admin/orders" &&
+      url.searchParams.get("q") === firstPage[0]!.trim()
+    );
+  });
+  await page.locator("#orders-search").fill(firstPage[0]!.trim());
+  await searched;
+  await expect(page.getByText("共 0 笔订单", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("没有符合条件的订单", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("最低订单金额", { exact: true })).toHaveValue(
+    "988",
+  );
 });
 
 test("商城公告复用 Markdown 编辑预览并展示图片视频", async ({ page }) => {

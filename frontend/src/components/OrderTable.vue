@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { NEmpty, NSpin } from "naive-ui";
+import { NEmpty } from "naive-ui";
 import { t } from "../i18n";
 import type { Order } from "../api";
 import OrderRow from "./OrderRow.vue";
+import HistoryRowsSkeleton from "./HistoryRowsSkeleton.vue";
 
 defineProps<{
   items: Order[];
@@ -14,7 +15,7 @@ defineEmits<{ open: [order: Order] }>();
 </script>
 
 <template>
-  <n-spin :show="loading">
+  <div :aria-busy="loading">
     <div class="orders-table">
       <div class="orders-table-head order-row--plain">
         <span>{{ t("orders.product_column") }}</span
@@ -23,6 +24,7 @@ defineEmits<{ open: [order: Order] }>();
         ><span>{{ t("orders.delivery_column") }}</span
         ><span>{{ t("common.created_at") }}</span>
       </div>
+      <HistoryRowsSkeleton v-if="loading && !items.length" />
       <OrderRow
         v-for="order in items"
         :key="order.id"
@@ -36,5 +38,5 @@ defineEmits<{ open: [order: Order] }>();
         <n-empty :description="emptyText" />
       </div>
     </div>
-  </n-spin>
+  </div>
 </template>

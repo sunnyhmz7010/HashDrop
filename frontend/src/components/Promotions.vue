@@ -8,7 +8,7 @@ import {
   NInput,
   NInputNumber,
   NSelect,
-  NSpin,
+  NSkeleton,
   NSwitch,
   NTag,
   useDialog,
@@ -30,6 +30,7 @@ import FormDialog from "./FormDialog.vue";
 const items = ref<Promotion[]>([]),
   products = ref<Product[]>([]);
 const loading = ref(false),
+  loaded = ref(false),
   error = ref(""),
   editor = ref(false),
   saving = ref(false),
@@ -71,6 +72,7 @@ async function load() {
     if (current === generation) {
       items.value = rules;
       products.value = candidates;
+      loaded.value = true;
     }
   } catch (e) {
     if (current === generation) error.value = errorText(e);
@@ -295,8 +297,11 @@ function status(p: Promotion) {
       >{{ errorText(error) }}
       <n-button text @click="load">{{ t("common.retry") }}</n-button></n-alert
     >
-    <n-spin :show="loading">
-      <div v-if="items.length" class="panel promotion-table-panel">
+    <div :aria-busy="loading">
+      <div
+        v-if="items.length || (loading && !loaded)"
+        class="panel promotion-table-panel"
+      >
         <div class="table-wrap">
           <table class="promotions-table">
             <thead>
@@ -311,6 +316,11 @@ function status(p: Promotion) {
               </tr>
             </thead>
             <tbody>
+              <template v-if="loading && !loaded">
+                <tr v-for="row in 3" :key="row" aria-hidden="true">
+                  <td v-for="column in 7" :key="column"><n-skeleton text /></td>
+                </tr>
+              </template>
               <tr v-for="p in items" :key="p.id">
                 <td>
                   <strong>{{ p.name }}</strong>
@@ -398,10 +408,10 @@ function status(p: Promotion) {
           </table>
         </div>
       </div>
-      <div v-else-if="!loading && !error" class="panel empty-panel">
+      <div v-else-if="loaded && !error" class="panel empty-panel">
         <n-empty :description="t('promotion.empty')" />
       </div>
-    </n-spin>
+    </div>
   </div>
   <FormDialog
     v-model:show="editor"

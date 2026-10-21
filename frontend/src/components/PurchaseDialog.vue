@@ -248,9 +248,31 @@ async function copyKey(event: MouseEvent) {
   }
 }
 async function openClaim() {
+  if (!order.value) {
+    if (busy.value) return;
+    busy.value = true;
+    error.value = "";
+    controller = new AbortController();
+    const signal = controller.signal;
+    try {
+      // 下单响应丢失时，先凭已有密钥找回订单，不能跳到尚无记录的历史页。
+      const detail = await api<OrderDetail>("/orders/lookup", {
+        method: "POST",
+        body: { key: key.value },
+        signal,
+      });
+      if (signal.aborted) return;
+      order.value = detail.order;
+    } catch (cause) {
+      if (!signal.aborted) error.value = errorText(cause);
+      return;
+    } finally {
+      if (!signal.aborted) busy.value = false;
+    }
+  }
   rememberClaimKey(key.value);
-  if (order.value) rememberOrder(order.value, key.value);
-  await router.push("/center/query");
+  rememberOrder(order.value, key.value);
+  await router.push(`/center/orders/${order.value.id}`);
   show.value = false;
 }
 async function buy() {

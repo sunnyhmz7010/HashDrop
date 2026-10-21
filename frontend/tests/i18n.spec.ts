@@ -82,7 +82,7 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
     page.getByRole("dialog", { name: "Confirm order" }),
   ).toBeVisible();
   const { key: token, orderID } = await placeTestOrder(page);
-  await page.goto(`${base}/center/query`);
+  await page.goto(`${base}/center/orders/${orderID}`);
   await expect(
     page.getByRole("button", { name: "Pay with HashPay" }),
   ).toBeVisible({ timeout: 15_000 });
@@ -183,21 +183,36 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await page.locator(".topbar .brand").click();
   await expect(page).toHaveURL(`${base}/`);
-  await page.goto(`${base}/center/query`);
+  await page.goto(`${base}/center/orders/${orderID}`);
   await page
     .getByRole("button", { name: "Find another order", exact: true })
     .click();
   await page.locator("#claim-key").fill("test");
-  await page.getByRole("button", { name: "View order", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "Find order", exact: true })
+    .getByRole("button", { name: "Find", exact: true })
+    .click();
   await expect(
     page.getByText("Invalid order or claim credential", {
       exact: true,
     }),
   ).toBeVisible();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Cancel", exact: true })
+    .click();
   await switchLanguage(page, "中文");
-  await expect(page.locator("#claim-key")).toHaveValue("test");
-  await page.getByRole("button", { name: "查看订单", exact: true }).click();
+  await page.getByRole("button", { name: "查询其他订单", exact: true }).click();
+  await page.locator("#claim-key").fill("test");
+  await page
+    .getByRole("dialog", { name: "查询订单", exact: true })
+    .getByRole("button", { name: "查询", exact: true })
+    .click();
   await expect(page.getByText("订单或凭证无效", { exact: true })).toBeVisible();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "取消", exact: true })
+    .click();
   await switchLanguage(page, "English");
 
   for (const width of [320, 390]) {

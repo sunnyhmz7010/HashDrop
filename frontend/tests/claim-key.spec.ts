@@ -58,17 +58,28 @@ test("密钥生成、重复候选和跨设备领取", async ({ page, request, br
   // 新页面不继承原页面 sessionStorage，模拟另一台设备只凭密钥领取。
   const otherContext = await browser.newContext({ locale: "zh-CN" });
   const other = await otherContext.newPage();
-  await other.goto(`${base}/center/query`);
+  await other.goto(`${base}/center/history`);
+  await other.getByRole("button", { name: "查询", exact: true }).click();
+  const query = other.getByRole("dialog", { name: "查询订单", exact: true });
   await other.getByLabel("领取密钥", { exact: true }).fill("错误密钥");
-  await other.getByRole("button", { name: "查看订单", exact: true }).click();
+  await query.getByRole("button", { name: "查询", exact: true }).click();
   await expect(
     other.getByText("订单或凭证无效", { exact: true }),
   ).toBeVisible();
   await expect(other.locator(".delivery-item")).toHaveCount(0);
+  await other.setViewportSize({ width: 320, height: 450 });
+  await expect(query).toBeInViewport();
+  await expect(
+    query.getByRole("button", { name: "查询", exact: true }),
+  ).toBeInViewport();
+  await other.screenshot({
+    path: "../.local/order-query-320.png",
+    fullPage: true,
+  });
   await other.getByLabel("领取密钥", { exact: true }).fill(key);
-  await other.getByRole("button", { name: "查看订单", exact: true }).click();
+  await query.getByRole("button", { name: "查询", exact: true }).click();
   await expect(other.locator(".delivery-item pre")).toContainText("购买时内容");
-  expect(other.url()).toBe(`${base}/center/query`);
+  expect(other.url()).toBe(`${base}/center/orders/${first.orderID}`);
   // 会话失败不能阻断游客历史；详情 Header 需保留中文、emoji 和尾空格。
   await other.route("**/api/admin/session", (route) => route.abort());
   await other.goto(`${base}/center/history`);
@@ -142,6 +153,14 @@ test("下单响应中断后重试复用订单并直接支付", async ({ page, re
   ).toBeEnabled();
   await expect(page.locator("#purchase-key")).toHaveValue(key);
   await expect(page.locator("#purchase-key")).toBeDisabled();
+  await page.getByRole("button", { name: "查看订单", exact: true }).click();
+  await expect(page).toHaveURL(`${base}/center/orders/${firstID}`);
+  await expect(
+    page.getByRole("button", { name: "前往 HashPay 付款", exact: true }),
+  ).toBeEnabled();
+  await page.goto(`${base}/products/${product.id}`);
+  await page.getByRole("button", { name: "下单", exact: true }).click();
+  await expect(page.locator("#purchase-key")).toHaveValue(key);
   await page.unroute("**/api/orders");
   await stubPaymentPage(page);
   expect(

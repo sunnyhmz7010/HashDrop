@@ -24,6 +24,7 @@ const router = createRouter({
       component: () => import("./pages/DonationOrder.vue"),
     },
     { path: "/products/:id", component: () => import("./pages/Product.vue") },
+    { path: "/center/query", redirect: "/center/history" },
     {
       path: "/center/:section?/:id?",
       component: () => import("./pages/Center.vue"),
@@ -58,7 +59,7 @@ router.beforeEach(async (to) => {
     const section = String(to.params.section ?? "");
     if (
       !adminAuthenticated.value &&
-      !["", "history", "query", "donations"].includes(section) &&
+      !["", "history", "donations"].includes(section) &&
       !(section === "orders" && to.params.id)
     )
       return { path: "/center", query: { login: "1" } };

@@ -37,7 +37,7 @@ const route = useRoute(),
   navOpen = ref(false),
   loginOpen = ref(false);
 const section = computed(() => String(route.params.section ?? "history"));
-const personalSections = ["history", "query", "donations"];
+const personalSections = ["history", "donations"];
 const personalPage = computed(
   () =>
     personalSections.includes(section.value) ||
@@ -45,7 +45,6 @@ const personalPage = computed(
 );
 const menuOptions = computed(() => [
   { key: "history", label: t("center.history") },
-  { key: "query", label: t("center.query") },
   { key: "donations", label: t("center.donations") },
   ...(adminAuthenticated.value
     ? [
@@ -169,10 +168,7 @@ async function logout() {
           >
           <template v-if="!sessionError || personalPage">
             <n-alert
-              v-if="
-                historyStorageError &&
-                (section === 'history' || section === 'query')
-              "
+              v-if="historyStorageError && section === 'history'"
               type="warning"
               class="space-bottom"
               >{{ t("center.storage_error") }}</n-alert
@@ -182,11 +178,7 @@ async function logout() {
               embedded
             />
             <GuestDonations v-else-if="section === 'donations'" />
-            <Order
-              v-else-if="
-                (section === 'orders' && route.params.id) || section === 'query'
-              "
-            />
+            <Order v-else-if="section === 'orders' && route.params.id" />
             <GuestOrders v-else-if="section === 'history'" />
             <template v-else-if="adminAuthenticated">
               <Products v-if="section === 'products'" />

@@ -49,8 +49,9 @@ const zh = {
   "center.title": "个人中心",
   "center.donations": "捐赠记录",
   "center.back_donations": "返回捐赠记录",
-  "center.donations_help":
-    "这里保存此浏览器的捐赠记录，与商品订单分开。其他设备或清理浏览器后可凭赞赏昵称查询。旧版无昵称记录仍可在原浏览器查看。",
+  "center.donation_query": "查询捐赠",
+  "center.donation_column": "记录 / 捐赠",
+  "center.donations_total": "共 {total} 笔捐赠",
   "center.donations_empty": "此浏览器还没有捐赠记录",
   "center.clear_donations": "清除本地捐赠记录",
   "center.clear_donations_warning":
@@ -61,15 +62,12 @@ const zh = {
     "有 {count} 项赞赏记录未能刷新，已保留本地记录并继续刷新其余项目。{error}",
   "common.query": "查询",
   "center.history": "订单历史",
-  "center.query": "查询交付",
+  "center.order_query": "查询订单",
   "center.order_detail": "订单详情",
   "center.back_history": "返回订单历史",
   "center.admin_login": "管理员登录",
-  "center.import_key": "凭密钥查询",
   "center.history_empty": "此浏览器还没有订单记录",
-  "center.history_help":
-    "这里保存此浏览器下单或凭密钥查询成功的订单。其他设备的订单请凭密钥导入；清理浏览器数据后需凭密钥恢复。",
-  "center.clear_history": "清除本地历史",
+  "center.clear_history": "清除本地订单历史",
   "center.clear_warning":
     "将清除此浏览器保存的订单记录与相应领取凭证，不会删除服务器订单。请先备份密钥。",
   "center.clear_failed": "部分本地记录或凭证未能清除，请重试。",
@@ -439,6 +437,7 @@ const zh = {
   "setup.gateway_title": "HashPay（可稍后在后台填写）",
   "setup.gateway_help":
     "地址、商户 ID、PEM 私钥一起填写，或全部留空。私钥保存后不会回显。",
+  "setup.callback_placeholder": "填写 HTTPS 站点地址后自动生成",
   "setup.callback_help":
     "HTTP 站点使用签名查询补查付款。HashPay 回调地址只接受 HTTPS。",
   "setup.submit": "完成初始化",
@@ -699,8 +698,9 @@ const en: Record<MessageKey, string> = {
   "center.title": "Personal center",
   "center.donations": "Donation history",
   "center.back_donations": "Back to donation history",
-  "center.donations_help":
-    "Donations saved in this browser appear separately from product orders. Use your donation nickname to find records on another device or after clearing browser data. Legacy records without nicknames remain available in their original browser.",
+  "center.donation_query": "Find donation",
+  "center.donation_column": "Record / Donation",
+  "center.donations_total": "{total} donations",
   "center.donations_empty": "No donations saved in this browser",
   "center.clear_donations": "Clear local donation history",
   "center.clear_donations_warning":
@@ -711,15 +711,12 @@ const en: Record<MessageKey, string> = {
     "Could not refresh {count} donation records. Saved records are retained and other records have been refreshed. {error}",
   "common.query": "Find",
   "center.history": "Order history",
-  "center.query": "Find delivery",
+  "center.order_query": "Find order",
   "center.order_detail": "Order details",
   "center.back_history": "Back to order history",
   "center.admin_login": "Admin sign in",
-  "center.import_key": "Find by claim key",
   "center.history_empty": "No orders saved in this browser",
-  "center.history_help":
-    "Orders placed or successfully found in this browser appear here. Import orders from other devices using their claim keys. Clearing browser data requires the keys to restore access.",
-  "center.clear_history": "Clear local history",
+  "center.clear_history": "Clear local order history",
   "center.clear_warning":
     "Remove order records and their claim credentials saved in this browser. Server orders will remain. Back up your keys first.",
   "center.clear_failed":
@@ -1130,6 +1127,8 @@ const en: Record<MessageKey, string> = {
   "setup.gateway_title": "HashPay (can be configured later)",
   "setup.gateway_help":
     "Enter the URL, merchant ID and PEM key together, or leave all three blank. The key is not shown after saving.",
+  "setup.callback_placeholder":
+    "Enter an HTTPS site URL to generate the callback URL",
   "setup.callback_help":
     "HTTP sites check payment through signed queries. HashPay callbacks require HTTPS.",
   "setup.submit": "Complete setup",

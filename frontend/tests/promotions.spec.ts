@@ -206,7 +206,7 @@ test("优惠管理保存、叠加报价、价格变化确认与历史领取", as
     "save10",
   );
   const { orderID } = await placeTestOrder(page);
-  const receipt = `${base}/center/query`;
+  const receipt = `${base}/center/orders/${orderID}`;
   await page.goto(receipt);
   await expect(page.locator(".checkout-amount-block")).toContainText(
     "64.00 CNY",

@@ -39,7 +39,15 @@ test("查询中心保留浏览器订单，跨设备导入并同步清除", async
   ).toHaveCount(0);
   await page.reload();
   await expect(page.locator(".order-row")).toHaveCount(2);
-  await page.getByRole("button", { name: "凭密钥查询", exact: true }).click();
+  await expect(
+    page.getByRole("menuitem", { name: "查询交付", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "查询", exact: true }).click();
+  await expect(
+    page.getByRole("dialog", { name: "查询订单", exact: true }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(`${base}/center`);
+  await expect(page.locator(".order-row")).toHaveCount(2);
   await expect(page.locator("#claim-key")).toHaveValue("");
   const otherTab = await context.newPage();
   await otherTab.goto(`${base}/center/orders/${orders[0].orderID}`);
@@ -91,11 +99,12 @@ test("查询中心保留浏览器订单，跨设备导入并同步清除", async
   const importer = await remote.newPage();
   await importer.goto(`${base}/center`);
   await expect(importer.locator(".order-row")).toHaveCount(0);
-  await importer
-    .getByRole("button", { name: "凭密钥查询", exact: true })
-    .click();
+  await importer.getByRole("button", { name: "查询", exact: true }).click();
   await importer.locator("#claim-key").fill(orders[0].key);
-  await importer.getByRole("button", { name: "查看订单", exact: true }).click();
+  await importer
+    .getByRole("dialog", { name: "查询订单", exact: true })
+    .getByRole("button", { name: "查询", exact: true })
+    .click();
   await expect(importer.locator(".delivery-item pre")).toContainText(
     "购买时内容",
   );
@@ -114,13 +123,17 @@ test("查询中心保留浏览器订单，跨设备导入并同步清除", async
       fullPage: true,
     });
   }
-  await page.getByRole("button", { name: "清除本地历史", exact: true }).click();
+  await page
+    .getByRole("button", { name: "清除本地订单历史", exact: true })
+    .click();
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "清除", exact: true })
     .click();
   await expect(page.locator(".order-row")).toHaveCount(0);
   await expect(otherTab.locator(".delivery-item")).toHaveCount(0);
+  await expect(otherTab).toHaveURL(`${base}/center/history`);
+  await otherTab.getByRole("button", { name: "查询", exact: true }).click();
   await expect(otherTab.locator("#claim-key")).toHaveValue("");
   await expect(pendingTab.getByRole("dialog")).toHaveCount(0);
   expect(
@@ -151,9 +164,9 @@ test("查询中心保留浏览器订单，跨设备导入并同步清除", async
 test("同一框架按会话展示权限并允许重试会话错误", async ({ page }) => {
   const base = process.env.HASHDROP_TEST_URL!;
   await page.goto(`${base}/center/query`);
-  await expect(page).toHaveURL(`${base}/center/query`);
+  await expect(page).toHaveURL(`${base}/center/history`);
   await expect(
-    page.getByRole("heading", { name: "查询交付", exact: true }),
+    page.getByRole("heading", { name: "订单历史", exact: true }),
   ).toBeVisible();
   await page.goto(`${base}/center/products`);
   await expect(page.getByRole("dialog", { name: "登录后台" })).toBeVisible();
@@ -188,11 +201,20 @@ test("同一框架按会话展示权限并允许重试会话错误", async ({ pa
   await expect(
     page.getByRole("heading", { name: "订单历史", exact: true }),
   ).toBeVisible();
-  await page.goto(`${base}/center/query`);
+  await page.getByRole("button", { name: "查询", exact: true }).click();
   await expect(page.locator("#claim-key")).toBeVisible();
   await expect(page.getByRole("alert")).toContainText("无法确认");
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "取消", exact: true })
+    .click();
   await page.goto(`${base}/center/donations`);
+  await page.getByRole("button", { name: "查询", exact: true }).click();
   await expect(page.locator("#donation-query-nickname")).toBeVisible();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "取消", exact: true })
+    .click();
   await page.goto(`${base}/center/products`);
   await expect(page.getByRole("alert")).toContainText("无法确认");
   await expect(

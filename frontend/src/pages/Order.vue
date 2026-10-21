@@ -5,7 +5,14 @@
 import { formatTime, t } from "../i18n";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { NAlert, NButton, NCheckbox, NInput, NTag, useMessage } from "naive-ui";
+import {
+  NAlert,
+  NButton,
+  NCheckbox,
+  NSkeleton,
+  NTag,
+  useMessage,
+} from "naive-ui";
 import {
   api,
   copyText,
@@ -16,14 +23,13 @@ import {
   type OrderDetail,
 } from "../api";
 import {
-  forgetClaimKey,
   forgetPurchase,
   rememberClaimKey,
   rememberOrder,
   restoreOrderKey,
   historyCleared,
-  restoreClaimKey,
 } from "../claim";
+import OrderQueryDialog from "../components/OrderQueryDialog.vue";
 
 const route = useRoute(),
   router = useRouter(),
@@ -33,19 +39,16 @@ const detail = ref<OrderDetail>(),
   busy = ref(false),
   token = ref(""),
   orderID = ref(""),
-  inputKey = ref(""),
+  queryOpen = ref(false),
   storageError = ref(false),
   credentialSaved = ref(false);
 let timer: ReturnType<typeof setTimeout> | undefined,
   controller: AbortController | undefined,
   generation = 0;
-const receipt = computed(() =>
+const credential = computed(() =>
   orderID.value && token.value
     ? `${location.origin}/center/orders/${orderID.value}#token=${encodeURIComponent(token.value)}`
     : "",
-);
-const credential = computed(() =>
-  orderID.value ? receipt.value : token.value,
 );
 function stop() {
   clearTimeout(timer);
@@ -55,21 +58,15 @@ function stop() {
 }
 async function load() {
   const current = generation;
-  if (busy.value || !token.value) return;
+  if (busy.value || !token.value || !orderID.value) return;
   clearTimeout(timer);
   controller = new AbortController();
   busy.value = true;
   try {
-    const result = orderID.value
-      ? await api<OrderDetail>(`/orders/${orderID.value}`, {
-          token: token.value,
-          signal: controller.signal,
-        })
-      : await api<OrderDetail>("/orders/lookup", {
-          method: "POST",
-          body: { key: token.value },
-          signal: controller.signal,
-        });
+    const result = await api<OrderDetail>(`/orders/${orderID.value}`, {
+      token: token.value,
+      signal: controller.signal,
+    });
     if (current !== generation) return;
     detail.value = result;
     const orderSaved = rememberOrder(result.order, token.value);
@@ -99,21 +96,17 @@ watch(
     credentialSaved.value = false;
     orderID.value = String(route.params.id ?? "");
     const fromURL = new URLSearchParams(route.hash.slice(1)).get("token");
-    if (orderID.value) {
-      try {
-        token.value =
-          fromURL ??
-          (restoreOrderKey(orderID.value) ||
-            sessionStorage.getItem(`hashdrop:${orderID.value}`) ||
-            "");
-        if (fromURL)
-          sessionStorage.setItem(`hashdrop:${orderID.value}`, fromURL);
-      } catch {
-        token.value = fromURL ?? "";
-        storageError.value = true;
-      }
-    } else token.value = route.query.new === "1" ? "" : restoreClaimKey();
-    inputKey.value = token.value;
+    try {
+      token.value =
+        fromURL ??
+        (restoreOrderKey(orderID.value) ||
+          sessionStorage.getItem(`hashdrop:${orderID.value}`) ||
+          "");
+      if (fromURL) sessionStorage.setItem(`hashdrop:${orderID.value}`, fromURL);
+    } catch {
+      token.value = fromURL ?? "";
+      storageError.value = true;
+    }
     void load();
   },
   { immediate: true },
@@ -122,41 +115,23 @@ onUnmounted(stop);
 watch(historyCleared, () => {
   stop();
   detail.value = undefined;
-  token.value = inputKey.value = orderID.value = "";
+  token.value = orderID.value = "";
   error.value = "";
   credentialSaved.value = false;
-  if (route.params.id || route.hash) void router.replace("/center/query");
+  queryOpen.value = false;
+  void router.replace("/center/history");
 });
-async function claim() {
-  if (!inputKey.value.trim() || Array.from(inputKey.value).length > 128) {
-    error.value = t("errors.claim_key");
-    return;
+async function queried(result: OrderDetail, key: string) {
+  const path = `/center/orders/${encodeURIComponent(result.order.id)}`;
+  if (route.path !== path || route.hash) await router.replace(path);
+  else {
+    stop();
+    detail.value = undefined;
+    error.value = "";
+    token.value = key;
+    credentialSaved.value = false;
+    await load();
   }
-  stop();
-  detail.value = undefined;
-  error.value = "";
-  // 用户新提交的密钥独立于旧链接中的订单号，查询响应只能属于本次输入。
-  credentialSaved.value = false;
-  orderID.value = "";
-  token.value = inputKey.value;
-  await load();
-  if (
-    detail.value &&
-    (route.path !== "/center/query" || route.hash || route.query.new)
-  )
-    await router.replace("/center/query");
-}
-async function otherOrder() {
-  stop();
-  detail.value = undefined;
-  error.value = "";
-  token.value = "";
-  inputKey.value = "";
-  orderID.value = "";
-  forgetClaimKey();
-  credentialSaved.value = false;
-  if (route.path !== "/center/query" || route.hash)
-    await router.replace({ path: "/center/query", query: { new: "1" } });
 }
 async function copy(value: string) {
   try {
@@ -190,47 +165,27 @@ const statusType = computed(() => {
 <template>
   <div class="guest-order-view grid">
     <div class="section-title">
-      <h2>
-        {{ route.params.id ? t("center.order_detail") : t("center.query") }}
-      </h2>
-      <n-button
-        v-if="route.params.id"
-        secondary
-        @click="router.push('/center/history')"
-        >{{ t("center.back_history") }}</n-button
-      >
+      <h2>{{ t("center.order_detail") }}</h2>
+      <n-button secondary @click="router.push('/center/history')">{{
+        t("center.back_history")
+      }}</n-button>
     </div>
     <main v-if="!detail" class="grid">
-      <form class="panel grid claim-panel" @submit.prevent="claim">
-        <p class="muted">{{ t("claim.private_help") }}</p>
+      <section class="panel grid claim-panel">
+        <n-skeleton v-if="busy" text :repeat="3" />
         <n-alert v-if="orderID && !token" type="warning">{{
           t("claim.missing")
         }}</n-alert>
-        <div class="field-stack">
-          <label class="field-label" for="claim-key">{{ t("claim.key") }}</label
-          ><n-input
-            v-model:value="inputKey"
-            :placeholder="t('claim.lookup_placeholder')"
-            :input-props="{
-              id: 'claim-key',
-              autocomplete: 'off',
-              spellcheck: false,
-            }"
-            :disabled="busy"
-          />
-        </div>
-        <div class="form-actions">
-          <n-button
-            type="primary"
-            attr-type="submit"
-            :loading="busy"
-            :disabled="busy || !inputKey.trim()"
-            >{{ t("claim.view") }}</n-button
-          >
-        </div>
-        <n-alert v-if="error" type="error">{{ errorText(error) }}</n-alert>
-        <small class="field-help">{{ t("claim.lost_help") }}</small>
-      </form>
+        <n-alert v-if="error" type="error"
+          >{{ errorText(error) }}
+          <n-button text :loading="busy" @click="load">{{
+            t("common.retry")
+          }}</n-button>
+        </n-alert>
+        <n-button type="primary" @click="queryOpen = true">{{
+          t("common.query")
+        }}</n-button>
+      </section>
     </main>
     <main v-else class="checkout-page">
       <section class="checkout-receipt">
@@ -347,10 +302,10 @@ const statusType = computed(() => {
           <small class="field-help">{{ t("claim.status_help") }}</small>
         </div>
         <div class="checkout-copy-field">
-          <span>{{ orderID ? t("claim.link") : t("claim.key") }}</span>
+          <span>{{ t("claim.link") }}</span>
           <code :title="credential">{{ credential }}</code>
           <n-button size="small" secondary @click="copy(credential)">{{
-            orderID ? t("claim.copy_link") : t("claim.copy_key")
+            t("claim.copy_link")
           }}</n-button>
         </div>
         <n-alert v-if="storageError" type="warning">{{
@@ -408,7 +363,7 @@ const statusType = computed(() => {
             <n-button :loading="busy" secondary size="small" @click="load">{{
               t("orders.refresh_status")
             }}</n-button>
-            <n-button secondary size="small" @click="otherOrder">{{
+            <n-button secondary size="small" @click="queryOpen = true">{{
               t("claim.other")
             }}</n-button>
           </div>
@@ -446,6 +401,7 @@ const statusType = computed(() => {
         </template>
       </section>
     </main>
+    <OrderQueryDialog v-model:show="queryOpen" @found="queried" />
   </div>
 </template>
 
@@ -457,10 +413,6 @@ const statusType = computed(() => {
 .claim-panel {
   max-width: 460px;
   margin: 0 auto;
-}
-
-.claim-panel p {
-  margin: 0;
 }
 
 .checkout-result .section-title {

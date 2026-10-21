@@ -117,6 +117,14 @@ test("个人捐赠记录按昵称查询和清除，管理员及会话故障时�
       );
       await querier.goto(`${base()}/center/donations`);
       await expect(querier.locator(".donation-history-row")).toHaveCount(0);
+      await expect(querier.locator("#donation-query-nickname")).toHaveCount(0);
+      await querier.getByRole("button", { name: "查询", exact: true }).click();
+      const query = querier.getByRole("dialog", {
+        name: "查询捐赠",
+        exact: true,
+      });
+      await expect(query).toBeVisible();
+      await expect(querier).toHaveURL(`${base()}/center/donations`);
       const input = querier.locator("#donation-query-nickname");
       await expect(input).toBeVisible();
       await input.fill(nickname("不存在的昵称"));
@@ -125,14 +133,14 @@ test("个人捐赠记录按昵称查询和清除，管理员及会话故障时�
           response.url() === `${base()}/api/donations/lookup` &&
           response.request().method() === "POST",
       );
-      await querier.getByRole("button", { name: "查询", exact: true }).click();
+      await query.getByRole("button", { name: "查询", exact: true }).click();
       expect((await missing).status()).toBe(404);
       await expect(
         querier.getByRole("alert").filter({ hasText: /赞赏|捐赠/ }),
       ).toBeVisible();
       await expect(querier.locator(".donation-history-row")).toHaveCount(0);
       await input.fill(name);
-      await querier.getByRole("button", { name: "查询", exact: true }).click();
+      await query.getByRole("button", { name: "查询", exact: true }).click();
       await expect(querier).toHaveURL(
         `${base()}/center/donations/${donation.id}`,
       );
@@ -162,6 +170,10 @@ test("个人捐赠记录按昵称查询和清除，管理员及会话故障时�
       await page.setViewportSize({ width, height: 900 });
       const box = await page.locator(".personal-donations").boundingBox();
       expect(box!.x + box!.width).toBeLessThanOrEqual(width + 1);
+      await page.screenshot({
+        path: `../.local/donation-history-${width}.png`,
+        fullPage: true,
+      });
     }
     let releaseResponse!: () => void;
     let requestStarted!: () => void;

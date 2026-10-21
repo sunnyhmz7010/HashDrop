@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { NAlert, NButton, NPagination, useDialog, useMessage } from "naive-ui";
+import { useDialog, useMessage } from "naive-ui";
 import { api, errorText, type OrderDetail } from "../api";
 import {
   clearOrderHistory,
@@ -10,12 +10,15 @@ import {
   historyCleared,
 } from "../claim";
 import { t } from "../i18n";
-import OrderTable from "./OrderTable.vue";
+import HistoryList from "./HistoryList.vue";
+import OrderRow from "./OrderRow.vue";
+import OrderQueryDialog from "./OrderQueryDialog.vue";
 
 const router = useRouter(),
   dialog = useDialog(),
   message = useMessage();
 const page = ref(1),
+  queryOpen = ref(false),
   loading = ref(false),
   error = ref("");
 const pageSize = 20;
@@ -107,75 +110,40 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="grid guest-history">
-    <div class="section-title">
-      <h2>{{ t("center.history") }}</h2>
-      <div class="row-actions">
-        <n-button :loading="loading" @click="load()">{{
-          t("common.refresh")
-        }}</n-button>
-        <n-button
-          type="primary"
-          @click="router.push({ path: '/center/query', query: { new: '1' } })"
-          >{{ t("center.import_key") }}</n-button
-        >
-        <n-button :disabled="loading || !orderHistory.length" @click="clear">{{
-          t("center.clear_history")
-        }}</n-button>
-      </div>
-    </div>
-    <p class="muted history-help">{{ t("center.history_help") }}</p>
-    <n-alert v-if="error" type="warning"
-      >{{ error
-      }}<n-button text @click="load()">{{
-        t("common.retry")
-      }}</n-button></n-alert
-    >
-    <div class="orders-workbench">
-      <OrderTable
-        :items="items"
-        :loading="loading"
-        :empty-text="t('center.history_empty')"
-        :show-empty="!error"
-        @open="
-          (order) =>
-            router.push('/center/orders/' + encodeURIComponent(order.id))
-        "
+  <HistoryList
+    :title="t('center.history')"
+    :items="items"
+    :columns="[
+      t('orders.product_column'),
+      t('orders.payment_status'),
+      t('common.amount'),
+      t('orders.delivery_column'),
+      t('common.created_at'),
+    ]"
+    :loading="loading"
+    :error="error"
+    :empty-text="t('center.history_empty')"
+    :clear-text="t('center.clear_history')"
+    :total="orderHistory.length"
+    :total-text="t('orders.total_count', { total: orderHistory.length })"
+    :page="page"
+    @refresh="load()"
+    @query="queryOpen = true"
+    @clear="clear"
+    @update:page="load"
+  >
+    <template #row="{ item }">
+      <OrderRow
+        :order="item"
+        @open="router.push('/center/orders/' + encodeURIComponent(item.id))"
       />
-      <div class="orders-pagination">
-        <span>{{
-          t("orders.total_count", { total: orderHistory.length })
-        }}</span
-        ><n-pagination
-          :page="page"
-          :page-size="pageSize"
-          :item-count="orderHistory.length"
-          :page-slot="5"
-          size="small"
-          :disabled="loading"
-          @update:page="(next) => load(next)"
-        />
-      </div>
-    </div>
-  </div>
+    </template>
+  </HistoryList>
+  <OrderQueryDialog
+    v-model:show="queryOpen"
+    @found="
+      (detail) =>
+        router.push('/center/orders/' + encodeURIComponent(detail.order.id))
+    "
+  />
 </template>
-
-<style scoped>
-.orders-workbench {
-  grid-template-columns: minmax(0, 1fr);
-}
-.orders-workbench > * {
-  min-width: 0;
-}
-.orders-pagination {
-  flex-wrap: wrap;
-}
-.history-help {
-  margin: 0;
-}
-@media (max-width: 820px) {
-  .section-title {
-    flex-wrap: wrap;
-  }
-}
-</style>

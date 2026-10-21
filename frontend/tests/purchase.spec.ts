@@ -106,11 +106,14 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   ).toBeTruthy();
   await page.reload();
   await expect(page.locator(".delivery-item pre")).toContainText("卡密-");
-  await page.goto(`${base}/center/query`);
+  await page.goto(`${base}/center/orders/${orderID}`);
   await page.getByRole("button", { name: "查询其他订单", exact: true }).click();
   await page.locator("#claim-key").fill(token);
-  await page.getByRole("button", { name: "查看订单", exact: true }).click();
-  await expect(page).toHaveURL(`${base}/center/query`);
+  await page
+    .getByRole("dialog", { name: "查询订单", exact: true })
+    .getByRole("button", { name: "查询", exact: true })
+    .click();
+  await expect(page).toHaveURL(`${base}/center/orders/${orderID}`);
   await expect(page.locator(".delivery-item pre")).toContainText("卡密-");
   await page.goto(`${base}/center?login=1`);
   await page.locator("#password input").fill("test-password-only");
@@ -305,15 +308,19 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   await blocked.getByRole("button", { name: "复制", exact: true }).click();
   const blockedOrder = await placeTestOrder(blocked);
   await blocked.goto(`${base}/center/orders/${blockedOrder.orderID}`);
+  await blocked.getByRole("button", { name: "查询", exact: true }).click();
   await blocked.locator("#claim-key").fill(blockedOrder.key);
-  await blocked.getByRole("button", { name: "查看订单", exact: true }).click();
+  await blocked
+    .getByRole("dialog", { name: "查询订单", exact: true })
+    .getByRole("button", { name: "查询", exact: true })
+    .click();
   await expect(
     blocked.getByRole("button", { name: "前往 HashPay 付款" }),
   ).toBeDisabled();
   await blocked.evaluate(() =>
     Object.defineProperty(window, "isSecureContext", { value: false }),
   );
-  await blocked.getByRole("button", { name: "复制密钥", exact: true }).click();
+  await blocked.getByRole("button", { name: "复制链接", exact: true }).click();
   await expect(
     blocked.getByRole("button", { name: "前往 HashPay 付款" }),
   ).toBeEnabled();

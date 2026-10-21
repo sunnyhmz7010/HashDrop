@@ -397,7 +397,7 @@ test("隐藏商品通过链接购买，取消隐藏后恢复首页入口", async
     ),
   ).toBeFalsy();
   const { orderID } = await placeTestOrder(page);
-  await page.goto(`${base}/center/query`);
+  await page.goto(`${base}/center/orders/${orderID}`);
   await expect(
     page.getByRole("button", { name: "前往 HashPay 付款" }),
   ).toBeVisible({ timeout: 15_000 });

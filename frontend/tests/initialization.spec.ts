@@ -45,6 +45,13 @@ test("网页初始化、自动登录与只写私钥", async ({ page, request }) 
   await expect(page.getByLabel("商户 RSA 私钥", { exact: true })).toHaveValue(
     "not-a-private-key",
   );
+  const siteURL = page.getByLabel("站点地址", { exact: true });
+  const callbackURL = page.getByLabel("回调地址：", { exact: true });
+  await expect(callbackURL).toHaveAttribute("readonly");
+  await siteURL.fill(" https://SHOP.example.com:8443/ ");
+  await expect(callbackURL).toHaveValue(
+    "https://shop.example.com:8443/api/webhooks/hashpay",
+  );
   for (const width of [320, 390, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     expect(
@@ -53,6 +60,10 @@ test("网页初始化、自动登录与只写私钥", async ({ page, request }) 
       ),
     ).toBeFalsy();
   }
+  await siteURL.fill("https://");
+  await expect(callbackURL).toHaveValue("");
+  await siteURL.fill(base);
+  await expect(callbackURL).toHaveValue("");
   await page
     .getByLabel("商户 RSA 私钥", { exact: true })
     .fill(fixture.private_key);

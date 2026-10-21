@@ -127,12 +127,13 @@ test("独立库存池共享、商品改绑与历史订单交付", async ({ page,
     };
   }
   async function viewOrder(order: { key: string }) {
-    await page.goto(`${base}/center/query`);
-    await page
-      .getByRole("button", { name: "查询其他订单", exact: true })
-      .click();
+    await page.goto(`${base}/center/history`);
+    await page.getByRole("button", { name: "查询", exact: true }).click();
     await page.getByLabel("领取密钥", { exact: true }).fill(order.key);
-    await page.getByRole("button", { name: "查看订单", exact: true }).click();
+    await page
+      .getByRole("dialog", { name: "查询订单", exact: true })
+      .getByRole("button", { name: "查询", exact: true })
+      .click();
   }
   const pending = await buy(first);
   await page.goto(`${base}/center/products`);

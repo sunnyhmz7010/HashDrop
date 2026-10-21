@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { t } from "../i18n";
 
-import { onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { NAlert, NButton, NInput } from "naive-ui";
 import { api, csrf, errorText, initialized, site } from "../api";
@@ -22,6 +22,17 @@ const form = reactive({
   hashpay_url: "",
   merchant_id: "",
   private_key: "",
+});
+const callbackURL = computed(() => {
+  try {
+    const publicURL = validatedSiteURL();
+    return publicURL.startsWith("https://")
+      ? `${publicURL}/api/webhooks/hashpay`
+      : "";
+  } catch {
+    // 站点地址尚未输入完整时，不展示无效或过期的回调地址。
+    return "";
+  }
 });
 onMounted(async () => {
   try {
@@ -78,13 +89,7 @@ function validatedSiteURL(): string {
     <section class="setup-panel">
       <div class="section-title setup-heading">
         <h1>{{ t("setup.title") }}</h1>
-        <div class="row-actions">
-          <LocaleSwitch /><router-link to="/center"
-            ><n-button size="small" secondary>{{
-              t("center.title")
-            }}</n-button></router-link
-          >
-        </div>
+        <LocaleSwitch />
       </div>
       <n-alert v-if="finished" type="success"
         >{{ t("setup.finished") }}<a :href="loginURL">{{ t("setup.login") }}</a>
@@ -170,6 +175,15 @@ function validatedSiteURL(): string {
             }"
           />
           <p class="helper">{{ t("setup.gateway_help") }}</p>
+          <label class="field-label" for="setup-callback">{{
+            t("settings.callback")
+          }}</label>
+          <n-input
+            :value="callbackURL"
+            readonly
+            :placeholder="t('setup.callback_placeholder')"
+            :input-props="{ id: 'setup-callback' }"
+          />
           <p class="helper">{{ t("setup.callback_help") }}</p>
         </fieldset>
         <n-alert v-if="error" type="error" class="space-top">{{

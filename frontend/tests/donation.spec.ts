@@ -337,8 +337,12 @@ test("多币种逐项配置、昵称付款与公开选择，停用后仍可查�
       page.getByText("赞赏页暂未开启。", { exact: true }),
     ).toBeVisible();
     await page.goto(`${base()}/center/donations`);
-    await page.locator("#donation-query-nickname").fill(privateName);
     await page.getByRole("button", { name: "查询", exact: true }).click();
+    await page.locator("#donation-query-nickname").fill(privateName);
+    await page
+      .getByRole("dialog", { name: "查询捐赠", exact: true })
+      .getByRole("button", { name: "查询", exact: true })
+      .click();
     await expect(
       page.getByRole("heading", { name: "感谢你的赞赏", exact: true }),
     ).toBeVisible();
@@ -513,8 +517,12 @@ test("创建结果未知后按昵称找回记录，返回赞赏页可以填写�
     ).toBeVisible();
     await expect(page.locator("#donate-nickname")).toBeDisabled();
     await page.goto(`${base()}/center/donations`);
-    await page.locator("#donation-query-nickname").fill(name);
     await page.getByRole("button", { name: "查询", exact: true }).click();
+    await page.locator("#donation-query-nickname").fill(name);
+    await page
+      .getByRole("dialog", { name: "查询捐赠", exact: true })
+      .getByRole("button", { name: "查询", exact: true })
+      .click();
     await expect(page).toHaveURL(`${base()}/center/donations/${createdID}`);
     await expect(page.locator(".donation-receipt")).toContainText(name);
     // 找回同一请求的结果后，待确认状态应已解除，不能锁住后续赞赏。
@@ -583,8 +591,12 @@ test("320px 长标题与受限存储下仍可用中文昵称付款和查询", as
       (await request.post(`${base()}/__test/pay-donation/${donation.id}`)).ok(),
     ).toBeTruthy();
     await page.goto(`${base()}/center/donations`);
-    await page.locator("#donation-query-nickname").fill(name);
     await page.getByRole("button", { name: "查询", exact: true }).click();
+    await page.locator("#donation-query-nickname").fill(name);
+    await page
+      .getByRole("dialog", { name: "查询捐赠", exact: true })
+      .getByRole("button", { name: "查询", exact: true })
+      .click();
     await expect(
       page.getByRole("heading", { name: "感谢你的赞赏", exact: true }),
     ).toBeVisible();

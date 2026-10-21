@@ -78,6 +78,12 @@ export interface Product {
   currency: string;
   inventory_id?: string;
   inventory_name?: string;
+  delivery_mode: "automatic" | "manual";
+  delivery_note: string;
+  buyer_note_label: string;
+  buyer_note_required: boolean;
+  min_quantity: number;
+  max_quantity: number;
   kind: string;
   active: boolean;
   hidden: boolean;
@@ -115,6 +121,8 @@ export interface Order {
   expires_at: number;
   created_at: number;
   last_error: string;
+  delivery_note: string;
+  buyer_note?: string;
 }
 export interface OrderDiscount {
   id: string;
@@ -246,6 +254,7 @@ export const kindNames = computed<Record<string, string>>(() => ({
   card: t("kind.card"),
   account: t("kind.account"),
   static: t("kind.static"),
+  manual: t("kind.manual"),
 }));
 export const paymentNames = computed<Record<string, string>>(() => ({
   creating: t("payment.creating"),

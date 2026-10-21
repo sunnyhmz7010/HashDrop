@@ -31,6 +31,10 @@ func TestAdminOrderFiltersAndPagination(t *testing.T) {
 		{"currency=CNY&min_amount=0.00&max_amount=10.05&status=paid", 6, 1, 6},
 		{"currency=USD&status=pending", 4, 1, 4},
 		{"currency=CNY&min_amount=20&page=9", 0, 1, 0},
+		{"delivery_status=pending&status=paid", 21, 1, 20},
+		{"delivery_status=done", 0, 1, 0},
+		{"q=%E6%B5%8B%E8%AF%95%E5%95%86%E5%93%81", 25, 1, 20},
+		{"q=missing-order", 0, 1, 0},
 	} {
 		t.Run(tc.query, func(t *testing.T) {
 			response := request("GET", "/api/admin/orders?"+tc.query)
@@ -52,7 +56,7 @@ func TestAdminOrderFiltersAndPagination(t *testing.T) {
 			}
 		})
 	}
-	for _, query := range []string{"min_amount=1", "currency=JPY&min_amount=1.1", "currency=CNY&min_amount=2&max_amount=1", "created_from=100&created_to=1", "created_from=abc", "created_from=-1", "currency=CNY&max_amount=NaN", "currency=INVALID", "status=unknown"} {
+	for _, query := range []string{"min_amount=1", "currency=JPY&min_amount=1.1", "currency=CNY&min_amount=2&max_amount=1", "created_from=100&created_to=1", "created_from=abc", "created_from=-1", "currency=CNY&max_amount=NaN", "currency=INVALID", "status=unknown", "delivery_status=unknown"} {
 		t.Run(fmt.Sprintf("invalid_%s", query), func(t *testing.T) {
 			response := request("GET", "/api/admin/orders?"+query)
 			if response.Code != http.StatusBadRequest {

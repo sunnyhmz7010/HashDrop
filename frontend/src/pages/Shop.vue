@@ -106,14 +106,14 @@ onMounted(load);
                       :aria-label="t('shop.buy')"
                       :disabled="
                         ['card', 'account'].includes(product.kind) &&
-                        product.available === 0 &&
+                        product.available < product.min_quantity &&
                         !restorePurchase(product.id)
                       "
                       @click="openPurchase(product.id)"
                       ><ProductIcon name="buy" /></n-button></template
                   >{{
                     ["card", "account"].includes(product.kind) &&
-                    product.available === 0 &&
+                    product.available < product.min_quantity &&
                     !restorePurchase(product.id)
                       ? t("product.sold_out")
                       : t("shop.buy")

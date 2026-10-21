@@ -2,7 +2,9 @@ package main
 
 import (
 	"database/sql"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -31,7 +33,7 @@ func TestDatabaseInitializesAndReopens(t *testing.T) {
 	}
 	defer db.Close()
 	var version, foreignKeys, sessions int
-	if err = db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 2 {
+	if err = db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 3 {
 		t.Fatal("数据库初始化版本无效", err)
 	}
 	if err = db.QueryRow("PRAGMA foreign_keys").Scan(&foreignKeys); err != nil || foreignKeys != 1 {
@@ -97,10 +99,25 @@ INSERT INTO donations(id,title,amount,currency,token_hash,gateway_url,gateway_me
  ('legacy-donation-2','另一笔匿名记录',500,'USD','legacy-token-hash-2','https://old.example','old-merchant','pending',2,2);
 CREATE INDEX donations_schedule ON donations(payment_status,next_check);
 CREATE INDEX donations_created ON donations(created_at DESC,id DESC);
-CREATE TABLE orders(id TEXT PRIMARY KEY,token_hash TEXT NOT NULL,content TEXT NOT NULL);
-INSERT INTO orders VALUES('old-order','old-order-token','v1:原订单密文');
+INSERT INTO inventories(id,name,kind,content,created_at,updated_at) VALUES('old-pool','原库存','static','v1:原库存密文',1,1);
+INSERT INTO products(id,name,price,currency,inventory_id,active,created_at,updated_at) VALUES('old-product','原商品',100,'USD','old-pool',1,1,1);
+INSERT INTO orders(id,product_id,product_name,inventory_id,kind,unit_price,currency,quantity,total,token_hash,content,payment_status,created_at,updated_at)
+ VALUES('old-order','old-product','原商品','old-pool','static',100,'USD',1,100,'old-order-token','v1:原订单密文','paid',1,1);
 PRAGMA user_version=1;
 `
+
+func schemaV2ForTest(t *testing.T) string {
+	t.Helper()
+	data, err := os.ReadFile("testdata/schema-v2.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
+func schemaV1ForTest(t *testing.T) string {
+	return strings.Split(schemaV2ForTest(t), "-- 赞赏独立于商品订单、库存和优惠。")[0] + donationSchemaV1ForTest
+}
 
 func TestDatabaseMigratesV1DonationsWithoutRewritingHistory(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "legacy.db")
@@ -108,7 +125,7 @@ func TestDatabaseMigratesV1DonationsWithoutRewritingHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := legacy.Exec(donationSchemaV1ForTest); err != nil {
+	if _, err := legacy.Exec(schemaV1ForTest(t)); err != nil {
 		legacy.Close()
 		t.Fatal(err)
 	}
@@ -123,9 +140,9 @@ func TestDatabaseMigratesV1DonationsWithoutRewritingHistory(t *testing.T) {
 		var version int
 		var nickname, requestID, hash, document, orderHash, cipher string
 		var shown bool
-		if err := db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 2 {
+		if err := db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 3 {
 			db.Close()
-			t.Fatal("迁移未升级到版本2", version, err)
+			t.Fatal("迁移未升级到版本3", version, err)
 		}
 		if err := db.QueryRow("SELECT nickname,show_public,request_id,token_hash FROM donations WHERE id='legacy-donation'").Scan(&nickname, &shown, &requestID, &hash); err != nil || nickname != "" || shown || requestID != "" || hash != "legacy-token-hash" {
 			db.Close()
@@ -178,7 +195,7 @@ func TestDonationV2MigrationFailureRollsBackAllColumns(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(donationSchemaV1ForTest); err != nil {
+	if _, err := db.Exec(schemaV1ForTest(t)); err != nil {
 		t.Fatal(err)
 	}
 	// 在第二列制造冲突，验证前面成功的 ALTER TABLE 也随事务回滚。
@@ -197,5 +214,87 @@ func TestDonationV2MigrationFailureRollsBackAllColumns(t *testing.T) {
 	}
 	if err := db.QueryRow("SELECT COUNT(*) FROM donations WHERE token_hash IN ('legacy-token-hash','legacy-token-hash-2')").Scan(&records); err != nil || records != 2 {
 		t.Fatal("迁移失败改变了旧赞赏记录", records, err)
+	}
+}
+
+func TestDeliveryV3MigrationPreservesHistoryAndBacksUp(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "v2.db")
+	db, err := sql.Open("sqlite", databaseURI(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(schemaV2ForTest(t)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(`
+INSERT INTO inventories(id,name,kind,created_at,updated_at) VALUES('pool','旧卡密池','card',1,1);
+INSERT INTO products(id,name,price,currency,inventory_id,active,created_at,updated_at) VALUES('product','旧商品',100,'CNY','pool',1,1,1);
+INSERT INTO orders(id,product_id,product_name,inventory_id,kind,unit_price,currency,quantity,total,token_hash,payment_status,created_at,updated_at)
+ VALUES('order','product','旧商品','pool','card',100,'CNY',1,100,'old-hash','paid',1,1);
+INSERT INTO stock_items(id,inventory_id,content,fingerprint,status,order_id,created_at) VALUES('stock','pool','原库存密文','fingerprint','sold','order',1);
+INSERT INTO deliveries(id,order_id,ordinal,stock_id,result,status,updated_at) VALUES('delivery','order',1,'stock','原交付密文','done',1);
+INSERT INTO promotions(id,name,kind,discount_type,value,scope,created_at,updated_at) VALUES('promo','原优惠','automatic','percentage',100,'selected',1,1);
+INSERT INTO promotion_products VALUES('promo','product');`); err != nil {
+		t.Fatal(err)
+	}
+	if err = db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db, err = openDatabase(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var mode, note, cipher string
+	var min, max, fks int
+	if err = db.QueryRow("SELECT delivery_mode,min_quantity,max_quantity,delivery_note FROM products WHERE id='product'").Scan(&mode, &min, &max, &note); err != nil || mode != "automatic" || min != 1 || max != 100 || note != "" {
+		t.Fatal("旧商品交付规则被改变", err)
+	}
+	if err = db.QueryRow("SELECT result FROM deliveries WHERE id='delivery'").Scan(&cipher); err != nil || cipher != "原交付密文" {
+		t.Fatal("历史交付丢失", err)
+	}
+	if err = db.QueryRow("PRAGMA foreign_keys").Scan(&fks); err != nil || fks != 1 {
+		t.Fatal("迁移后外键未启用", err)
+	}
+	if _, err = db.Exec("DELETE FROM products WHERE id='product'"); err == nil {
+		t.Fatal("迁移破坏了订单和优惠的外键")
+	}
+	backups, err := filepath.Glob(path + ".pre-v3-*.db")
+	if err != nil || len(backups) != 1 {
+		t.Fatal("升级前未保存备份", backups, err)
+	}
+	old, err := sql.Open("sqlite", databaseURI(backups[0])+"?mode=ro")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer old.Close()
+	var version int
+	if err = old.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 2 {
+		t.Fatal("备份不是升级前的数据", err)
+	}
+}
+
+func TestDeliveryV3MigrationFailureRollsBackAndRestoresForeignKeys(t *testing.T) {
+	db, err := sql.Open("sqlite", databaseURI(filepath.Join(t.TempDir(), "v3-failure.db")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(1)
+	if _, err = db.Exec(schemaV2ForTest(t) + "ALTER TABLE orders ADD COLUMN buyer_note TEXT NOT NULL DEFAULT ''; PRAGMA foreign_keys=ON;"); err != nil {
+		t.Fatal(err)
+	}
+	if err = migrateDatabaseV3(db); err == nil {
+		t.Fatal("迁移忽略了列冲突")
+	}
+	var version, fks, columns int
+	if err = db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 2 {
+		t.Fatal("迁移失败仍升级版本", err)
+	}
+	if err = db.QueryRow("PRAGMA foreign_keys").Scan(&fks); err != nil || fks != 1 {
+		t.Fatal("迁移失败未恢复外键", err)
+	}
+	if err = db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('products') WHERE name='delivery_mode'").Scan(&columns); err != nil || columns != 0 {
+		t.Fatal("失败迁移留下了新表", err)
 	}
 }

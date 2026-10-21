@@ -31,7 +31,20 @@ withDefaults(
         {{
           ["card", "account"].includes(product.kind)
             ? t("stock.count", { quantity: product.available })
-            : t("shop.after_payment")
+            : product.kind === "manual"
+              ? t("product.manual_help")
+              : t("shop.after_payment")
+        }}
+      </p>
+      <p
+        v-if="product.min_quantity > 1 || product.max_quantity < 100"
+        class="product-stock"
+      >
+        {{
+          t("product.quantity_range", {
+            min: product.min_quantity,
+            max: product.max_quantity,
+          })
         }}
       </p>
     </div>

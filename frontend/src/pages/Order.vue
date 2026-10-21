@@ -294,6 +294,14 @@ const statusType = computed(() => {
               <dd>{{ expires }}</dd>
             </div>
           </dl>
+          <div v-if="detail.order.buyer_note" class="order-note-block">
+            <strong>{{ t("orders.buyer_note") }}</strong>
+            <p>{{ detail.order.buyer_note }}</p>
+          </div>
+          <div v-if="detail.order.delivery_note" class="order-note-block">
+            <strong>{{ t("product.delivery_note") }}</strong>
+            <p>{{ detail.order.delivery_note }}</p>
+          </div>
         </template>
       </section>
       <section
@@ -371,7 +379,13 @@ const statusType = computed(() => {
               detail.order.delivery_status === 'manual'
             "
             type="warning"
-            >{{ t("claim.manual_help") }}</n-alert
+            >{{
+              t(
+                detail.order.kind === "manual"
+                  ? "claim.manual_waiting"
+                  : "claim.manual_help",
+              )
+            }}</n-alert
           >
           <n-checkbox
             v-if="storageError && detail.order.payment_status === 'pending'"
@@ -404,6 +418,14 @@ const statusType = computed(() => {
           >
             <div class="section-title">
               <h2>{{ t("delivery.content") }}</h2>
+              <span class="muted">{{
+                t("delivery.progress", {
+                  done: detail.deliveries.filter(
+                    (item) => item.status === "done",
+                  ).length,
+                  total: detail.order.quantity,
+                })
+              }}</span>
             </div>
             <article
               v-for="item in detail.deliveries.filter(
@@ -443,5 +465,14 @@ const statusType = computed(() => {
 
 .checkout-result .section-title {
   margin-bottom: 0;
+}
+.order-note-block {
+  margin-top: 18px;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+.order-note-block p {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
 }
 </style>

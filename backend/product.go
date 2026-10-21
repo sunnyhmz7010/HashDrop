@@ -9,17 +9,23 @@ import (
 )
 
 type Product struct {
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	Description   string `json:"description"`
-	Details       string `json:"details"`
-	Price         int64  `json:"price"`
-	SalePrice     *int64 `json:"sale_price,omitempty"`
-	OfferName     string `json:"offer_name,omitempty"`
-	Currency      string `json:"currency"`
-	InventoryID   string `json:"inventory_id,omitempty"`
-	InventoryName string `json:"inventory_name,omitempty"`
-	// Kind 来自关联库存池；商品本身不再保存交付类型和内容。
+	ID                string `json:"id"`
+	Name              string `json:"name"`
+	Description       string `json:"description"`
+	Details           string `json:"details"`
+	Price             int64  `json:"price"`
+	SalePrice         *int64 `json:"sale_price,omitempty"`
+	OfferName         string `json:"offer_name,omitempty"`
+	Currency          string `json:"currency"`
+	InventoryID       string `json:"inventory_id,omitempty"`
+	InventoryName     string `json:"inventory_name,omitempty"`
+	DeliveryMode      string `json:"delivery_mode"`
+	DeliveryNote      string `json:"delivery_note"`
+	BuyerNoteLabel    string `json:"buyer_note_label"`
+	BuyerNoteRequired bool   `json:"buyer_note_required"`
+	MinQuantity       int    `json:"min_quantity"`
+	MaxQuantity       int    `json:"max_quantity"`
+	// 自动交付的 Kind 来自库存池；人工交付不占用库存。
 	Kind      string `json:"kind"`
 	Active    bool   `json:"active"`
 	Hidden    bool   `json:"hidden"`
@@ -30,18 +36,18 @@ type Product struct {
 	UpdatedAt int64  `json:"updated_at"`
 }
 
-const productSelect = `SELECT p.id,p.name,p.description,p.details,p.price,p.currency,COALESCE(i.kind,''),p.active,p.hidden,COALESCE(i.content,''),p.updated_at,
+const productSelect = `SELECT p.id,p.name,p.description,p.details,p.price,p.currency,CASE WHEN p.delivery_mode='manual' THEN 'manual' ELSE COALESCE(i.kind,'') END,p.active,p.hidden,COALESCE(i.content,''),p.updated_at,
  (SELECT COUNT(*) FROM stock_items s WHERE s.inventory_id=i.id AND s.status='available'),
  (SELECT COUNT(*) FROM stock_items s WHERE s.inventory_id=i.id AND s.status='reserved'),
  (SELECT COUNT(*) FROM stock_items s WHERE s.inventory_id=i.id AND s.status='sold'),
- COALESCE(i.id,''),COALESCE(i.name,'')
+ COALESCE(i.id,''),COALESCE(i.name,''),p.delivery_mode,p.delivery_note,p.buyer_note_label,p.buyer_note_required,p.min_quantity,p.max_quantity
  FROM products p LEFT JOIN inventories i ON i.id=p.inventory_id AND i.deleted_at IS NULL`
 
 type scanner interface{ Scan(...any) error }
 
 func scanProduct(row scanner) (Product, error) {
 	var p Product
-	err := row.Scan(&p.ID, &p.Name, &p.Description, &p.Details, &p.Price, &p.Currency, &p.Kind, &p.Active, &p.Hidden, &p.Content, &p.UpdatedAt, &p.Available, &p.Reserved, &p.Sold, &p.InventoryID, &p.InventoryName)
+	err := row.Scan(&p.ID, &p.Name, &p.Description, &p.Details, &p.Price, &p.Currency, &p.Kind, &p.Active, &p.Hidden, &p.Content, &p.UpdatedAt, &p.Available, &p.Reserved, &p.Sold, &p.InventoryID, &p.InventoryName, &p.DeliveryMode, &p.DeliveryNote, &p.BuyerNoteLabel, &p.BuyerNoteRequired, &p.MinQuantity, &p.MaxQuantity)
 	return p, err
 }
 func (a *App) products(active bool) ([]Product, error) {
@@ -131,14 +137,20 @@ func (a *App) productDetail(w http.ResponseWriter, r *http.Request) error {
 }
 
 type productInput struct {
-	Name        string  `json:"name"`
-	Description string  `json:"description"`
-	Details     *string `json:"details"`
-	Price       int64   `json:"price"`
-	Currency    string  `json:"currency"`
-	InventoryID *string `json:"inventory_id"`
-	Active      bool    `json:"active"`
-	Hidden      *bool   `json:"hidden"`
+	Name              string  `json:"name"`
+	Description       string  `json:"description"`
+	Details           *string `json:"details"`
+	Price             int64   `json:"price"`
+	Currency          string  `json:"currency"`
+	InventoryID       *string `json:"inventory_id"`
+	Active            bool    `json:"active"`
+	Hidden            *bool   `json:"hidden"`
+	DeliveryMode      *string `json:"delivery_mode"`
+	DeliveryNote      *string `json:"delivery_note"`
+	BuyerNoteLabel    *string `json:"buyer_note_label"`
+	BuyerNoteRequired *bool   `json:"buyer_note_required"`
+	MinQuantity       *int    `json:"min_quantity"`
+	MaxQuantity       *int    `json:"max_quantity"`
 }
 
 func (a *App) saveProduct(w http.ResponseWriter, r *http.Request) error {
@@ -166,10 +178,11 @@ func (a *App) saveProduct(w http.ResponseWriter, r *http.Request) error {
 	inventory := ""
 	details := ""
 	hidden := false
+	policy := Product{DeliveryMode: "automatic", MinQuantity: 1, MaxQuantity: 100}
 	if id == "" {
 		id = newID()
 	} else {
-		if err := tx.QueryRowContext(r.Context(), "SELECT COALESCE(inventory_id,''),details,hidden FROM products WHERE id=? AND deleted_at IS NULL", id).Scan(&inventory, &details, &hidden); err == sql.ErrNoRows {
+		if err := tx.QueryRowContext(r.Context(), "SELECT COALESCE(inventory_id,''),details,hidden,delivery_mode,delivery_note,buyer_note_label,buyer_note_required,min_quantity,max_quantity FROM products WHERE id=? AND deleted_at IS NULL", id).Scan(&inventory, &details, &hidden, &policy.DeliveryMode, &policy.DeliveryNote, &policy.BuyerNoteLabel, &policy.BuyerNoteRequired, &policy.MinQuantity, &policy.MaxQuantity); err == sql.ErrNoRows {
 			return &apiError{404, "商品不存在"}
 		} else if err != nil {
 			return err
@@ -184,7 +197,40 @@ func (a *App) saveProduct(w http.ResponseWriter, r *http.Request) error {
 	if input.InventoryID != nil {
 		inventory = strings.TrimSpace(*input.InventoryID)
 	}
-	if inventory == "" && input.Active {
+	if input.DeliveryMode != nil {
+		policy.DeliveryMode = *input.DeliveryMode
+	}
+	if input.DeliveryNote != nil {
+		policy.DeliveryNote = strings.TrimSpace(*input.DeliveryNote)
+	}
+	if input.BuyerNoteLabel != nil {
+		policy.BuyerNoteLabel = strings.TrimSpace(*input.BuyerNoteLabel)
+	}
+	if input.BuyerNoteRequired != nil {
+		policy.BuyerNoteRequired = *input.BuyerNoteRequired
+	}
+	if input.MinQuantity != nil {
+		policy.MinQuantity = *input.MinQuantity
+	}
+	if input.MaxQuantity != nil {
+		policy.MaxQuantity = *input.MaxQuantity
+	}
+	if policy.DeliveryMode != "automatic" && policy.DeliveryMode != "manual" {
+		return bad("交付方式无效")
+	}
+	if policy.MinQuantity < 1 || policy.MaxQuantity > 100 || policy.MinQuantity > policy.MaxQuantity {
+		return bad("购买数量范围须在 1–100 之间，且下限不能大于上限")
+	}
+	if !utf8.ValidString(policy.DeliveryNote) || utf8.RuneCountInString(policy.DeliveryNote) > 4000 || !utf8.ValidString(policy.BuyerNoteLabel) || utf8.RuneCountInString(policy.BuyerNoteLabel) > 120 {
+		return bad("交付说明或买家信息标题过长")
+	}
+	if policy.BuyerNoteRequired && policy.BuyerNoteLabel == "" {
+		return bad("请先设置买家信息标题")
+	}
+	if policy.DeliveryMode == "manual" {
+		inventory = ""
+	}
+	if inventory == "" && input.Active && policy.DeliveryMode == "automatic" {
 		return bad("上架前请选择库存池")
 	}
 	if inventory != "" {
@@ -203,8 +249,8 @@ func (a *App) saveProduct(w http.ResponseWriter, r *http.Request) error {
 	if inventory != "" {
 		inventoryID = inventory
 	}
-	result, err := tx.ExecContext(r.Context(), `INSERT INTO products(id,name,description,details,price,currency,inventory_id,active,hidden,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)
- ON CONFLICT(id) DO UPDATE SET name=excluded.name,description=excluded.description,details=excluded.details,price=excluded.price,currency=excluded.currency,inventory_id=excluded.inventory_id,active=excluded.active,hidden=excluded.hidden,updated_at=excluded.updated_at WHERE products.deleted_at IS NULL`, id, input.Name, input.Description, details, input.Price, input.Currency, inventoryID, input.Active, hidden, now, now)
+	result, err := tx.ExecContext(r.Context(), `INSERT INTO products(id,name,description,details,price,currency,inventory_id,active,hidden,created_at,updated_at,delivery_mode,delivery_note,buyer_note_label,buyer_note_required,min_quantity,max_quantity) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+ ON CONFLICT(id) DO UPDATE SET name=excluded.name,description=excluded.description,details=excluded.details,price=excluded.price,currency=excluded.currency,inventory_id=excluded.inventory_id,active=excluded.active,hidden=excluded.hidden,updated_at=excluded.updated_at,delivery_mode=excluded.delivery_mode,delivery_note=excluded.delivery_note,buyer_note_label=excluded.buyer_note_label,buyer_note_required=excluded.buyer_note_required,min_quantity=excluded.min_quantity,max_quantity=excluded.max_quantity WHERE products.deleted_at IS NULL`, id, input.Name, input.Description, details, input.Price, input.Currency, inventoryID, input.Active, hidden, now, now, policy.DeliveryMode, policy.DeliveryNote, policy.BuyerNoteLabel, policy.BuyerNoteRequired, policy.MinQuantity, policy.MaxQuantity)
 	if err != nil {
 		return err
 	}

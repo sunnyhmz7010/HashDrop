@@ -43,7 +43,7 @@ test("订单金额筛选、数字分页与失败查询重试", async ({ page }) 
     expect(created.status(), await created.text()).toBe(201);
   }
   await page.goto(`${base}/center/orders`);
-  await page.locator(".orders-filter .n-select").nth(1).click();
+  await page.getByLabel("订单币种", { exact: true }).click();
   await page
     .locator(".n-base-select-option")
     .getByText("JPY", { exact: true })

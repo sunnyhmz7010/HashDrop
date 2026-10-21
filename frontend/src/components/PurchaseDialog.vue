@@ -43,6 +43,7 @@ const router = useRouter(),
   message = useMessage();
 const product = ref<Product>(),
   quantity = ref(1),
+  buyerNote = ref(""),
   key = ref(""),
   loading = ref(false),
   busy = ref(false),
@@ -64,13 +65,20 @@ let requestID = "",
   controller: AbortController | undefined;
 const max = computed(() =>
   product.value && ["card", "account"].includes(product.value.kind)
-    ? Math.min(100, product.value.available)
-    : 100,
+    ? Math.min(product.value.max_quantity, product.value.available)
+    : (product.value?.max_quantity ?? 100),
+);
+const min = computed(() => product.value?.min_quantity ?? 1);
+const validBuyerNote = computed(
+  () =>
+    locked.value ||
+    ((!product.value?.buyer_note_required || !!buyerNote.value.trim()) &&
+      Array.from(buyerNote.value).length <= 2000),
 );
 const validQuantity = computed(
   () =>
     Number.isInteger(quantity.value) &&
-    quantity.value >= 1 &&
+    quantity.value >= min.value &&
     quantity.value <= max.value,
 );
 const validKey = computed(
@@ -161,8 +169,9 @@ watch(
     });
     if (!previous?.[0] || previous[1] !== id) {
       const pending = restorePurchase(id);
-      key.value = pending?.key ?? "";
+      key.value = pending?.key ?? generateClaimKey();
       quantity.value = pending?.quantity ?? 1;
+      buyerNote.value = pending?.buyerNote ?? "";
       requestID = pending?.requestID ?? newPurchaseID();
       locked.value = !!pending;
       coupon.value = pending?.couponCode ?? "";
@@ -188,13 +197,22 @@ watch(
           : Promise.resolve(undefined),
       ] as const);
       if (!active) return;
-      if (result.status === "fulfilled") product.value = result.value;
+      if (result.status === "fulfilled") {
+        product.value = result.value;
+        if (!locked.value)
+          quantity.value = Math.max(
+            min.value,
+            Math.min(max.value, quantity.value),
+          );
+      }
       if (
         restored.status === "fulfilled" &&
         restored.value?.order.id === requestID &&
         restored.value.order.product_id === id
-      )
+      ) {
         order.value = restored.value.order;
+        buyerNote.value = restored.value.order.buyer_note ?? "";
+      }
       if (!product.value && !order.value && result.status === "rejected")
         error.value = errorText(result.reason);
     } catch (e) {
@@ -242,6 +260,7 @@ async function buy() {
     (!product.value && !order.value) ||
     !pricingReady.value ||
     !validKey.value ||
+    !validBuyerNote.value ||
     (!locked.value && !validQuantity.value)
   )
     return;
@@ -260,6 +279,7 @@ async function buy() {
     key: key.value,
     couponCode: coupon.value,
     quote: frozenQuote.value,
+    buyerNote: buyerNote.value,
   });
   storageError.value = !rememberClaimKey(key.value) || !saved;
   if (storageError.value && !keySaved.value) {
@@ -277,6 +297,7 @@ async function buy() {
         coupon_code: coupon.value,
         quoted_total: frozenQuote.value?.total,
         quoted_currency: frozenQuote.value?.currency,
+        buyer_note: buyerNote.value,
       },
       signal,
     });
@@ -365,17 +386,53 @@ async function buy() {
           }}</span>
         </div>
         <div class="field-stack">
+          <n-alert
+            v-if="order?.delivery_note || product?.delivery_note"
+            type="info"
+            class="delivery-note"
+            >{{ order?.delivery_note || product?.delivery_note }}</n-alert
+          >
+          <small
+            v-if="(order?.kind ?? product?.kind) === 'manual'"
+            class="field-help"
+            >{{ t("product.manual_help") }}</small
+          >
+        </div>
+        <div class="field-stack">
           <label class="field-label" for="purchase-quantity">{{
             t("product.quantity")
           }}</label>
           <n-input-number
             :value="quantity"
-            :min="1"
-            :max="Math.max(1, max, locked ? quantity : 1)"
+            :min="locked ? 1 : min"
+            :max="Math.max(min, max, locked ? quantity : 1)"
             :precision="0"
-            :disabled="busy || locked || max === 0"
+            :disabled="busy || locked || max < min"
             :input-props="{ id: 'purchase-quantity' }"
             @update:value="(value) => (quantity = value ?? 1)"
+          />
+          <small v-if="!locked" class="field-help">{{
+            t("product.quantity_range", {
+              min,
+              max: product?.max_quantity ?? 100,
+            })
+          }}</small>
+        </div>
+        <div v-if="product?.buyer_note_label || buyerNote" class="field-stack">
+          <label class="field-label" for="purchase-buyer-note"
+            >{{ locked ? t("orders.buyer_note") : product?.buyer_note_label
+            }}{{
+              !locked && product?.buyer_note_required
+                ? t("common.required")
+                : ""
+            }}</label
+          >
+          <n-input
+            v-model:value="buyerNote"
+            type="textarea"
+            :maxlength="2000"
+            :disabled="busy || locked"
+            :input-props="{ id: 'purchase-buyer-note', autocomplete: 'off' }"
           />
         </div>
         <div class="field-stack">
@@ -513,13 +570,14 @@ async function buy() {
           loading ||
           (!product && !order) ||
           !validKey ||
+          !validBuyerNote ||
           !pricingReady ||
           (!locked && !validQuantity) ||
           busy ||
           (storageError && !keySaved)
         "
         >{{
-          product && max === 0 && !locked
+          product && max < min && !locked
             ? t("product.sold_out")
             : locked
               ? t("purchase.resume")
@@ -582,6 +640,10 @@ async function buy() {
 .key-actions {
   display: flex;
   gap: 10px;
+}
+.delivery-note {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .key-suggestions {
   gap: 8px;

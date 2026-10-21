@@ -78,13 +78,13 @@ watch(
                 size="large"
                 :disabled="
                   ['card', 'account'].includes(product.kind) &&
-                  product.available === 0 &&
+                  product.available < product.min_quantity &&
                   !restorePurchase(product.id)
                 "
                 @click="purchaseOpen = true"
                 >{{
                   ["card", "account"].includes(product.kind) &&
-                  product.available === 0 &&
+                  product.available < product.min_quantity &&
                   !restorePurchase(product.id)
                     ? t("product.sold_out")
                     : t("shop.buy")
@@ -92,6 +92,13 @@ watch(
               >
             </template>
           </ProductSummary>
+        </section>
+        <section
+          v-if="product.delivery_note"
+          class="panel product-details delivery-note"
+        >
+          <h2>{{ t("product.delivery_note") }}</h2>
+          <p>{{ product.delivery_note }}</p>
         </section>
         <section v-if="product.details?.trim()" class="panel product-details">
           <MarkdownContent :content="product.details" />
@@ -136,5 +143,14 @@ watch(
 }
 .product-details {
   min-width: 0;
+}
+.delivery-note h2 {
+  font-size: 16px;
+  margin: 0 0 12px;
+}
+.delivery-note p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 </style>

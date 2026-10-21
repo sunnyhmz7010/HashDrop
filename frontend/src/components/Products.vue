@@ -7,6 +7,7 @@ import {
   NButton,
   NEmpty,
   NInput,
+  NInputNumber,
   NSelect,
   NSpin,
   NSwitch,
@@ -45,6 +46,12 @@ const model = reactive({
   inventory_id: null as string | null,
   active: false,
   hidden: false,
+  delivery_mode: "automatic" as "automatic" | "manual",
+  delivery_note: "",
+  buyer_note_label: "",
+  buyer_note_required: false,
+  min_quantity: 1,
+  max_quantity: 100,
 });
 const currencies = [
   "CNY",
@@ -97,6 +104,12 @@ function edit(product?: Product) {
           details: product.details ?? "",
           price: priceText(product.price, product.currency),
           inventory_id: product.inventory_id || null,
+          delivery_mode: product.delivery_mode,
+          delivery_note: product.delivery_note,
+          buyer_note_label: product.buyer_note_label,
+          buyer_note_required: product.buyer_note_required,
+          min_quantity: product.min_quantity,
+          max_quantity: product.max_quantity,
         }
       : {
           id: "",
@@ -108,6 +121,12 @@ function edit(product?: Product) {
           inventory_id: null,
           active: false,
           hidden: false,
+          delivery_mode: "automatic",
+          delivery_note: "",
+          buyer_note_label: "",
+          buyer_note_required: false,
+          min_quantity: 1,
+          max_quantity: 100,
         },
   );
   formError.value = "";
@@ -129,6 +148,13 @@ async function save() {
         inventory_id: model.inventory_id ?? "",
         active: model.active,
         hidden: model.hidden,
+        delivery_mode: model.delivery_mode,
+        delivery_note: model.delivery_note,
+        buyer_note_label: model.buyer_note_label,
+        buyer_note_required:
+          !!model.buyer_note_label.trim() && model.buyer_note_required,
+        min_quantity: model.min_quantity,
+        max_quantity: model.max_quantity,
       },
     });
     editor.value = false;
@@ -217,8 +243,12 @@ function removeProduct(product: Product) {
                 <template v-else>{{ p.name }}</template>
               </td>
               <td class="name-cell">
-                {{ p.inventory_name || t("inventory.unassigned") }}
-                <span v-if="p.kind" class="muted">
+                {{
+                  p.delivery_mode === "manual"
+                    ? t("kind.manual")
+                    : p.inventory_name || t("inventory.unassigned")
+                }}
+                <span v-if="p.kind && p.kind !== 'manual'" class="muted">
                   · {{ kindNames[p.kind] }}</span
                 >
               </td>
@@ -280,7 +310,30 @@ function removeProduct(product: Product) {
             :maxlength="120"
           />
         </div>
-        <div>
+        <div class="wide">
+          <label class="field-label" for="product-delivery-mode">{{
+            t("product.delivery_mode")
+          }}</label>
+          <n-select
+            id="product-delivery-mode"
+            v-model:value="model.delivery_mode"
+            :disabled="saving"
+            :options="[
+              { label: t('product.automatic'), value: 'automatic' },
+              { label: t('kind.manual'), value: 'manual' },
+            ]"
+          />
+          <p class="helper">
+            {{
+              t(
+                model.delivery_mode === "manual"
+                  ? "product.manual_help"
+                  : "inventory.association_help",
+              )
+            }}
+          </p>
+        </div>
+        <div v-if="model.delivery_mode === 'automatic'">
           <label class="field-label" for="product-inventory">{{
             t("inventory.association")
           }}</label
@@ -293,7 +346,6 @@ function removeProduct(product: Product) {
             clearable
             :disabled="saving"
           />
-          <p class="helper">{{ t("inventory.association_help") }}</p>
           <n-alert v-if="!inventories.length" type="info">{{
             t("inventory.create_first")
           }}</n-alert>
@@ -338,6 +390,70 @@ function removeProduct(product: Product) {
             :aria-label="t('product.hidden')"
           />
           <p class="helper">{{ t("product.hidden_help") }}</p>
+        </div>
+        <div class="wide">
+          <label class="field-label" for="product-delivery-note">{{
+            t("product.delivery_note")
+          }}</label>
+          <n-input
+            id="product-delivery-note"
+            v-model:value="model.delivery_note"
+            type="textarea"
+            :maxlength="4000"
+            :disabled="saving"
+            :placeholder="t('product.delivery_note_help')"
+          />
+        </div>
+        <div>
+          <label class="field-label" for="product-min-quantity">{{
+            t("product.min_quantity")
+          }}</label>
+          <n-input-number
+            :value="model.min_quantity"
+            :min="1"
+            :max="model.max_quantity"
+            :precision="0"
+            :disabled="saving"
+            :input-props="{ id: 'product-min-quantity' }"
+            @update:value="(value) => (model.min_quantity = value ?? 1)"
+          />
+        </div>
+        <div>
+          <label class="field-label" for="product-max-quantity">{{
+            t("product.max_quantity")
+          }}</label>
+          <n-input-number
+            :value="model.max_quantity"
+            :min="model.min_quantity"
+            :max="100"
+            :precision="0"
+            :disabled="saving"
+            :input-props="{ id: 'product-max-quantity' }"
+            @update:value="(value) => (model.max_quantity = value ?? 100)"
+          />
+        </div>
+        <div class="wide">
+          <label class="field-label" for="product-buyer-note-label">{{
+            t("product.buyer_note_label")
+          }}</label>
+          <n-input
+            id="product-buyer-note-label"
+            v-model:value="model.buyer_note_label"
+            :maxlength="120"
+            :disabled="saving"
+            :placeholder="t('product.buyer_note_help')"
+          />
+        </div>
+        <div v-if="model.buyer_note_label.trim()" class="wide">
+          <label class="field-label" for="product-buyer-note-required">{{
+            t("product.buyer_note_required")
+          }}</label>
+          <n-switch
+            id="product-buyer-note-required"
+            v-model:value="model.buyer_note_required"
+            :disabled="saving"
+            :aria-label="t('product.buyer_note_required')"
+          />
         </div>
         <div class="wide">
           <label class="field-label" for="description">{{

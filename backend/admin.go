@@ -133,6 +133,22 @@ func (a *App) adminOrders(w http.ResponseWriter, r *http.Request) error {
 	}
 	where := " WHERE deleted_at IS NULL"
 	args := []any{}
+	if delivery := values.Get("delivery_status"); delivery != "" {
+		switch delivery {
+		case "pending", "processing", "done", "manual", "cancelled":
+		default:
+			return bad("交付状态无效")
+		}
+		where += " AND delivery_status=?"
+		args = append(args, delivery)
+	}
+	if query := strings.TrimSpace(values.Get("q")); query != "" {
+		if !utf8.ValidString(query) || utf8.RuneCountInString(query) > 120 {
+			return bad("订单搜索内容过长")
+		}
+		where += " AND (id=? OR gateway_id=? OR instr(lower(product_name),lower(?))>0)"
+		args = append(args, query, query, query)
+	}
 	if status := values.Get("status"); status != "" {
 		switch status {
 		case "creating", "pending", "paid", "expired", "invalid", "review", "closed":
@@ -237,6 +253,9 @@ func (a *App) adminOrder(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	if err = a.decryptBuyerNote(&o); err != nil {
+		return err
+	}
 	deliveries, err := a.deliveryResults(r.Context(), o.ID)
 	if err != nil {
 		return err
@@ -264,7 +283,7 @@ func (a *App) retryOrder(w http.ResponseWriter, r *http.Request) error {
 	}
 	a.workerMu.Lock()
 	defer a.workerMu.Unlock()
-	o, err := a.loadOrder(r.Context(), r.PathValue("id"))
+	o, err := scanOrder(a.db.QueryRowContext(r.Context(), orderSelect+" WHERE id=? AND deleted_at IS NULL", r.PathValue("id")))
 	if err == sql.ErrNoRows {
 		return &apiError{404, "订单不存在"}
 	}

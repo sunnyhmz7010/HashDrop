@@ -43,6 +43,8 @@ const message = useMessage(),
   selectedID = ref(""),
   busy = ref(false),
   detailError = ref("");
+const editingDelivery = ref(""),
+  deliveryContent = ref("");
 const statusOptions = computed(() => [
   { label: t("orders.all_statuses"), value: "" },
   ...Object.entries(paymentNames.value).map(([value, label]) => ({
@@ -52,6 +54,8 @@ const statusOptions = computed(() => [
 ]);
 const filters = reactive({
   status: "",
+  delivery_status: "",
+  q: "",
   currency: "",
   min: "",
   max: "",
@@ -63,6 +67,8 @@ const filtered = computed(
   () =>
     !!(
       applied.value.status ||
+      applied.value.delivery_status ||
+      applied.value.q.trim() ||
       applied.value.currency ||
       applied.value.min ||
       applied.value.max ||
@@ -97,6 +103,8 @@ async function load(next = page.value, source = applied.value) {
   const params = new URLSearchParams({
     page: String(next),
     status: query.status,
+    delivery_status: query.delivery_status,
+    q: query.q.trim(),
     currency: query.currency,
   });
   if (query.min.trim()) params.set("min_amount", query.min.trim());
@@ -127,6 +135,8 @@ async function load(next = page.value, source = applied.value) {
 function resetFilters() {
   Object.assign(filters, {
     status: "",
+    delivery_status: "",
+    q: "",
     currency: "",
     min: "",
     max: "",
@@ -160,6 +170,7 @@ async function open(order: Order) {
   controller = new AbortController();
   selectedID.value = order.id;
   selected.value = undefined;
+  editingDelivery.value = deliveryContent.value = "";
   show.value = true;
   detailError.value = "";
   busy.value = true;
@@ -175,7 +186,7 @@ async function open(order: Order) {
     if (current === generation) busy.value = false;
   }
 }
-async function action(name: string) {
+async function action(name: string, body: unknown = {}) {
   if (busy.value || !selected.value) return;
   const id = selected.value.order.id,
     current = generation;
@@ -185,18 +196,29 @@ async function action(name: string) {
   try {
     const result = await api<OrderDetail>(`/admin/orders/${id}/${name}`, {
       method: "POST",
-      body: {},
+      body,
       signal: controller.signal,
     });
     if (current !== generation) return;
     selected.value = result;
     message.success(t("orders.updated"));
     await load();
+    return true;
   } catch (e) {
     if (current === generation) detailError.value = errorText(e);
   } finally {
     if (current === generation) busy.value = false;
   }
+}
+async function fulfill() {
+  if (!editingDelivery.value || !deliveryContent.value.trim()) return;
+  if (
+    await action("fulfill", {
+      delivery_id: editingDelivery.value,
+      content: deliveryContent.value,
+    })
+  )
+    editingDelivery.value = deliveryContent.value = "";
 }
 function remove() {
   if (busy.value || !selected.value) return;
@@ -276,6 +298,32 @@ async function copy(value: string) {
     >
     <div class="orders-workbench">
       <form class="orders-filter" @submit.prevent="load(1, filters)">
+        <div class="field-stack orders-search">
+          <label class="field-label" for="orders-search">{{
+            t("orders.search")
+          }}</label>
+          <n-input
+            v-model:value="filters.q"
+            :maxlength="120"
+            :input-props="{ id: 'orders-search' }"
+            :placeholder="t('orders.search_help')"
+            clearable
+          />
+        </div>
+        <div class="field-stack">
+          <label class="field-label">{{ t("delivery.status") }}</label>
+          <n-select
+            v-model:value="filters.delivery_status"
+            :aria-label="t('delivery.status')"
+            :options="[
+              { label: t('orders.all_deliveries'), value: '' },
+              ...Object.entries(deliveryNames).map(([value, label]) => ({
+                value,
+                label,
+              })),
+            ]"
+          />
+        </div>
         <div class="field-stack">
           <label class="field-label">{{ t("orders.status_filter") }}</label
           ><n-select
@@ -391,6 +439,7 @@ async function copy(value: string) {
             v-if="
               selected.order.payment_status === 'paid' &&
               selected.order.delivery_status !== 'done' &&
+              selected.order.kind !== 'manual' &&
               kindNames[selected.order.kind]
             "
             :disabled="busy"
@@ -521,6 +570,16 @@ async function copy(value: string) {
         </section>
 
         <section class="order-modal-section">
+          <template v-if="selected.order.buyer_note">
+            <h3>{{ t("orders.buyer_note") }}</h3>
+            <pre class="order-note">{{ selected.order.buyer_note }}</pre>
+          </template>
+          <template v-if="selected.order.delivery_note">
+            <h3>{{ t("product.delivery_note") }}</h3>
+            <p class="order-note">{{ selected.order.delivery_note }}</p>
+          </template>
+        </section>
+        <section class="order-modal-section">
           <div class="order-delivery-title">
             <h3>{{ t("delivery.content") }}</h3>
             <n-tag size="small">{{
@@ -546,6 +605,60 @@ async function copy(value: string) {
               >
             </div>
             <pre v-if="delivery.content">{{ delivery.content }}</pre>
+            <form
+              v-else-if="editingDelivery === delivery.id"
+              class="grid"
+              @submit.prevent="fulfill"
+            >
+              <label
+                class="field-label"
+                :for="'delivery-content-' + delivery.id"
+                >{{ t("delivery.content") }}</label
+              >
+              <n-input
+                v-model:value="deliveryContent"
+                type="textarea"
+                :maxlength="65536"
+                :autosize="{ minRows: 4, maxRows: 12 }"
+                :disabled="busy"
+                :input-props="{ id: 'delivery-content-' + delivery.id }"
+                :placeholder="t('delivery.fulfill_help')"
+              />
+              <small class="field-help">{{
+                t("delivery.immutable_help")
+              }}</small>
+              <div class="row-actions">
+                <n-button
+                  type="primary"
+                  attr-type="submit"
+                  :loading="busy"
+                  :disabled="!deliveryContent.trim() || busy"
+                  >{{ t("delivery.fulfill") }}</n-button
+                >
+                <n-button
+                  :disabled="busy"
+                  @click="
+                    editingDelivery = '';
+                    deliveryContent = '';
+                  "
+                  >{{ t("common.cancel") }}</n-button
+                >
+              </div>
+            </form>
+            <n-button
+              v-else-if="
+                selected.order.payment_status === 'paid' &&
+                delivery.status !== 'done'
+              "
+              secondary
+              size="small"
+              :disabled="busy || !!editingDelivery"
+              @click="
+                editingDelivery = delivery.id;
+                deliveryContent = '';
+              "
+              >{{ t("delivery.fulfill") }}</n-button
+            >
           </article>
           <n-empty
             v-if="!selected.deliveries.length"
@@ -587,6 +700,15 @@ async function copy(value: string) {
 .orders-date-filter {
   grid-column: span 2;
 }
+.orders-search {
+  grid-column: span 2;
+}
+.order-note {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
 .orders-pagination {
   flex-wrap: wrap;
 }
@@ -598,6 +720,9 @@ async function copy(value: string) {
     grid-template-columns: minmax(0, 1fr);
   }
   .orders-date-filter {
+    grid-column: auto;
+  }
+  .orders-search {
     grid-column: auto;
   }
 }

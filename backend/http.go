@@ -99,6 +99,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("DELETE /api/admin/orders/{id}", wrap(a.admin(a.deleteOrder)))
 	mux.HandleFunc("POST /api/admin/orders/{id}/recheck", wrap(a.admin(a.recheckOrder)))
 	mux.HandleFunc("POST /api/admin/orders/{id}/retry", wrap(a.admin(a.retryOrder)))
+	mux.HandleFunc("POST /api/admin/orders/{id}/fulfill", wrap(a.admin(a.fulfillDelivery)))
 	mux.HandleFunc("GET /api/admin/settings", wrap(a.admin(a.getSettings)))
 	mux.HandleFunc("GET /api/admin/donation", wrap(a.admin(a.getDonationSettings)))
 	mux.HandleFunc("PUT /api/admin/donation", wrap(a.admin(a.updateDonationSettings)))

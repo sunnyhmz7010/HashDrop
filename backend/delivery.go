@@ -2,11 +2,15 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"path/filepath"
+	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 type Delivery struct {
@@ -51,6 +55,15 @@ func (a *App) deliverOrder(ctx context.Context, o Order) error {
 		return err
 	}
 	defer tx.Rollback()
+	if o.Kind == "manual" {
+		if _, err = tx.ExecContext(ctx, "UPDATE deliveries SET status='manual',last_error='',updated_at=? WHERE order_id=? AND status<>'done'", unixNow(), o.ID); err != nil {
+			return err
+		}
+		if _, err = tx.ExecContext(ctx, "UPDATE orders SET delivery_status='manual',last_error='',updated_at=? WHERE id=?", unixNow(), o.ID); err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
 	// 历史订单保留领取记录；已停止支持的类型不能进入库存分配。
 	if !validDeliveryKind(o.Kind) {
 		if _, err = tx.ExecContext(ctx, "UPDATE deliveries SET status='manual',last_error='商品交付类型已停止支持',updated_at=? WHERE order_id=? AND status<>'done'", unixNow(), o.ID); err != nil {
@@ -119,6 +132,83 @@ func (a *App) deliverOrder(ctx context.Context, o Order) error {
 	}
 	audit("order_delivered", o.ID)
 	return nil
+}
+
+// 人工交付一次只完成一份；相同内容重试可恢复结果，已交付内容禁止覆盖。
+func (a *App) fulfillDelivery(w http.ResponseWriter, r *http.Request) error {
+	var input struct {
+		DeliveryID string `json:"delivery_id"`
+		Content    string `json:"content"`
+	}
+	if err := readJSON(w, r, &input); err != nil {
+		return err
+	}
+	if strings.TrimSpace(input.Content) == "" || !utf8.ValidString(input.Content) || utf8.RuneCountInString(input.Content) > 65536 {
+		return bad("交付内容须为 1–65536 字符")
+	}
+	a.workerMu.Lock()
+	defer a.workerMu.Unlock()
+	tx, err := a.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	o, err := scanOrder(tx.QueryRowContext(r.Context(), orderSelect+" WHERE id=? AND deleted_at IS NULL", r.PathValue("id")))
+	if err == sql.ErrNoRows {
+		return &apiError{404, "订单不存在"}
+	}
+	if err != nil {
+		return err
+	}
+	if o.PaymentStatus != "paid" {
+		return bad("订单尚未核实付款，不能交付")
+	}
+	var status, cipher, stockID string
+	if err = tx.QueryRowContext(r.Context(), "SELECT status,result,COALESCE(stock_id,'') FROM deliveries WHERE id=? AND order_id=?", input.DeliveryID, o.ID).Scan(&status, &cipher, &stockID); err == sql.ErrNoRows {
+		return &apiError{404, "交付项目不存在"}
+	} else if err != nil {
+		return err
+	}
+	if status == "done" {
+		plain, err := a.vault.decrypt(cipher, "delivery:"+input.DeliveryID)
+		if err != nil {
+			return err
+		}
+		if plain != input.Content {
+			return &apiError{409, "该份商品已交付，不能覆盖原内容"}
+		}
+	} else {
+		cipher, err = a.vault.encrypt(input.Content, "delivery:"+input.DeliveryID)
+		if err != nil {
+			return err
+		}
+		if stockID != "" {
+			result, err := tx.ExecContext(r.Context(), "UPDATE stock_items SET status='available',order_id=NULL WHERE id=? AND order_id=? AND status='reserved'", stockID, o.ID)
+			if err != nil {
+				return err
+			}
+			count, err := result.RowsAffected()
+			if err != nil {
+				return err
+			}
+			if count != 1 {
+				return &apiError{409, "库存预留状态不一致，请先核查"}
+			}
+		}
+		if _, err = tx.ExecContext(r.Context(), "UPDATE deliveries SET result=?,status='done',stock_id=NULL,attempts=attempts+1,last_error='',updated_at=? WHERE id=? AND order_id=?", cipher, unixNow(), input.DeliveryID, o.ID); err != nil {
+			return err
+		}
+		if _, err = tx.ExecContext(r.Context(), `UPDATE orders SET delivery_status=CASE WHEN EXISTS(SELECT 1 FROM deliveries WHERE order_id=? AND status<>'done') THEN 'manual' ELSE 'done' END,
+ reservation_status=CASE WHEN EXISTS(SELECT 1 FROM deliveries WHERE order_id=? AND status<>'done') THEN reservation_status ELSE 'consumed' END,
+ last_error='',updated_at=? WHERE id=?`, o.ID, o.ID, unixNow(), o.ID); err != nil {
+			return err
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	audit("delivery_fulfilled", o.ID)
+	return a.adminOrder(w, r)
 }
 func (a *App) runScheduler(ctx context.Context) {
 	ticker := time.NewTicker(15 * time.Second)

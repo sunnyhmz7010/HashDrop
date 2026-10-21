@@ -202,6 +202,7 @@ test("同一框架按会话展示权限并允许重试会话错误", async ({ pa
     page.getByRole("menuitem", { name: "商品", exact: true }),
   ).toHaveCount(0);
   await page.goto(`${base}/center`);
+  await expect(page.getByRole("alert")).toContainText("无法确认");
   await page.unroute("**/api/admin/session");
   await page.getByRole("button", { name: "重试", exact: true }).click();
   await expect(

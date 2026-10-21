@@ -99,9 +99,13 @@ test("多币种逐项配置、昵称付款与公开选择，停用后仍可查�
       const group = groups.nth(index);
       await group.getByLabel("赞赏币种", { exact: true }).click();
       await page
-        .locator(".n-base-select-option")
+        .locator(".n-base-select-option:visible")
         .getByText(currency, { exact: true })
         .click();
+      await expect(group.getByLabel("赞赏币种", { exact: true })).toContainText(
+        currency,
+      );
+      await expect(page.locator(".n-base-select-menu:visible")).toHaveCount(0);
       if (!(await group.locator(".donation-preset input").count()))
         await group
           .getByRole("button", { name: "添加金额", exact: true })

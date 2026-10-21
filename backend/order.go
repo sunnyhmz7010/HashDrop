@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 type Order struct {
@@ -36,14 +37,17 @@ type Order struct {
 	TokenHash         string          `json:"-"`
 	Attempts          int             `json:"attempts"`
 	LastError         string          `json:"last_error"`
+	DeliveryNote      string          `json:"delivery_note"`
+	BuyerNote         string          `json:"buyer_note,omitempty"`
+	buyerNoteCipher   string
 }
 
-const orderSelect = `SELECT id,product_id,product_name,kind,unit_price,currency,quantity,total,COALESCE(gateway_id,''),gateway_url,gateway_merchant_id,checkout_url,payment_status,delivery_status,reservation_status,expires_at,created_at,content,token_hash,attempts,last_error,discounts,COALESCE(inventory_id,'') FROM orders`
+const orderSelect = `SELECT id,product_id,product_name,kind,unit_price,currency,quantity,total,COALESCE(gateway_id,''),gateway_url,gateway_merchant_id,checkout_url,payment_status,delivery_status,reservation_status,expires_at,created_at,content,token_hash,attempts,last_error,discounts,COALESCE(inventory_id,''),delivery_note,buyer_note FROM orders`
 
 func scanOrder(row scanner) (Order, error) {
 	var o Order
 	var discounts string
-	err := row.Scan(&o.ID, &o.ProductID, &o.ProductName, &o.Kind, &o.UnitPrice, &o.Currency, &o.Quantity, &o.Total, &o.GatewayID, &o.GatewayURL, &o.GatewayMerchantID, &o.CheckoutURL, &o.PaymentStatus, &o.DeliveryStatus, &o.ReservationStatus, &o.ExpiresAt, &o.CreatedAt, &o.Content, &o.TokenHash, &o.Attempts, &o.LastError, &discounts, &o.InventoryID)
+	err := row.Scan(&o.ID, &o.ProductID, &o.ProductName, &o.Kind, &o.UnitPrice, &o.Currency, &o.Quantity, &o.Total, &o.GatewayID, &o.GatewayURL, &o.GatewayMerchantID, &o.CheckoutURL, &o.PaymentStatus, &o.DeliveryStatus, &o.ReservationStatus, &o.ExpiresAt, &o.CreatedAt, &o.Content, &o.TokenHash, &o.Attempts, &o.LastError, &discounts, &o.InventoryID, &o.DeliveryNote, &o.buyerNoteCipher)
 	if err == nil {
 		err = json.Unmarshal([]byte(discounts), &o.Discounts)
 	}
@@ -60,6 +64,7 @@ type orderInput struct {
 	CouponCode     string `json:"coupon_code"`
 	QuotedTotal    *int64 `json:"quoted_total"`
 	QuotedCurrency string `json:"quoted_currency"`
+	BuyerNote      string `json:"buyer_note"`
 }
 
 func (a *App) loadOrder(ctx context.Context, id string) (Order, error) {
@@ -122,6 +127,10 @@ func (a *App) reserveOrder(ctx context.Context, productID string, quantity int, 
 }
 func (a *App) reservePricedOrder(ctx context.Context, input orderInput) (Order, string, error) {
 	productID, quantity := input.ProductID, input.Quantity
+	input.BuyerNote = strings.TrimSpace(input.BuyerNote)
+	if !utf8.ValidString(input.BuyerNote) || utf8.RuneCountInString(input.BuyerNote) > 2000 {
+		return Order{}, "", bad("买家信息不能超过 2000 字符")
+	}
 	token, id := input.Key, input.RequestID
 	// 内部调用沿用随机凭证；公开下单入口必须先验证买家设置的密钥。
 	if token == "" {
@@ -144,6 +153,12 @@ func (a *App) reservePricedOrder(ctx context.Context, input orderInput) (Order, 
 		if existing.ProductID != productID || existing.Quantity != quantity || !constantEqual(existing.TokenHash, tokenHash(token)) {
 			return Order{}, "", &apiError{409, "下单请求标识无效，请重新打开下单弹窗"}
 		}
+		if err = a.decryptBuyerNote(&existing); err != nil {
+			return Order{}, "", err
+		}
+		if existing.BuyerNote != input.BuyerNote {
+			return Order{}, "", &apiError{409, "下单请求标识无效，请重新打开下单弹窗"}
+		}
 		return existing, token, nil
 	}
 	if err != sql.ErrNoRows {
@@ -163,6 +178,15 @@ func (a *App) reservePricedOrder(ctx context.Context, input orderInput) (Order, 
 	if err != nil {
 		return Order{}, "", err
 	}
+	if err = validatePurchaseQuantity(p, quantity); err != nil {
+		return Order{}, "", err
+	}
+	if p.BuyerNoteRequired && input.BuyerNote == "" {
+		return Order{}, "", bad("请填写商品要求的买家信息")
+	}
+	if p.BuyerNoteLabel == "" && input.BuyerNote != "" {
+		return Order{}, "", bad("该商品不接收买家信息，请重新确认商品")
+	}
 	quote, err := quoteOrder(ctx, tx, p, quantity, input.CouponCode, unixNow())
 	if err != nil {
 		var invalid *apiError
@@ -174,7 +198,7 @@ func (a *App) reservePricedOrder(ctx context.Context, input orderInput) (Order, 
 	if input.QuotedTotal != nil && (*input.QuotedTotal != quote.Total || input.QuotedCurrency != quote.Currency) {
 		return Order{}, "", &apiError{409, "优惠或价格已变化，请重新确认金额"}
 	}
-	if p.InventoryID == "" || !validDeliveryKind(p.Kind) {
+	if p.Kind != "manual" && (p.InventoryID == "" || !validDeliveryKind(p.Kind)) {
 		return Order{}, "", bad("商品尚未关联可用库存池")
 	}
 	content := ""
@@ -190,11 +214,22 @@ func (a *App) reservePricedOrder(ctx context.Context, input orderInput) (Order, 
 	}
 	o := Order{ID: id, ProductID: p.ID, ProductName: p.Name, InventoryID: p.InventoryID, Kind: p.Kind, UnitPrice: p.Price, Currency: p.Currency, Quantity: quantity, Total: p.Price * int64(quantity), TokenHash: tokenHash(token), Content: content, PaymentStatus: "creating", DeliveryStatus: "pending", ReservationStatus: "reserved", CreatedAt: unixNow()}
 	o.Total, o.OriginalTotal, o.DiscountTotal, o.Discounts = quote.Total, quote.OriginalTotal, quote.DiscountTotal, quote.Discounts
+	o.DeliveryNote, o.BuyerNote = p.DeliveryNote, input.BuyerNote
+	if o.BuyerNote != "" {
+		o.buyerNoteCipher, err = a.vault.encrypt(o.BuyerNote, "buyer-note:"+id)
+		if err != nil {
+			return Order{}, "", err
+		}
+	}
 	snapshot, err := json.Marshal(o.Discounts)
 	if err != nil {
 		return Order{}, "", err
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO orders(id,product_id,product_name,kind,unit_price,currency,quantity,total,content,token_hash,payment_status,created_at,updated_at,discounts,inventory_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, o.ID, o.ProductID, o.ProductName, o.Kind, o.UnitPrice, o.Currency, o.Quantity, o.Total, o.Content, o.TokenHash, o.PaymentStatus, o.CreatedAt, o.CreatedAt, string(snapshot), o.InventoryID); err != nil {
+	var inventoryID any
+	if o.InventoryID != "" {
+		inventoryID = o.InventoryID
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO orders(id,product_id,product_name,kind,unit_price,currency,quantity,total,content,token_hash,payment_status,created_at,updated_at,discounts,inventory_id,delivery_note,buyer_note) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, o.ID, o.ProductID, o.ProductName, o.Kind, o.UnitPrice, o.Currency, o.Quantity, o.Total, o.Content, o.TokenHash, o.PaymentStatus, o.CreatedAt, o.CreatedAt, string(snapshot), inventoryID, o.DeliveryNote, o.buyerNoteCipher); err != nil {
 		return Order{}, "", err
 	}
 	// 与库存预留同一写事务占用优惠次数；只有可靠终止且未付款的订单才归还名额。
@@ -276,12 +311,33 @@ func (a *App) orderDetail(w http.ResponseWriter, r *http.Request) error {
 	return a.replyOrder(w, r, o)
 }
 func (a *App) replyOrder(w http.ResponseWriter, r *http.Request, o Order) error {
+	if err := a.decryptBuyerNote(&o); err != nil {
+		return err
+	}
 	results, err := a.deliveryResults(r.Context(), o.ID)
 	if err != nil {
 		return err
 	}
 	o.LastError = ""
 	reply(w, 200, map[string]any{"order": o, "deliveries": results})
+	return nil
+}
+
+func (a *App) decryptBuyerNote(o *Order) error {
+	if o.buyerNoteCipher == "" {
+		return nil
+	}
+	plain, err := a.vault.decrypt(o.buyerNoteCipher, "buyer-note:"+o.ID)
+	if err == nil {
+		o.BuyerNote = plain
+	}
+	return err
+}
+
+func validatePurchaseQuantity(p Product, quantity int) error {
+	if quantity < p.MinQuantity || quantity > p.MaxQuantity {
+		return bad("购买数量不在商品允许的范围内")
+	}
 	return nil
 }
 func (a *App) syncOrder(ctx context.Context, id string) error {
@@ -359,6 +415,10 @@ func (a *App) syncOrderLocked(ctx context.Context, id string) error {
 		if _, err = a.db.ExecContext(ctx, "UPDATE orders SET gateway_url=?,gateway_merchant_id=? WHERE id=?", strings.TrimRight(config.HashPay.BaseURL, "/"), config.HashPay.MerchantID, id); err != nil {
 			return err
 		}
+	}
+	// 刷新仍核对原网关和金额，但已经核实的付款不能因后续状态回退而释放库存。
+	if o.PaymentStatus == "paid" {
+		return a.deliverOrder(ctx, o)
 	}
 	if remote.Status == "paid" {
 		// 已完成签名查询和身份/金额核验，付款状态由 HashPay 决定。

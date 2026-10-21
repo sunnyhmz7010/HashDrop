@@ -328,6 +328,9 @@ func (a *App) quoteOrder(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	if err = validatePurchaseQuantity(p, input.Quantity); err != nil {
+		return err
+	}
 	quote, err := quoteOrder(r.Context(), tx, p, input.Quantity, input.CouponCode, unixNow())
 	if err != nil {
 		return err

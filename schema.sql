@@ -11,8 +11,13 @@ CREATE TABLE products (
  inventory_id TEXT REFERENCES inventories(id),
  active INTEGER NOT NULL DEFAULT 0 CHECK(active IN (0,1)),
  hidden INTEGER NOT NULL DEFAULT 0 CHECK(hidden IN (0,1)),
+ delivery_mode TEXT NOT NULL DEFAULT 'automatic' CHECK(delivery_mode IN ('automatic','manual')),
+ delivery_note TEXT NOT NULL DEFAULT '', buyer_note_label TEXT NOT NULL DEFAULT '',
+ buyer_note_required INTEGER NOT NULL DEFAULT 0 CHECK(buyer_note_required IN (0,1)),
+ min_quantity INTEGER NOT NULL DEFAULT 1 CHECK(min_quantity BETWEEN 1 AND 100),
+ max_quantity INTEGER NOT NULL DEFAULT 100 CHECK(max_quantity BETWEEN min_quantity AND 100),
  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, deleted_at INTEGER,
- CHECK(active=0 OR inventory_id IS NOT NULL)
+ CHECK(active=0 OR delivery_mode='manual' OR inventory_id IS NOT NULL)
 );
 CREATE INDEX products_inventory ON products(inventory_id);
 CREATE TABLE orders (
@@ -21,6 +26,7 @@ CREATE TABLE orders (
  unit_price INTEGER NOT NULL CHECK(unit_price > 0), currency TEXT NOT NULL,
  quantity INTEGER NOT NULL CHECK(quantity BETWEEN 1 AND 100), total INTEGER NOT NULL CHECK(total > 0),
  content TEXT NOT NULL DEFAULT '', discounts TEXT NOT NULL DEFAULT '[]',
+ delivery_note TEXT NOT NULL DEFAULT '', buyer_note TEXT NOT NULL DEFAULT '',
  token_hash TEXT NOT NULL UNIQUE, gateway_id TEXT UNIQUE,
  gateway_url TEXT NOT NULL DEFAULT '', gateway_merchant_id TEXT NOT NULL DEFAULT '',
  checkout_url TEXT NOT NULL DEFAULT '',
@@ -32,6 +38,7 @@ CREATE TABLE orders (
  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, deleted_at INTEGER
 );
 CREATE INDEX orders_schedule ON orders(payment_status,next_check);
+CREATE INDEX orders_delivery ON orders(delivery_status,created_at DESC) WHERE deleted_at IS NULL AND payment_status='paid';
 CREATE TABLE stock_items (
  id TEXT PRIMARY KEY, inventory_id TEXT NOT NULL REFERENCES inventories(id), content TEXT NOT NULL,
  fingerprint TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'available' CHECK(status IN ('available','reserved','sold')),
@@ -101,4 +108,4 @@ CREATE INDEX donations_created ON donations(created_at DESC,id DESC);
 CREATE UNIQUE INDEX donations_nickname ON donations(nickname) WHERE nickname <> '';
 CREATE UNIQUE INDEX donations_request ON donations(request_id) WHERE request_id <> '';
 CREATE INDEX donations_public ON donations(payment_status,show_public,paid_at DESC,id DESC);
-PRAGMA user_version = 2;
+PRAGMA user_version = 3;

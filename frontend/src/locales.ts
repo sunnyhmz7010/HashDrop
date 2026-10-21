@@ -6,6 +6,46 @@ export type Locale = "zh-CN" | "en-US";
 export type I18nParams = Record<string, string | number | null | undefined>;
 
 const zh = {
+  "common.required": "（必填）",
+  "kind.manual": "人工交付",
+  "product.delivery_mode": "交付方式",
+  "product.automatic": "付款后自动交付",
+  "product.manual_help":
+    "付款核验后由商家人工交付，可凭领取密钥查看进度和领取内容。",
+  "product.delivery_note": "交付说明",
+  "product.delivery_note_help":
+    "说明交付时效、使用方法或售后联系方式，将在购买前展示。请勿填写卡密或其他秘密。",
+  "product.min_quantity": "单次最少购买数量",
+  "product.max_quantity": "单次最多购买数量",
+  "product.quantity_range": "每单可购买 {min}–{max} 份",
+  "product.buyer_note_label": "买家信息标题（可选）",
+  "product.buyer_note_help": "如：充值账号、接收邮箱；留空则下单时不收集信息",
+  "product.buyer_note_required": "买家必须填写此信息",
+  "orders.buyer_note": "买家信息",
+  "orders.search": "搜索订单",
+  "orders.search_help": "订单号、网关订单号或商品名称",
+  "orders.all_deliveries": "全部交付状态",
+  "delivery.fulfill": "交付此份商品",
+  "delivery.fulfill_help": "填写此份商品的卡密、账号、下载链接或服务处理结果",
+  "delivery.immutable_help": "提交后买家即可凭密钥领取，已交付内容不能覆盖。",
+  "delivery.progress": "已交付 {done} / {total} 份",
+  "claim.manual_waiting":
+    "付款已确认，等待商家交付。已完成的部分可在下方领取，请保留领取密钥。",
+  "errors.delivery_mode": "交付方式无效",
+  "errors.quantity_policy": "购买数量范围须在 1–100 之间，且下限不能大于上限",
+  "errors.delivery_note_limit": "交付说明或买家信息标题过长",
+  "errors.buyer_note_label": "请先设置买家信息标题",
+  "errors.quantity_policy_order": "购买数量不在商品允许的范围内",
+  "errors.buyer_note_required": "请填写商品要求的买家信息",
+  "errors.buyer_note_limit": "买家信息不能超过 2000 字符",
+  "errors.buyer_note_unexpected": "该商品不接收买家信息，请重新确认商品",
+  "errors.fulfill_content": "交付内容须为 1–65536 字符",
+  "errors.fulfill_unpaid": "订单尚未核实付款，不能交付",
+  "errors.delivery_missing": "交付项目不存在",
+  "errors.delivery_immutable": "该份商品已交付，不能覆盖原内容",
+  "errors.delivery_filter": "交付状态无效",
+  "errors.order_search_limit": "订单搜索内容过长",
+  "errors.delivery_reservation": "库存预留状态不一致，请先核查",
   "center.title": "个人中心",
   "center.donations": "捐赠记录",
   "center.back_donations": "返回捐赠记录",
@@ -604,6 +644,58 @@ const zh = {
 
 export type MessageKey = keyof typeof zh;
 const en: Record<MessageKey, string> = {
+  "common.required": " (required)",
+  "kind.manual": "Manual delivery",
+  "product.delivery_mode": "Delivery method",
+  "product.automatic": "Automatic after payment",
+  "product.manual_help":
+    "The seller delivers after payment verification. Use your claim key to check progress and collect the content.",
+  "product.delivery_note": "Delivery instructions",
+  "product.delivery_note_help":
+    "Explain delivery time, usage or support contact. Shown before purchase; never include codes or secrets.",
+  "product.min_quantity": "Minimum quantity per order",
+  "product.max_quantity": "Maximum quantity per order",
+  "product.quantity_range": "Buy {min}–{max} items per order",
+  "product.buyer_note_label": "Buyer information label (optional)",
+  "product.buyer_note_help":
+    "For example, a top-up account or receiving email. Leave empty to collect no information.",
+  "product.buyer_note_required": "Require this information from the buyer",
+  "orders.buyer_note": "Buyer information",
+  "orders.search": "Search orders",
+  "orders.search_help": "Order ID, gateway order ID or product name",
+  "orders.all_deliveries": "All delivery statuses",
+  "delivery.fulfill": "Deliver this item",
+  "delivery.fulfill_help":
+    "Enter this item's code, account, download link or service result",
+  "delivery.immutable_help":
+    "The buyer can collect this immediately after submission. Delivered content cannot be overwritten.",
+  "delivery.progress": "Delivered {done} / {total} items",
+  "claim.manual_waiting":
+    "Payment confirmed. Waiting for the seller to deliver. Completed items are available below; keep your claim key.",
+  "errors.delivery_mode": "Invalid delivery method",
+  "errors.quantity_policy":
+    "Quantity limits must be within 1–100, with the minimum no greater than the maximum",
+  "errors.delivery_note_limit":
+    "Delivery instructions or buyer information label is too long",
+  "errors.buyer_note_label": "Set a buyer information label first",
+  "errors.quantity_policy_order":
+    "Quantity is outside the product's allowed range",
+  "errors.buyer_note_required":
+    "Enter the buyer information required by this product",
+  "errors.buyer_note_limit":
+    "Buyer information must not exceed 2000 characters",
+  "errors.buyer_note_unexpected":
+    "This product does not collect buyer information. Review the product again.",
+  "errors.fulfill_content": "Delivery content must contain 1–65536 characters",
+  "errors.fulfill_unpaid":
+    "Payment has not been verified; delivery is unavailable",
+  "errors.delivery_missing": "Delivery item not found",
+  "errors.delivery_immutable":
+    "This item was already delivered and its content cannot be overwritten",
+  "errors.delivery_filter": "Invalid delivery status",
+  "errors.order_search_limit": "Order search is too long",
+  "errors.delivery_reservation":
+    "Stock reservation is inconsistent. Review it first.",
   "center.title": "Personal center",
   "center.donations": "Donation history",
   "center.back_donations": "Back to donation history",

@@ -25,7 +25,10 @@ const editor = ref(false),
 const deleting = ref("");
 const model = reactive({ id: "", name: "", kind: "card", static_content: "" });
 const kinds = computed(() =>
-  Object.entries(kindNames.value).map(([value, label]) => ({ value, label })),
+  ["card", "account", "static"].map((value) => ({
+    value,
+    label: kindNames.value[value]!,
+  })),
 );
 const stockNames = computed<Record<string, string>>(() => ({
   available: t("stock.available"),

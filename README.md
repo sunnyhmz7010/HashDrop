@@ -66,7 +66,7 @@ HashPay 已经提供了加密货币收款能力，但要真正销售数字商品
 ```yaml
 services:
   hashdrop:
-    image: ghcr.io/sunnyhmz7010/hashdrop:1.1.0
+    image: ghcr.io/sunnyhmz7010/hashdrop:1.2.0
     container_name: hashdrop
     restart: unless-stopped
     ports:
@@ -100,7 +100,7 @@ docker run -d \
   --restart unless-stopped \
   -p 8080:8080 \
   -v hashdrop_data:/data \
-  ghcr.io/sunnyhmz7010/hashdrop:1.1.0
+  ghcr.io/sunnyhmz7010/hashdrop:1.2.0
 ```
 
 ### 🛠️ 自行构建镜像

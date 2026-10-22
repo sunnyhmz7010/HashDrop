@@ -149,8 +149,9 @@ test("同昵称再次赞赏需确认，概览卡片聚合完整历史并可核�
     const wall = page.getByRole("region", { name: "赞赏记录", exact: true });
     const card = wall.locator(".supporter-card").filter({ hasText: name });
     await expect(card).toHaveCount(1);
-    await expect(card.locator(".supporter-amounts")).toContainText("5.00 CNY");
-    await expect(card.locator("summary")).toContainText("2 笔赞赏");
+    await expect(card.locator(".supporter-count")).toContainText("2 笔");
+    await expect(card.locator("details")).not.toHaveAttribute("open", "");
+    await expect(wall.locator(".donation-totals")).toHaveCount(0);
     const metrics = await page.locator(".metric-row").boundingBox();
     const wallBox = await wall.boundingBox();
     expect(wallBox!.y).toBeGreaterThan(metrics!.y + metrics!.height);
@@ -179,7 +180,11 @@ test("同昵称再次赞赏需确认，概览卡片聚合完整历史并可核�
     await pending
       .getByRole("button", { name: "刷新状态", exact: true })
       .click();
-    await expect(card.locator(".supporter-amounts")).toContainText("10.00 CNY");
+    await expect(card.locator(".supporter-count")).toContainText("2 笔");
+    await expect(card.locator(".donation-record-amount")).toHaveText([
+      "+5.00 CNY",
+      "+5.00 CNY",
+    ]);
     await expect(card.locator("details")).toHaveAttribute("open", "");
     await expect(pending).toContainText("已付款");
     await card.locator("summary").click();
@@ -214,6 +219,16 @@ test("同昵称再次赞赏需确认，概览卡片聚合完整历史并可核�
     expect(
       await card.evaluate((element) => getComputedStyle(element).animationName),
     ).toBe("none");
+    const supporterCount = await wall.locator(".supporter-card").count();
+    const search = wall.getByRole("textbox", { name: "搜索昵称", exact: true });
+    await search.fill(name);
+    await expect(wall.locator(".supporter-card")).toHaveCount(1);
+    await expect(card.locator(".supporter-count")).toContainText("2 笔");
+    await search.fill("没有匹配昵称的记录");
+    await expect(wall).toContainText("没有匹配昵称的赞赏记录");
+    await search.clear();
+    await expect(wall.locator(".supporter-card")).toHaveCount(supporterCount);
+    await expect(card.locator("details")).not.toHaveAttribute("open", "");
     await page.goto(`${base()}/center/donation`);
     await expect(page.locator(".donation-wall")).toHaveCount(0);
 
@@ -235,6 +250,106 @@ test("同昵称再次赞赏需确认，概览卡片聚合完整历史并可核�
     } finally {
       await remote.close();
     }
+  } finally {
+    await restore();
+  }
+});
+
+test("赞赏明细逐笔删除需确认，失败可重试，最后一笔删除后卡片消失", async ({
+  page,
+}) => {
+  const restore = await configure(page);
+  const nickname = uniqueName();
+  try {
+    const donations: Donation[] = [];
+    for (let index = 0; index < 2; index++) {
+      const response = await page.request.post(`${base()}/api/donations`, {
+        headers: { Origin: base() },
+        data: {
+          request_id: crypto.randomUUID().replaceAll("-", ""),
+          nickname,
+          show_public: false,
+          amount: 500,
+          currency: "CNY",
+          confirm_repeat: true,
+        },
+      });
+      expect(response.ok(), await response.text()).toBeTruthy();
+      donations.push((await response.json()).donation);
+    }
+    await page.goto(`${base()}/center/overview`);
+    const wall = page.getByRole("region", { name: "赞赏记录", exact: true });
+    const search = wall.getByRole("textbox", { name: "搜索昵称", exact: true });
+    await search.fill(nickname);
+    const card = wall.locator(".supporter-card").filter({ hasText: nickname });
+    await expect(card.locator(".supporter-count")).toContainText("2 笔");
+    await card.locator("summary").click();
+    const record = card
+      .locator(".donation-record")
+      .filter({ hasText: donations[0]!.id });
+    const remove = record.getByRole("button", {
+      name: "删除赞赏记录",
+      exact: true,
+    });
+    await expect(remove).toHaveText("");
+    await page.setViewportSize({ width: 320, height: 900 });
+    const amountBox = await record
+      .locator(".donation-record-amount")
+      .boundingBox();
+    const removeBox = await remove.boundingBox();
+    expect(removeBox!.x).toBeGreaterThanOrEqual(
+      amountBox!.x + amountBox!.width,
+    );
+    await remove.click();
+    const confirmation = page.getByRole("dialog").filter({
+      hasText: "删除这笔赞赏记录？",
+    });
+    await expect(confirmation).toContainText(nickname);
+    await expect(confirmation).toContainText("5.00 CNY");
+    await confirmation
+      .getByRole("button", { name: "取消", exact: true })
+      .click();
+    await expect(confirmation).toHaveCount(0);
+    await expect(card.locator(".supporter-count")).toContainText("2 笔");
+    await page.route(
+      `${base()}/api/admin/donations/${donations[0]!.id}`,
+      (route) =>
+        route.fulfill({
+          status: 502,
+          json: { error: "删除暂时失败，请重试" },
+        }),
+      { times: 1 },
+    );
+    await remove.click();
+    await confirmation
+      .getByRole("button", { name: "删除", exact: true })
+      .click();
+    await expect(
+      page.getByText("删除暂时失败，请重试", { exact: true }),
+    ).toBeVisible();
+    await expect(confirmation).toBeVisible();
+    await expect(card.locator(".supporter-count")).toContainText("2 笔");
+    await confirmation
+      .getByRole("button", { name: "删除", exact: true })
+      .click();
+    await expect(confirmation).toHaveCount(0);
+    await expect(card.locator(".supporter-count")).toContainText("1 笔");
+    await expect(card.locator("details")).toHaveAttribute("open", "");
+    await expect(record).toHaveCount(0);
+    await card
+      .getByRole("button", { name: "删除赞赏记录", exact: true })
+      .click();
+    await confirmation
+      .getByRole("button", { name: "删除", exact: true })
+      .click();
+    await expect(confirmation).toHaveCount(0);
+    await expect(card).toHaveCount(0);
+    await expect(wall).toContainText("没有匹配昵称的赞赏记录");
+    await page.reload();
+    await wall
+      .getByRole("textbox", { name: "搜索昵称", exact: true })
+      .fill(nickname);
+    await expect(wall).toContainText("没有匹配昵称的赞赏记录");
   } finally {
     await restore();
   }

@@ -538,23 +538,29 @@ func (a *App) adminDonations(w http.ResponseWriter, r *http.Request) error {
 	if page > 100000 {
 		return bad("页码超限")
 	}
+	where := " WHERE deleted_at IS NULL"
+	args := []any{}
+	if nickname := strings.TrimSpace(r.URL.Query().Get("q")); nickname != "" {
+		where += " AND instr(lower(nickname),lower(?))>0"
+		args = append(args, nickname)
+	}
 	tx, err := a.db.BeginTx(r.Context(), nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 	grouped := r.URL.Query().Get("group_by") == "nickname"
-	query := donationSelect + " ORDER BY created_at DESC,id DESC LIMIT 21 OFFSET ?"
+	query := donationSelect + where + " ORDER BY created_at DESC,id DESC LIMIT 21 OFFSET ?"
 	const groupKey = "CASE WHEN donations.nickname='' THEN 'id:'||donations.id ELSE 'nickname:'||donations.nickname END"
 	if grouped {
 		// 先按昵称分页，再取完整历史，避免同一个人被拆到不同页；匿名旧记录单独保留。
 		query = `WITH supporter_page AS (
-SELECT ` + groupKey + ` AS supporter,MAX(created_at) AS latest FROM donations
+SELECT ` + groupKey + ` AS supporter,MAX(created_at) AS latest FROM donations` + where + `
 GROUP BY supporter ORDER BY latest DESC,supporter DESC LIMIT 21 OFFSET ?
-) ` + donationSelect + ` WHERE ` + groupKey + ` IN (SELECT supporter FROM supporter_page)
+) ` + donationSelect + ` WHERE deleted_at IS NULL AND ` + groupKey + ` IN (SELECT supporter FROM supporter_page)
 ORDER BY (SELECT latest FROM supporter_page WHERE supporter=` + groupKey + `) DESC,` + groupKey + ` DESC,created_at DESC,id DESC`
 	}
-	rows, err := tx.QueryContext(r.Context(), query, (page-1)*20)
+	rows, err := tx.QueryContext(r.Context(), query, append(args, (page-1)*20)...)
 	if err != nil {
 		return err
 	}
@@ -572,7 +578,7 @@ ORDER BY (SELECT latest FROM supporter_page WHERE supporter=` + groupKey + `) DE
 	if err != nil {
 		return err
 	}
-	rows, err = tx.QueryContext(r.Context(), "SELECT currency,COUNT(*),SUM(amount) FROM donations WHERE payment_status='paid' GROUP BY currency ORDER BY currency")
+	rows, err = tx.QueryContext(r.Context(), "SELECT currency,COUNT(*),SUM(amount) FROM donations WHERE deleted_at IS NULL AND payment_status='paid' GROUP BY currency ORDER BY currency")
 	if err != nil {
 		return err
 	}
@@ -616,9 +622,29 @@ ORDER BY (SELECT latest FROM supporter_page WHERE supporter=` + groupKey + `) DE
 	return nil
 }
 
+func (a *App) deleteDonation(w http.ResponseWriter, r *http.Request) error {
+	// 后台逻辑删除，保留昵称查询、请求幂等及网关回调映射。
+	id, now := r.PathValue("id"), unixNow()
+	result, err := a.db.ExecContext(r.Context(), "UPDATE donations SET deleted_at=COALESCE(deleted_at,?),updated_at=? WHERE id=?", now, now, id)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return &apiError{404, "赞赏记录或凭证无效"}
+	}
+	audit("donation_deleted", id)
+	reply(w, 200, map[string]bool{"ok": true})
+	return nil
+}
+
 func (a *App) recheckDonation(w http.ResponseWriter, r *http.Request) error {
 	id := r.PathValue("id")
-	if _, err := a.loadDonation(r.Context(), id); err == sql.ErrNoRows {
+	var existing string
+	if err := a.db.QueryRowContext(r.Context(), "SELECT id FROM donations WHERE id=? AND deleted_at IS NULL", id).Scan(&existing); err == sql.ErrNoRows {
 		return &apiError{404, "赞赏记录或凭证无效"}
 	} else if err != nil {
 		return err

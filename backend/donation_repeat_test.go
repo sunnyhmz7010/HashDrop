@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -112,6 +113,34 @@ VALUES(?,'历史赞赏',?,100,?,?,'https://pay.example','merchant-test',?,?,?)`,
 	}
 	if len(seen) != 25 {
 		t.Fatal("分组分页合并了匿名记录或遗漏历史")
+	}
+	if _, err := a.db.Exec(`INSERT INTO donations(id,title,nickname,amount,currency,token_hash,gateway_url,gateway_merchant_id,payment_status,created_at,updated_at)
+VALUES('search-literal','搜索测试','Sunny_100%',500,'USD',?,'https://pay.example','merchant-test','paid',101,101)`, randomToken()); err != nil {
+		t.Fatal(err)
+	}
+	for _, group := range []string{"nickname", ""} {
+		for _, sample := range []struct {
+			query string
+			want  int
+		}{
+			{" 多次支持 ", 3},
+			{"支持者-22", 1}, // 原列表第二页的昵称也必须能够搜到。
+			{"sunny", 1},
+			{"%", 1},
+			{"_", 1},
+			{"' OR 1=1 --", 0},
+			{"不存在的昵称", 0},
+		} {
+			params := url.Values{"group_by": {group}, "q": {sample.query}}
+			response := admin("GET", "/api/admin/donations?"+params.Encode())
+			var result struct {
+				Items []Donation `json:"items"`
+				More  bool       `json:"has_more"`
+			}
+			if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &result) != nil || len(result.Items) != sample.want || result.More {
+				t.Fatalf("昵称搜索未保持完整历史或按字面匹配，分组=%q 搜索=%q: %d %s", group, sample.query, response.Code, response.Body)
+			}
+		}
 	}
 }
 

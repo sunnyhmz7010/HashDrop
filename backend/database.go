@@ -42,7 +42,7 @@ func openDatabase(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, err
 	}
-	if version < 0 || version > 4 {
+	if version < 0 || version > 5 {
 		db.Close()
 		return nil, fmt.Errorf("数据库结构版本 %d 不受支持", version)
 	}
@@ -75,8 +75,28 @@ func openDatabase(path string) (*sql.DB, error) {
 			db.Close()
 			return nil, fmt.Errorf("升级重复赞赏结构失败: %w", err)
 		}
+		version = 4
+	}
+	if version == 4 {
+		if err = migrateDatabaseV5(db); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("升级赞赏删除结构失败: %w", err)
+		}
 	}
 	return db, nil
+}
+
+func migrateDatabaseV5(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.Exec(`ALTER TABLE donations ADD COLUMN deleted_at INTEGER;
+PRAGMA user_version = 5;`); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // 只放宽昵称索引，保留逐笔请求、旧凭证和付款记录。

@@ -101,11 +101,11 @@ CREATE TABLE donations (
  payment_status TEXT NOT NULL CHECK(payment_status IN ('creating','pending','paid','expired','invalid','review','closed')),
  expires_at INTEGER NOT NULL DEFAULT 0, paid_at INTEGER,
  next_check INTEGER NOT NULL DEFAULT 0, attempts INTEGER NOT NULL DEFAULT 0,
- last_error TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+ last_error TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, deleted_at INTEGER
 );
 CREATE INDEX donations_schedule ON donations(payment_status,next_check);
 CREATE INDEX donations_created ON donations(created_at DESC,id DESC);
 CREATE INDEX donations_nickname ON donations(nickname,created_at DESC,id DESC) WHERE nickname <> '';
 CREATE UNIQUE INDEX donations_request ON donations(request_id) WHERE request_id <> '';
 CREATE INDEX donations_public ON donations(payment_status,show_public,paid_at DESC,id DESC);
-PRAGMA user_version = 4;
+PRAGMA user_version = 5;

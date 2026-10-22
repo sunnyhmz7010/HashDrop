@@ -104,6 +104,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /api/admin/donation", wrap(a.admin(a.getDonationSettings)))
 	mux.HandleFunc("PUT /api/admin/donation", wrap(a.admin(a.updateDonationSettings)))
 	mux.HandleFunc("GET /api/admin/donations", wrap(a.admin(a.adminDonations)))
+	mux.HandleFunc("DELETE /api/admin/donations/{id}", wrap(a.admin(a.deleteDonation)))
 	mux.HandleFunc("POST /api/admin/donations/{id}/recheck", wrap(a.admin(a.recheckDonation)))
 	mux.HandleFunc("PUT /api/admin/settings", wrap(a.admin(a.updateSettings)))
 	mux.Handle("/", a.staticHandler())

@@ -8,6 +8,7 @@ import DonationWall from "./DonationWall.vue";
 const data = ref<Record<string, number>>(),
   error = ref(""),
   busy = ref(false);
+const donationWall = ref<InstanceType<typeof DonationWall>>();
 const labels = computed(() => [
   ["products", t("overview.products")],
   ["stock", t("overview.stock")],
@@ -31,6 +32,9 @@ async function load() {
     busy.value = false;
   }
 }
+function refresh() {
+  return Promise.all([load(), donationWall.value?.refresh()]);
+}
 onMounted(load);
 onUnmounted(() => controller.abort());
 </script>
@@ -38,9 +42,12 @@ onUnmounted(() => controller.abort());
   <div class="grid overview-page">
     <div class="section-title">
       <h2>{{ t("nav.overview") }}</h2>
-      <n-button :loading="busy" @click="load">{{
-        t("common.refresh")
-      }}</n-button>
+      <n-button
+        :loading="busy || donationWall?.loading"
+        :disabled="donationWall?.processing"
+        @click="refresh"
+        >{{ t("common.refresh") }}</n-button
+      >
     </div>
     <n-alert v-if="error" type="error" class="space-bottom"
       >{{ errorText(error) }}
@@ -53,6 +60,6 @@ onUnmounted(() => controller.abort());
         <strong v-else>{{ data?.[key!] ?? "—" }}</strong>
       </article>
     </div>
-    <DonationWall />
+    <DonationWall ref="donationWall" />
   </div>
 </template>

@@ -33,7 +33,7 @@ func TestDatabaseInitializesAndReopens(t *testing.T) {
 	}
 	defer db.Close()
 	var version, foreignKeys, sessions int
-	if err = db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 4 {
+	if err = db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 5 {
 		t.Fatal("数据库初始化版本无效", err)
 	}
 	if err = db.QueryRow("PRAGMA foreign_keys").Scan(&foreignKeys); err != nil || foreignKeys != 1 {
@@ -140,9 +140,9 @@ func TestDatabaseMigratesV1DonationsWithoutRewritingHistory(t *testing.T) {
 		var version int
 		var nickname, requestID, hash, document, orderHash, cipher string
 		var shown bool
-		if err := db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 4 {
+		if err := db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 5 {
 			db.Close()
-			t.Fatal("迁移未升级到版本4", version, err)
+			t.Fatal("迁移未升级到版本5", version, err)
 		}
 		if err := db.QueryRow("SELECT nickname,show_public,request_id,token_hash FROM donations WHERE id='legacy-donation'").Scan(&nickname, &shown, &requestID, &hash); err != nil || nickname != "" || shown || requestID != "" || hash != "legacy-token-hash" {
 			db.Close()
@@ -325,8 +325,8 @@ VALUES('old-named','原赞赏','同一昵称',500,'CNY','saved-credential','http
 	defer db.Close()
 	var version int
 	var hash, status string
-	if err = db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 4 {
-		t.Fatal("没有完成版本4迁移", version, err)
+	if err = db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 5 {
+		t.Fatal("没有完成赞赏结构迁移", version, err)
 	}
 	if err = db.QueryRow("SELECT token_hash,payment_status FROM donations WHERE id='old-named'").Scan(&hash, &status); err != nil || hash != "saved-credential" || status != "paid" {
 		t.Fatal("昵称索引迁移改变了旧凭证或付款状态", hash, status, err)
@@ -355,5 +355,47 @@ func TestDonationV4MigrationFailureRestoresUniqueIndex(t *testing.T) {
 	}
 	if err = db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 3 {
 		t.Fatal("失败迁移仍升级了版本", version, err)
+	}
+}
+
+func TestDonationV5MigrationPreservesRecordsAndReopens(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "v4-donations.db")
+	db, err := sql.Open("sqlite", databaseURI(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(schemaV2ForTest(t)); err != nil {
+		t.Fatal(err)
+	}
+	if err = migrateDatabaseV3(db); err != nil {
+		t.Fatal(err)
+	}
+	if err = migrateDatabaseV4(db); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(`INSERT INTO donations(id,title,nickname,request_id,amount,currency,token_hash,gateway_url,gateway_merchant_id,payment_status,created_at,updated_at)
+VALUES('saved','原赞赏','原昵称','saved-request',500,'USD','saved-token','https://pay.example','merchant-test','paid',1,1)`); err != nil {
+		t.Fatal(err)
+	}
+	if err = db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for attempt := 0; attempt < 2; attempt++ {
+		db, err = openDatabase(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var version, amount int
+		var requestID, hash, status string
+		var deleted sql.NullInt64
+		if err = db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 5 {
+			t.Fatal("赞赏删除结构未升级", version, err)
+		}
+		if err = db.QueryRow("SELECT amount,request_id,token_hash,payment_status,deleted_at FROM donations WHERE id='saved'").Scan(&amount, &requestID, &hash, &status, &deleted); err != nil || amount != 500 || requestID != "saved-request" || hash != "saved-token" || status != "paid" || deleted.Valid {
+			t.Fatal("迁移改变了已有赞赏或误标记删除", err)
+		}
+		if err = db.Close(); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

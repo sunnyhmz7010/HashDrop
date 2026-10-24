@@ -391,7 +391,7 @@ const zh = {
   "claim.nav": "查询 / 领取",
   "claim.key": "领取密钥",
   "claim.key_placeholder": "自行填写或点击生成",
-  "claim.lookup_placeholder": "请输入下单时保存的领取密钥",
+  "claim.lookup_placeholder": "请输入",
   "claim.key_help":
     "密钥为查询和领取的唯一凭证，请复制保存，丢失后无法自动找回。区分大小写，最多 128 个字符；简单密钥容易被猜中，建议点击生成。",
   "claim.generate": "生成",
@@ -401,8 +401,6 @@ const zh = {
   "claim.status_title": "订单状态",
   "claim.status_help":
     "付款后在此查看交付内容，也可使用领取密钥在其他设备查询。",
-  "claim.private_help":
-    "输入下单时保存的密钥，继续付款或领取商品。请勿将密钥分享给他人。",
   "claim.missing": "当前浏览器没有该订单的凭证，请输入已保存的领取密钥。",
   "claim.view": "查看订单",
   "claim.receipt": "订单凭证",
@@ -1084,8 +1082,7 @@ const en: Record<MessageKey, string> = {
   "claim.nav": "Find / Claim",
   "claim.key": "Claim key",
   "claim.key_placeholder": "Enter a key or select Generate",
-  "claim.lookup_placeholder":
-    "Enter the claim key saved when placing your order",
+  "claim.lookup_placeholder": "Please enter",
   "claim.key_help":
     "This key is your only credential to find and claim the order. Copy and save it; lost keys cannot be recovered automatically. Case-sensitive, up to 128 characters. Simple keys are easy to guess; use Generate for a random key.",
   "claim.generate": "Generate",
@@ -1095,8 +1092,6 @@ const en: Record<MessageKey, string> = {
   "claim.status_title": "Order status",
   "claim.status_help":
     "View your delivery here after payment, or use the claim key on another device.",
-  "claim.private_help":
-    "Enter the key you saved when placing the order to continue payment or claim your purchase. Keep it private.",
   "claim.missing":
     "This browser has no credential for this order. Enter your saved claim key.",
   "claim.view": "View order",

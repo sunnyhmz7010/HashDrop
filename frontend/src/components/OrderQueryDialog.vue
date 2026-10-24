@@ -68,7 +68,6 @@ async function lookup() {
     width="min(440px, calc(100vw - 28px))"
   >
     <form id="order-query-form" class="form-grid" @submit.prevent="lookup">
-      <p class="muted">{{ t("claim.private_help") }}</p>
       <div class="field-stack">
         <label class="field-label" for="claim-key">{{ t("claim.key") }}</label>
         <n-input

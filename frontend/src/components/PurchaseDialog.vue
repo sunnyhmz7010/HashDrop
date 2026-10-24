@@ -64,7 +64,7 @@ const coupon = ref(""),
 let requestID = "",
   controller: AbortController | undefined;
 const max = computed(() =>
-  product.value && ["card", "account"].includes(product.value.kind)
+  product.value?.delivery_mode === "automatic" && !product.value.stock_unlimited
     ? Math.min(product.value.max_quantity, product.value.available)
     : (product.value?.max_quantity ?? 100),
 );

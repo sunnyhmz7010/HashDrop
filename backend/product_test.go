@@ -14,7 +14,7 @@ func TestProductDetailsPersistAndDoNotBloatCatalog(t *testing.T) {
 	request := adminSessionRequest(t, a)
 	inventory := createInventoryViaAPI(t, a, "card", "")
 	details := "## 商品介绍\n\n**加粗内容**\n\n![图片](https://example.com/image.png)\n\n![视频](https://example.com/video.webm)"
-	input := map[string]any{"name": "详情商品", "description": "卡片简介 <保留原文>", "details": details, "price": 1234, "currency": "CNY", "inventory_id": inventory.ID, "active": true}
+	input := map[string]any{"name": "详情商品", "description": "卡片简介 <保留原文>", "details": details, "price": 1234, "currency": "CNY", "active": true}
 	body, _ := json.Marshal(input)
 	created := request("POST", "/api/admin/products", string(body))
 	if created.Code != http.StatusOK {
@@ -24,6 +24,7 @@ func TestProductDetailsPersistAndDoNotBloatCatalog(t *testing.T) {
 	if err := json.Unmarshal(created.Body.Bytes(), &product); err != nil || product.Details != details {
 		t.Fatal("详情未原样保存")
 	}
+	bindInventoryProducts(t, a, inventory.ID, product.ID)
 	read := func(path string) *httptest.ResponseRecorder {
 		response := httptest.NewRecorder()
 		a.routes().ServeHTTP(response, httptest.NewRequest("GET", path, nil))
@@ -74,7 +75,7 @@ func TestHiddenProductCanBePurchasedWithoutAppearingInCatalog(t *testing.T) {
 	admin := adminSessionRequest(t, a)
 	hiddenID := insertProduct(t, a, "card", 3)
 	visibleID := insertProduct(t, a, "static", 0)
-	input := map[string]any{"name": "链接商品", "price": 1234, "currency": "CNY", "inventory_id": hiddenID, "active": true, "hidden": true}
+	input := map[string]any{"name": "链接商品", "price": 1234, "currency": "CNY", "active": true, "hidden": true}
 	save := func() Product {
 		t.Helper()
 		body, err := json.Marshal(input)
@@ -198,7 +199,7 @@ func TestDeleteProductPreservesOrdersAndClaims(t *testing.T) {
 			if response := public("/api/products/"+product, ""); response.Code != 404 {
 				t.Fatal("已删除商品仍可通过旧链接访问")
 			}
-			stale := `{"name":"旧编辑窗口","price":1234,"currency":"CNY","inventory_id":"` + product + `","active":true}`
+			stale := `{"name":"旧编辑窗口","price":1234,"currency":"CNY","active":true}`
 			if response := admin("PUT", "/api/admin/products/"+product, stale); response.Code != 404 {
 				t.Fatal("旧编辑窗口可以重新保存已删除商品")
 			}

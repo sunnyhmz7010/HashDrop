@@ -1,6 +1,12 @@
 import { randomBytes } from "node:crypto";
 import { resolve } from "node:path";
-import { test, expect, loginAdmin, createInventory } from "./fixture";
+import {
+  test,
+  expect,
+  loginAdmin,
+  createInventory,
+  bindInventoryProducts,
+} from "./fixture";
 
 test("订单金额筛选、数字分页与失败查询重试", async ({ page }) => {
   const base = process.env.HASHDROP_TEST_URL!;
@@ -21,13 +27,13 @@ test("订单金额筛选、数字分页与失败查询重试", async ({ page }) 
       name: "分页验证商品",
       price: 987,
       currency: "JPY",
-      inventory_id: pool.id,
       active: true,
       hidden: true,
     },
   });
   expect(response.ok(), await response.text()).toBeTruthy();
   const product = await response.json();
+  await bindInventoryProducts(page, pool, [product.id]);
   for (let i = 0; i < 161; i++) {
     if (i % 8 === 0) await page.request.post(`${base}/__test/reset-limits`);
     const created = await page.request.post(`${base}/api/orders`, {

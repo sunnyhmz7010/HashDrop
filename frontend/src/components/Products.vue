@@ -19,17 +19,14 @@ import MarkdownEditor from "./MarkdownEditor.vue";
 import {
   api,
   errorText,
-  kindNames,
   money,
   priceText,
   toMinor,
-  type Inventory,
   type Product,
 } from "../api";
 const message = useMessage(),
   dialog = useDialog(),
   products = ref<Product[]>([]),
-  inventories = ref<Inventory[]>([]),
   loading = ref(false),
   loaded = ref(false),
   error = ref(""),
@@ -44,7 +41,7 @@ const model = reactive({
   details: "",
   price: "",
   currency: "CNY",
-  inventory_id: null as string | null,
+  inventory_strategy: "oldest" as Product["inventory_strategy"],
   active: false,
   hidden: false,
   delivery_mode: "automatic" as "automatic" | "manual",
@@ -64,10 +61,10 @@ const currencies = [
   "USDT",
   "USDC",
 ].map((value) => ({ label: value, value }));
-const inventoryOptions = computed(() =>
-  inventories.value.map((item) => ({
-    value: item.id,
-    label: `${item.name} · ${kindNames.value[item.kind]} · ${item.id.slice(0, 6)}`,
+const strategyOptions = computed(() =>
+  (["random", "oldest", "newest"] as const).map((value) => ({
+    value,
+    label: t(`inventory.strategy_${value}`),
   })),
 );
 let loadGeneration = 0;
@@ -79,13 +76,11 @@ async function load() {
   loading.value = true;
   error.value = "";
   try {
-    const [items, pools] = await Promise.all([
-      api<Product[]>("/admin/products", { signal: loadController.signal }),
-      api<Inventory[]>("/admin/inventories", { signal: loadController.signal }),
-    ]);
+    const items = await api<Product[]>("/admin/products", {
+      signal: loadController.signal,
+    });
     if (current === loadGeneration) {
       products.value = items;
-      inventories.value = pools;
       loaded.value = true;
     }
   } catch (e) {
@@ -112,7 +107,7 @@ function edit(product?: Product) {
           hidden: product.hidden ?? false,
           details: product.details ?? "",
           price: priceText(product.price, product.currency),
-          inventory_id: product.inventory_id || null,
+          inventory_strategy: product.inventory_strategy,
           delivery_mode: product.delivery_mode,
           delivery_note: product.delivery_note,
           buyer_note_label: product.buyer_note_label,
@@ -127,7 +122,7 @@ function edit(product?: Product) {
           details: "",
           price: "",
           currency: "CNY",
-          inventory_id: null,
+          inventory_strategy: "oldest",
           active: false,
           hidden: false,
           delivery_mode: "automatic",
@@ -156,7 +151,7 @@ async function save() {
           details: model.details,
           price: toMinor(model.price, model.currency),
           currency: model.currency,
-          inventory_id: model.inventory_id ?? "",
+          inventory_strategy: model.inventory_strategy,
           active: model.active,
           hidden: model.hidden,
           delivery_mode: model.delivery_mode,
@@ -169,7 +164,7 @@ async function save() {
         },
       },
     );
-    // 保存响应已包含库存统计与关联名称，直接提交服务端结果，避免再等一轮刷新。
+    // 保存响应已包含库存统计，直接提交服务端结果，避免再等一轮刷新。
     loadGeneration++;
     loadController?.abort();
     loading.value = false;
@@ -250,7 +245,7 @@ function removeProduct(product: Product) {
           <thead>
             <tr>
               <th>{{ t("common.product") }}</th>
-              <th>{{ t("inventory.association") }}</th>
+              <th>{{ t("inventory.strategy") }}</th>
               <th>{{ t("common.price") }}</th>
               <th>{{ t("stock.summary") }}</th>
               <th>{{ t("common.status") }}</th>
@@ -274,21 +269,30 @@ function removeProduct(product: Product) {
                 {{
                   p.delivery_mode === "manual"
                     ? t("kind.manual")
-                    : p.inventory_name || t("inventory.unassigned")
+                    : t(`inventory.strategy_${p.inventory_strategy}`)
                 }}
-                <span v-if="p.kind && p.kind !== 'manual'" class="muted">
-                  · {{ kindNames[p.kind] }}</span
+                <span v-if="p.delivery_mode === 'automatic'" class="muted">
+                  ·
+                  {{
+                    t("inventory.bound_count", { count: p.inventory_count })
+                  }}</span
                 >
               </td>
               <td>{{ money(p.price, p.currency) }}</td>
               <td>
                 {{
-                  !p.inventory_id
+                  !p.inventory_count
                     ? "—"
-                    : ["card", "account"].includes(p.kind)
+                    : p.kind !== "static"
                       ? `${p.available} / ${p.reserved} / ${p.sold}`
                       : t("stock.not_consumed")
                 }}
+                <small
+                  v-if="p.stock_unlimited && p.kind !== 'static'"
+                  class="muted"
+                >
+                  · {{ t("stock.unlimited_pool") }}</small
+                >
               </td>
               <td>
                 {{ p.active ? t("product.active") : t("product.inactive") }}
@@ -363,21 +367,16 @@ function removeProduct(product: Product) {
           </p>
         </div>
         <div v-if="model.delivery_mode === 'automatic'">
-          <label class="field-label" for="product-inventory">{{
-            t("inventory.association")
+          <label class="field-label" for="product-inventory-strategy">{{
+            t("inventory.strategy")
           }}</label
           ><n-select
-            id="product-inventory"
-            v-model:value="model.inventory_id"
-            :options="inventoryOptions"
-            :placeholder="t('inventory.select')"
-            filterable
-            clearable
+            id="product-inventory-strategy"
+            v-model:value="model.inventory_strategy"
+            :options="strategyOptions"
             :disabled="saving"
           />
-          <n-alert v-if="!inventories.length" type="info">{{
-            t("inventory.create_first")
-          }}</n-alert>
+          <p class="helper">{{ t("inventory.strategy_help") }}</p>
         </div>
         <div>
           <label class="field-label" for="currency">{{

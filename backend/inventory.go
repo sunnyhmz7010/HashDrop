@@ -2,28 +2,30 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"unicode/utf8"
 )
 
 type Inventory struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Kind         string `json:"kind"`
-	HasContent   bool   `json:"has_content"`
-	Available    int    `json:"available"`
-	Reserved     int    `json:"reserved"`
-	Sold         int    `json:"sold"`
-	ProductCount int    `json:"product_count"`
-	UpdatedAt    int64  `json:"updated_at"`
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	Kind         string   `json:"kind"`
+	HasContent   bool     `json:"has_content"`
+	Available    int      `json:"available"`
+	Reserved     int      `json:"reserved"`
+	Sold         int      `json:"sold"`
+	ProductCount int      `json:"product_count"`
+	ProductIDs   []string `json:"product_ids"`
+	UpdatedAt    int64    `json:"updated_at"`
 }
 
 const inventorySelect = `SELECT i.id,i.name,i.kind,i.content<>'',i.updated_at,
  (SELECT COUNT(*) FROM stock_items s WHERE s.inventory_id=i.id AND s.status='available'),
  (SELECT COUNT(*) FROM stock_items s WHERE s.inventory_id=i.id AND s.status='reserved'),
  (SELECT COUNT(*) FROM stock_items s WHERE s.inventory_id=i.id AND s.status='sold'),
- (SELECT COUNT(*) FROM products p WHERE p.inventory_id=i.id AND p.deleted_at IS NULL)
+ (SELECT json_group_array(ip.product_id) FROM inventory_products ip JOIN products p ON p.id=ip.product_id WHERE ip.inventory_id=i.id AND p.deleted_at IS NULL)
  FROM inventories i`
 
 func validDeliveryKind(kind string) bool {
@@ -32,7 +34,12 @@ func validDeliveryKind(kind string) bool {
 
 func scanInventory(row scanner) (Inventory, error) {
 	var i Inventory
-	err := row.Scan(&i.ID, &i.Name, &i.Kind, &i.HasContent, &i.UpdatedAt, &i.Available, &i.Reserved, &i.Sold, &i.ProductCount)
+	var products string
+	err := row.Scan(&i.ID, &i.Name, &i.Kind, &i.HasContent, &i.UpdatedAt, &i.Available, &i.Reserved, &i.Sold, &products)
+	if err == nil {
+		err = json.Unmarshal([]byte(products), &i.ProductIDs)
+		i.ProductCount = len(i.ProductIDs)
+	}
 	return i, err
 }
 
@@ -59,9 +66,10 @@ func (a *App) adminInventories(w http.ResponseWriter, r *http.Request) error {
 
 func (a *App) saveInventory(w http.ResponseWriter, r *http.Request) error {
 	var input struct {
-		Name          string `json:"name"`
-		Kind          string `json:"kind"`
-		StaticContent string `json:"static_content"`
+		Name          string    `json:"name"`
+		Kind          string    `json:"kind"`
+		StaticContent string    `json:"static_content"`
+		ProductIDs    *[]string `json:"product_ids"`
 	}
 	if err := readJSON(w, r, &input); err != nil {
 		return err
@@ -109,6 +117,43 @@ func (a *App) saveInventory(w http.ResponseWriter, r *http.Request) error {
  ON CONFLICT(id) DO UPDATE SET name=excluded.name,content=excluded.content,updated_at=excluded.updated_at`, id, input.Name, input.Kind, content, now, now); err != nil {
 		return err
 	}
+	if input.ProductIDs != nil {
+		productIDs := []string{}
+		seen := map[string]bool{}
+		for _, productID := range *input.ProductIDs {
+			if seen[productID] {
+				continue
+			}
+			var mode string
+			if err = tx.QueryRowContext(r.Context(), "SELECT delivery_mode FROM products WHERE id=? AND deleted_at IS NULL", productID).Scan(&mode); err == sql.ErrNoRows {
+				return bad("关联商品不存在或已删除")
+			} else if err != nil {
+				return err
+			}
+			if mode != "automatic" {
+				return bad("库存池只能绑定自动交付商品")
+			}
+			seen[productID] = true
+			productIDs = append(productIDs, productID)
+		}
+		query := "DELETE FROM inventory_products WHERE inventory_id=?"
+		args := []any{id}
+		if len(productIDs) > 0 {
+			query += " AND product_id NOT IN (" + strings.TrimSuffix(strings.Repeat("?,", len(productIDs)), ",") + ")"
+			for _, productID := range productIDs {
+				args = append(args, productID)
+			}
+		}
+		if _, err = tx.ExecContext(r.Context(), query, args...); err != nil {
+			return err
+		}
+		// 仅新增和移除差异，普通保存不改变已有绑定的先后顺序。
+		for _, productID := range productIDs {
+			if _, err = tx.ExecContext(r.Context(), "INSERT INTO inventory_products(inventory_id,product_id,created_at) VALUES(?,?,?) ON CONFLICT(inventory_id,product_id) DO NOTHING", id, productID, now); err != nil {
+				return err
+			}
+		}
+	}
 	if err = tx.Commit(); err != nil {
 		return err
 	}
@@ -135,7 +180,7 @@ func (a *App) deleteInventory(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	var linked, reserved int
-	if err = tx.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM products WHERE inventory_id=? AND deleted_at IS NULL", id).Scan(&linked); err != nil {
+	if err = tx.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM inventory_products ip JOIN products p ON p.id=ip.product_id WHERE ip.inventory_id=? AND p.deleted_at IS NULL", id).Scan(&linked); err != nil {
 		return err
 	}
 	if linked > 0 {

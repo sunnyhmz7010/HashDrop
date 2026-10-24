@@ -282,16 +282,23 @@ const zh = {
   "inventory.edit": "编辑库存池",
   "inventory.name": "库存池名称",
   "inventory.delivery_type": "交付类型",
-  "inventory.association": "关联库存池",
-  "inventory.select": "选择库存池",
-  "inventory.unassigned": "未关联库存池",
+  "kind.mixed": "混合库存",
+  "inventory.strategy": "库存分配策略",
+  "inventory.strategy_random": "随机分配",
+  "inventory.strategy_oldest": "先绑定的库存池优先",
+  "inventory.strategy_newest": "后绑定的库存池优先",
+  "inventory.strategy_help":
+    "优先池库存不足时继续使用其他绑定池；随机分配会随机排列可用库存池。",
+  "inventory.bound_count": "已绑定 {count} 个库存池",
+  "stock.unlimited_pool": "含不限量库存",
   "inventory.association_help":
-    "多个商品可共享同一库存池。更换关联仅影响新订单，上架前须选择库存池。",
-  "inventory.create_first":
-    "请先到库存创建库存池；未关联的商品可以保存为下架草稿。",
+    "请到库存页面选择此商品进行绑定。此处仅设置分配策略；未绑定库存池时无法下单。",
   "inventory.kind_help":
     "交付类型属于库存池；如需更换类型，请新建库存池并调整商品关联。",
   "inventory.products": "关联商品",
+  "inventory.select_products": "选择需要绑定的商品（可多选）",
+  "inventory.products_help":
+    "可绑定多个自动交付商品，同一商品也可绑定多个库存池。解绑后重新绑定会排在最后，普通保存不改变绑定顺序。",
   "inventory.shared_count": "{count} 个商品",
   "inventory.content_missing": "待填写固定内容",
   "inventory.empty": "还没有库存池",
@@ -314,7 +321,9 @@ const zh = {
   "errors.inventory_linked": "库存池仍有关联商品，请先解除关联",
   "errors.inventory_reserved": "库存池仍有订单预留，暂不能删除",
   "errors.inventory_no_items": "固定文本库存池不使用逐条库存",
-  "errors.inventory_required": "上架前请选择库存池",
+  "errors.inventory_strategy": "库存分配策略无效",
+  "errors.inventory_product_missing": "关联商品不存在或已删除",
+  "errors.inventory_product_manual": "库存池只能绑定自动交付商品",
   "errors.inventory_unassigned": "商品尚未关联可用库存池",
   "product.add": "新增商品",
   "common.product": "商品",
@@ -962,16 +971,23 @@ const en: Record<MessageKey, string> = {
   "inventory.edit": "Edit inventory pool",
   "inventory.name": "Inventory pool name",
   "inventory.delivery_type": "Delivery type",
-  "inventory.association": "Inventory pool",
-  "inventory.select": "Select an inventory pool",
-  "inventory.unassigned": "No inventory pool",
+  "kind.mixed": "Mixed inventory",
+  "inventory.strategy": "Inventory allocation",
+  "inventory.strategy_random": "Random allocation",
+  "inventory.strategy_oldest": "Earlier bindings first",
+  "inventory.strategy_newest": "Later bindings first",
+  "inventory.strategy_help":
+    "Continue to other linked pools when a pool runs out. Random allocation shuffles the available pools.",
+  "inventory.bound_count": "{count} linked pools",
+  "stock.unlimited_pool": "Includes unlimited stock",
   "inventory.association_help":
-    "Products can share one pool. Changing the pool affects new orders only. Select a pool before publishing.",
-  "inventory.create_first":
-    "Create a pool in Inventory first. Products without a pool can be saved as unpublished drafts.",
+    "Link this product from the Inventory page. Set only the allocation strategy here; orders require a linked pool.",
   "inventory.kind_help":
     "The delivery type belongs to the pool. To change it, create a new pool and update the product association.",
   "inventory.products": "Linked products",
+  "inventory.select_products": "Select products to link (multiple allowed)",
+  "inventory.products_help":
+    "Link multiple automatic-delivery products. Each product may use several pools. Unlinking and relinking moves a binding to the end; ordinary saves preserve its order.",
   "inventory.shared_count": "{count} products",
   "inventory.content_missing": "Content required",
   "inventory.empty": "No inventory pools yet",
@@ -1000,7 +1016,10 @@ const en: Record<MessageKey, string> = {
     "This pool still has reserved stock and cannot be deleted yet",
   "errors.inventory_no_items":
     "Fixed-content pools do not use individual stock items",
-  "errors.inventory_required": "Select an inventory pool before publishing",
+  "errors.inventory_strategy": "Invalid inventory allocation strategy",
+  "errors.inventory_product_missing": "Linked product not found or deleted",
+  "errors.inventory_product_manual":
+    "Pools can only link automatic-delivery products",
   "errors.inventory_unassigned": "This product has no available inventory pool",
   "product.add": "Add product",
   "common.product": "Product",

@@ -3,7 +3,7 @@ import {
   expect,
   loginAdmin,
   createInventory,
-  selectProductInventory,
+  bindInventoryProducts,
   importInventory,
   type Locator,
 } from "./fixture";
@@ -130,7 +130,6 @@ test("Markdown 详情保存、图片视频展示与首页直接下单", async ({
   await page.getByRole("button", { name: "新增商品" }).click();
   const editor = page.getByRole("dialog", { name: "新增商品", exact: true });
   await editor.locator("#product-name input").fill(name);
-  await selectProductInventory(page, pool);
   await editor.locator("#price input").fill("12.34");
   await editor.locator("#active").click();
   await editor
@@ -155,6 +154,7 @@ test("Markdown 详情保存、图片视频展示与首页直接下单", async ({
   );
   await editor.getByRole("button", { name: "保存商品", exact: true }).click();
   const product = await (await saved).json();
+  await bindInventoryProducts(page, pool, [product.id]);
   expect(product.details).toBe(details);
   const row = page.getByRole("row").filter({ hasText: name });
   await row.getByRole("button", { name: "编辑", exact: true }).click();
@@ -319,7 +319,6 @@ test("Markdown 详情保存、图片视频展示与首页直接下单", async ({
         details: product.details,
         price: product.price,
         currency: product.currency,
-        inventory_id: pool.id,
         active: false,
       },
     },
@@ -340,7 +339,6 @@ test("隐藏商品通过链接购买，取消隐藏后恢复首页入口", async
   const editor = page.getByRole("dialog", { name: "新增商品", exact: true });
   await editor.locator("#product-name input").fill(name);
   await editor.locator("#price input").fill("6.20");
-  await selectProductInventory(page, pool);
   await editor.locator("#active").click();
   await editor.getByRole("switch", { name: "隐藏商品", exact: true }).click();
   const saved = page.waitForResponse(
@@ -350,6 +348,7 @@ test("隐藏商品通过链接购买，取消隐藏后恢复首页入口", async
   );
   await editor.getByRole("button", { name: "保存商品", exact: true }).click();
   const product = await (await saved).json();
+  await bindInventoryProducts(page, pool, [product.id]);
   expect(product.hidden).toBe(true);
   expect(product.active).toBe(true);
   const row = page.getByRole("row").filter({ hasText: name });
@@ -437,7 +436,6 @@ test("删除商品保留订单和领取，失败可重试", async ({ page, reque
   await page.getByRole("button", { name: "新增商品", exact: true }).click();
   await page.locator("#product-name input").fill(name);
   await page.locator("#price input").fill("7.50");
-  await selectProductInventory(page, pool);
   await page.locator("#active").click();
   const saved = page.waitForResponse(
     (response) =>
@@ -446,6 +444,7 @@ test("删除商品保留订单和领取，失败可重试", async ({ page, reque
   );
   await page.getByRole("button", { name: "保存商品", exact: true }).click();
   const product = await (await saved).json();
+  await bindInventoryProducts(page, pool, [product.id]);
   const row = page.getByRole("row").filter({ hasText: name });
   await importInventory(
     page,

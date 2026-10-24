@@ -10,13 +10,20 @@ import {
   useDialog,
   useMessage,
 } from "naive-ui";
-import { api, errorText, kindNames, type Inventory } from "../api";
+import {
+  api,
+  errorText,
+  kindNames,
+  type Inventory,
+  type Product,
+} from "../api";
 import { t } from "../i18n";
 import FormDialog from "./FormDialog.vue";
 
 const message = useMessage(),
   dialog = useDialog();
 const inventories = ref<Inventory[]>([]),
+  products = ref<Product[]>([]),
   loading = ref(false),
   loaded = ref(false),
   error = ref("");
@@ -24,7 +31,21 @@ const editor = ref(false),
   saving = ref(false),
   formError = ref("");
 const deleting = ref("");
-const model = reactive({ id: "", name: "", kind: "card", static_content: "" });
+const model = reactive({
+  id: "",
+  name: "",
+  kind: "card",
+  static_content: "",
+  product_ids: [] as string[],
+});
+const productOptions = computed(() =>
+  products.value
+    .filter((product) => product.delivery_mode === "automatic")
+    .map((product) => ({
+      value: product.id,
+      label: `${product.name} · ${product.id.slice(0, 6)}`,
+    })),
+);
 const kinds = computed(() =>
   ["card", "account", "static"].map((value) => ({
     value,
@@ -46,11 +67,13 @@ async function load() {
   loading.value = true;
   error.value = "";
   try {
-    const pools = await api<Inventory[]>("/admin/inventories", {
-      signal: loadController.signal,
-    });
+    const [pools, items] = await Promise.all([
+      api<Inventory[]>("/admin/inventories", { signal: loadController.signal }),
+      api<Product[]>("/admin/products", { signal: loadController.signal }),
+    ]);
     if (current === loadGeneration) {
       inventories.value = pools;
+      products.value = items;
       loaded.value = true;
     }
   } catch (e) {
@@ -71,6 +94,7 @@ function edit(pool?: Inventory) {
     name: pool?.name ?? "",
     kind: pool?.kind ?? "card",
     static_content: "",
+    product_ids: [...(pool?.product_ids ?? [])],
   });
   formError.value = "";
   editor.value = true;
@@ -88,6 +112,7 @@ async function save() {
           name: model.name,
           kind: model.kind,
           static_content: model.kind === "static" ? model.static_content : "",
+          product_ids: model.product_ids,
         },
       },
     );
@@ -316,6 +341,15 @@ function removeStock(id: string) {
               </td>
               <td>
                 {{ t("inventory.shared_count", { count: pool.product_count }) }}
+                <small v-if="pool.product_ids.length" class="muted code-cell">{{
+                  pool.product_ids
+                    .map(
+                      (id) =>
+                        products.find((product) => product.id === id)?.name ??
+                        id,
+                    )
+                    .join("、")
+                }}</small>
               </td>
               <td>
                 <div class="row-actions">
@@ -400,6 +434,22 @@ function removeStock(id: string) {
             :disabled="!!model.id"
           />
           <p class="helper">{{ t("inventory.kind_help") }}</p>
+        </div>
+        <div>
+          <label class="field-label" for="inventory-products">{{
+            t("inventory.products")
+          }}</label>
+          <n-select
+            id="inventory-products"
+            v-model:value="model.product_ids"
+            :options="productOptions"
+            :placeholder="t('inventory.select_products')"
+            multiple
+            filterable
+            clearable
+            :disabled="saving"
+          />
+          <p class="helper">{{ t("inventory.products_help") }}</p>
         </div>
         <div v-if="model.kind === 'static'">
           <label class="field-label" for="static-content">{{

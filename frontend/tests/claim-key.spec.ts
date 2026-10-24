@@ -112,7 +112,6 @@ test("下单响应中断后重试复用订单并直接支付", async ({ page, re
     name: "断网恢复专用商品",
     price: 1234,
     currency: "CNY",
-    inventory_id: inventory.id,
     active: true,
     hidden: true,
   };
@@ -122,6 +121,18 @@ test("下单响应中断后重试复用订单并直接支付", async ({ page, re
   });
   expect(created.ok()).toBeTruthy();
   const product: Product = await created.json();
+  const binding = await request.put(
+    `${base}/api/admin/inventories/${inventory.id}`,
+    {
+      headers,
+      data: {
+        name: inventory.name,
+        kind: inventory.kind,
+        product_ids: [product.id],
+      },
+    },
+  );
+  expect(binding.ok()).toBeTruthy();
   expect(
     (
       await request.post(

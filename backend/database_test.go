@@ -24,6 +24,12 @@ func TestDatabaseInitializesAndReopens(t *testing.T) {
 	if _, err = db.Exec(`UPDATE donation_settings SET document=json_set(document,'$.title','已保存的标题') WHERE id=1`); err != nil {
 		t.Fatal(err)
 	}
+	if _, err = db.Exec(`
+INSERT INTO products(id,name,price,currency,inventory_strategy,active,created_at,updated_at) VALUES('saved-product','已保存商品',100,'CNY','newest',1,1,1);
+INSERT INTO inventories(id,name,kind,created_at,updated_at) VALUES('saved-pool','已保存库存池','card',1,1);
+INSERT INTO inventory_products(inventory_id,product_id,created_at) VALUES('saved-pool','saved-product',1);`); err != nil {
+		t.Fatal("新建数据库不能保存商品分配策略或库存绑定", err)
+	}
 	if err = db.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -46,8 +52,15 @@ func TestDatabaseInitializesAndReopens(t *testing.T) {
 	if err != nil || settings.Title != "已保存的标题" {
 		t.Fatal("重新打开数据库重置了已保存的设置", err)
 	}
-	if _, err = db.Exec("INSERT INTO products(id,name,price,currency,inventory_id,created_at,updated_at) VALUES('invalid','无效关联',100,'CNY','missing',1,1)"); err == nil {
-		t.Fatal("数据库接受了不存在的库存关联")
+	product, err := scanProduct(db.QueryRow(productSelect + " WHERE p.id='saved-product'"))
+	if err != nil || product.InventoryStrategy != "newest" || product.InventoryCount != 1 || product.Kind != "card" {
+		t.Fatal("重新打开数据库后丢失商品分配策略或库存绑定", product, err)
+	}
+	if _, err = db.Exec("INSERT INTO inventory_products(inventory_id,product_id,created_at) VALUES('missing','saved-product',1)"); err == nil {
+		t.Fatal("数据库接受了不存在的库存池")
+	}
+	if _, err = db.Exec("INSERT INTO inventory_products(inventory_id,product_id,created_at) VALUES('saved-pool','missing',1)"); err == nil {
+		t.Fatal("数据库接受了不存在的商品绑定")
 	}
 }
 

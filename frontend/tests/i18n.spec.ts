@@ -161,7 +161,8 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
   await switchLanguage(page, "English");
   await page.getByRole("menuitem", { name: "Products", exact: true }).click();
   await page.getByRole("button", { name: "Add product", exact: true }).click();
-  await expect(page.locator("#product-inventory")).toBeVisible();
+  await expect(page.locator("#product-inventory")).toHaveCount(0);
+  await expect(page.locator("#product-inventory-strategy")).toBeVisible();
   await expect(page.locator("#static-content textarea")).toHaveCount(0);
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await page.getByRole("menuitem", { name: "Inventory", exact: true }).click();

@@ -29,7 +29,7 @@ withDefaults(
       </p>
       <p class="product-stock">
         {{
-          ["card", "account"].includes(product.kind)
+          product.delivery_mode === "automatic" && !product.stock_unlimited
             ? t("stock.count", { quantity: product.available })
             : product.kind === "manual"
               ? t("product.manual_help")

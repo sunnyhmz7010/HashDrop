@@ -77,13 +77,15 @@ watch(
                 type="primary"
                 size="large"
                 :disabled="
-                  ['card', 'account'].includes(product.kind) &&
+                  product.delivery_mode === 'automatic' &&
+                  !product.stock_unlimited &&
                   product.available < product.min_quantity &&
                   !restorePurchase(product.id)
                 "
                 @click="purchaseOpen = true"
                 >{{
-                  ["card", "account"].includes(product.kind) &&
+                  product.delivery_mode === "automatic" &&
+                  !product.stock_unlimited &&
                   product.available < product.min_quantity &&
                   !restorePurchase(product.id)
                     ? t("product.sold_out")

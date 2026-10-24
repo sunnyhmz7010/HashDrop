@@ -23,12 +23,23 @@ export async function createInventory(
   return response.json();
 }
 
-export async function selectProductInventory(page: Page, pool: Inventory) {
-  await page.locator("#product-inventory").click();
-  await page
-    .locator(".n-base-select-option")
-    .filter({ hasText: pool.name })
-    .click();
+export async function bindInventoryProducts(
+  page: Page,
+  pool: Inventory,
+  products: string[],
+) {
+  const baseURL = process.env.HASHDROP_TEST_URL!;
+  const session = await (
+    await page.request.get(`${baseURL}/api/admin/session`)
+  ).json();
+  const response = await page.request.put(
+    `${baseURL}/api/admin/inventories/${pool.id}`,
+    {
+      headers: { Origin: baseURL, "X-CSRF-Token": session.csrf },
+      data: { name: pool.name, kind: pool.kind, product_ids: products },
+    },
+  );
+  expect(response.ok(), await response.text()).toBeTruthy();
 }
 
 export async function importInventory(

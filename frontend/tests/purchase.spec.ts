@@ -2,7 +2,7 @@ import {
   test,
   expect,
   createInventory,
-  selectProductInventory,
+  bindInventoryProducts,
   importInventory,
 } from "./fixture";
 import type { Product } from "../src/api";
@@ -130,8 +130,14 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   await page.getByRole("button", { name: "新增商品" }).click();
   await page.locator("#product-name input").fill("浏览器验证商品");
   await page.locator("#price input").fill("18.50");
-  await selectProductInventory(page, pool);
+  const saved = page.waitForResponse(
+    (response) =>
+      response.url() === `${base}/api/admin/products` &&
+      response.request().method() === "POST",
+  );
   await page.getByRole("button", { name: "保存商品" }).click();
+  const createdProduct = await (await saved).json();
+  await bindInventoryProducts(page, pool, [createdProduct.id]);
   const row = page.getByRole("row").filter({ hasText: "浏览器验证商品" });
   await expect(row).toContainText("18.50 CNY");
   await row.getByRole("button", { name: "编辑", exact: true }).click();

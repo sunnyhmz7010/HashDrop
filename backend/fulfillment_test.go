@@ -13,7 +13,7 @@ func TestManualPurchaseAndPartialDelivery(t *testing.T) {
 	admin := adminSessionRequest(t, a)
 	created := admin("POST", "/api/admin/products", `{"name":"人工充值","price":100,"currency":"CNY","active":true,"delivery_mode":"manual","delivery_note":"两小时内完成，请保留密钥","buyer_note_label":"充值账号","buyer_note_required":true,"min_quantity":2,"max_quantity":3}`)
 	var p Product
-	if created.Code != 200 || json.Unmarshal(created.Body.Bytes(), &p) != nil || p.Kind != "manual" || p.InventoryID != "" {
+	if created.Code != 200 || json.Unmarshal(created.Body.Bytes(), &p) != nil || p.Kind != "manual" || p.InventoryCount != 0 {
 		t.Fatal("人工商品不能独立上架", created.Body)
 	}
 	input := orderInput{ProductID: p.ID, Quantity: 2, Key: "manual-order-key", RequestID: newID(), BuyerNote: "账号@example.com"}

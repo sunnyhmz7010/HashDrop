@@ -198,21 +198,20 @@ func (a *App) reservePricedOrder(ctx context.Context, input orderInput) (Order, 
 	if input.QuotedTotal != nil && (*input.QuotedTotal != quote.Total || input.QuotedCurrency != quote.Currency) {
 		return Order{}, "", &apiError{409, "优惠或价格已变化，请重新确认金额"}
 	}
-	if p.Kind != "manual" && (p.InventoryID == "" || !validDeliveryKind(p.Kind)) {
-		return Order{}, "", bad("商品尚未关联可用库存池")
+	allocations, err := a.allocateInventory(ctx, tx, p, quantity)
+	if err != nil {
+		return Order{}, "", err
 	}
-	content := ""
-	if p.Kind == "static" {
-		plain, e := a.vault.decrypt(p.Content, "inventory:"+p.InventoryID)
-		if e != nil {
-			return Order{}, "", e
+	kind, inventory := allocations[0].kind, allocations[0].inventory
+	for _, item := range allocations[1:] {
+		if item.kind != kind {
+			kind = "mixed"
 		}
-		content, e = a.vault.encrypt(plain, "order:"+id)
-		if e != nil {
-			return Order{}, "", e
+		if item.inventory != inventory {
+			inventory = ""
 		}
 	}
-	o := Order{ID: id, ProductID: p.ID, ProductName: p.Name, InventoryID: p.InventoryID, Kind: p.Kind, UnitPrice: p.Price, Currency: p.Currency, Quantity: quantity, Total: p.Price * int64(quantity), TokenHash: tokenHash(token), Content: content, PaymentStatus: "creating", DeliveryStatus: "pending", ReservationStatus: "reserved", CreatedAt: unixNow()}
+	o := Order{ID: id, ProductID: p.ID, ProductName: p.Name, InventoryID: inventory, Kind: kind, UnitPrice: p.Price, Currency: p.Currency, Quantity: quantity, Total: p.Price * int64(quantity), TokenHash: tokenHash(token), PaymentStatus: "creating", DeliveryStatus: "pending", ReservationStatus: "reserved", CreatedAt: unixNow()}
 	o.Total, o.OriginalTotal, o.DiscountTotal, o.Discounts = quote.Total, quote.OriginalTotal, quote.DiscountTotal, quote.Discounts
 	o.DeliveryNote, o.BuyerNote = p.DeliveryNote, input.BuyerNote
 	if o.BuyerNote != "" {
@@ -238,30 +237,11 @@ func (a *App) reservePricedOrder(ctx context.Context, input orderInput) (Order, 
 			return Order{}, "", err
 		}
 	}
-	stockIDs := []string{}
-	if p.Kind == "card" || p.Kind == "account" {
-		rows, e := tx.QueryContext(ctx, "SELECT id FROM stock_items WHERE inventory_id=? AND status='available' ORDER BY created_at,id LIMIT ?", p.InventoryID, quantity)
-		if e != nil {
-			return Order{}, "", e
-		}
-		for rows.Next() {
-			var stock string
-			if e = rows.Scan(&stock); e != nil {
-				rows.Close()
-				return Order{}, "", e
-			}
-			stockIDs = append(stockIDs, stock)
-		}
-		e = rows.Err()
-		rows.Close()
-		if e != nil {
-			return Order{}, "", e
-		}
-		if len(stockIDs) != quantity {
-			return Order{}, "", &apiError{409, "库存不足，请调整数量"}
-		}
-		for _, stock := range stockIDs {
-			result, e := tx.ExecContext(ctx, "UPDATE stock_items SET status='reserved',order_id=? WHERE id=? AND status='available'", id, stock)
+	for ordinal, item := range allocations {
+		var stock, inventoryID any
+		if item.stock != "" {
+			stock = item.stock
+			result, e := tx.ExecContext(ctx, "UPDATE stock_items SET status='reserved',order_id=? WHERE id=? AND inventory_id=? AND status='available'", id, item.stock, item.inventory)
 			if e != nil {
 				return Order{}, "", e
 			}
@@ -270,14 +250,18 @@ func (a *App) reservePricedOrder(ctx context.Context, input orderInput) (Order, 
 				return Order{}, "", &apiError{409, "库存发生变化，请重试"}
 			}
 		}
-	}
-	for i := 1; i <= quantity; i++ {
-		var stock any
-		if len(stockIDs) > 0 {
-			stock = stockIDs[i-1]
-		}
 		deliveryID := newID()
-		if _, err = tx.ExecContext(ctx, "INSERT INTO deliveries(id,order_id,ordinal,stock_id,updated_at) VALUES(?,?,?,?,?)", deliveryID, id, i, stock, unixNow()); err != nil {
+		content := ""
+		if item.inventory != "" {
+			inventoryID = item.inventory
+		}
+		if item.kind == "static" {
+			content, err = a.vault.encrypt(item.content, "delivery-content:"+deliveryID)
+			if err != nil {
+				return Order{}, "", err
+			}
+		}
+		if _, err = tx.ExecContext(ctx, "INSERT INTO deliveries(id,order_id,ordinal,stock_id,inventory_id,kind,content,updated_at) VALUES(?,?,?,?,?,?,?,?)", deliveryID, id, ordinal+1, stock, inventoryID, item.kind, content, unixNow()); err != nil {
 			return Order{}, "", err
 		}
 	}

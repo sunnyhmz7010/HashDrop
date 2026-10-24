@@ -3,6 +3,7 @@ import {
   test,
   expect,
   createInventory,
+  bindInventoryProducts,
   type Locator,
 } from "./fixture";
 import type { Promotion, Product } from "../src/api";
@@ -37,7 +38,6 @@ test("优惠管理保存、叠加报价、价格变化确认与历史领取", as
         details: "",
         price: 10000,
         currency: "CNY",
-        inventory_id: pool.id,
         active: true,
         hidden,
       },
@@ -47,6 +47,7 @@ test("优惠管理保存、叠加报价、价格变化确认与历史领取", as
   }
   const first = await createProduct("优惠叠加商品", false),
     second = await createProduct("优惠范围备用商品", true);
+  await bindInventoryProducts(page, pool, [first.id, second.id]);
   await page.getByRole("menuitem", { name: "优惠", exact: true }).click();
   async function select(form: Locator, selector: string, name: string) {
     await form.locator(selector).click();

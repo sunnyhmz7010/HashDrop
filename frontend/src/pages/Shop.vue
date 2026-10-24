@@ -105,14 +105,16 @@ onMounted(load);
                       size="large"
                       :aria-label="t('shop.buy')"
                       :disabled="
-                        ['card', 'account'].includes(product.kind) &&
+                        product.delivery_mode === 'automatic' &&
+                        !product.stock_unlimited &&
                         product.available < product.min_quantity &&
                         !restorePurchase(product.id)
                       "
                       @click="openPurchase(product.id)"
                       ><ProductIcon name="buy" /></n-button></template
                   >{{
-                    ["card", "account"].includes(product.kind) &&
+                    product.delivery_mode === "automatic" &&
+                    !product.stock_unlimited &&
                     product.available < product.min_quantity &&
                     !restorePurchase(product.id)
                       ? t("product.sold_out")

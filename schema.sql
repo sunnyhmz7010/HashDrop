@@ -1,4 +1,4 @@
--- v1.0.0 全新安装结构；初始化在单个事务内完成。
+-- 全新安装结构；初始化在单个事务内完成。
 CREATE TABLE inventories (
  id TEXT PRIMARY KEY, name TEXT NOT NULL,
  kind TEXT NOT NULL CHECK(kind IN ('card','account','static')),
@@ -8,7 +8,7 @@ CREATE TABLE inventories (
 CREATE TABLE products (
  id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
  details TEXT NOT NULL DEFAULT '', price INTEGER NOT NULL CHECK(price > 0), currency TEXT NOT NULL,
- inventory_id TEXT REFERENCES inventories(id),
+ inventory_strategy TEXT NOT NULL DEFAULT 'oldest' CHECK(inventory_strategy IN ('random','oldest','newest')),
  active INTEGER NOT NULL DEFAULT 0 CHECK(active IN (0,1)),
  hidden INTEGER NOT NULL DEFAULT 0 CHECK(hidden IN (0,1)),
  delivery_mode TEXT NOT NULL DEFAULT 'automatic' CHECK(delivery_mode IN ('automatic','manual')),
@@ -16,10 +16,14 @@ CREATE TABLE products (
  buyer_note_required INTEGER NOT NULL DEFAULT 0 CHECK(buyer_note_required IN (0,1)),
  min_quantity INTEGER NOT NULL DEFAULT 1 CHECK(min_quantity BETWEEN 1 AND 100),
  max_quantity INTEGER NOT NULL DEFAULT 100 CHECK(max_quantity BETWEEN min_quantity AND 100),
- created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, deleted_at INTEGER,
- CHECK(active=0 OR delivery_mode='manual' OR inventory_id IS NOT NULL)
+ created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, deleted_at INTEGER
 );
-CREATE INDEX products_inventory ON products(inventory_id);
+CREATE TABLE inventory_products (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ inventory_id TEXT NOT NULL REFERENCES inventories(id), product_id TEXT NOT NULL REFERENCES products(id),
+ created_at INTEGER NOT NULL, UNIQUE(inventory_id,product_id)
+);
+CREATE INDEX inventory_products_product ON inventory_products(product_id,id);
 CREATE TABLE orders (
  id TEXT PRIMARY KEY, product_id TEXT NOT NULL REFERENCES products(id),
  product_name TEXT NOT NULL, inventory_id TEXT REFERENCES inventories(id), kind TEXT NOT NULL,
@@ -50,6 +54,7 @@ CREATE INDEX stock_available ON stock_items(inventory_id,status);
 CREATE TABLE deliveries (
  id TEXT PRIMARY KEY, order_id TEXT NOT NULL REFERENCES orders(id), ordinal INTEGER NOT NULL CHECK(ordinal > 0),
  stock_id TEXT UNIQUE REFERENCES stock_items(id), result TEXT NOT NULL DEFAULT '',
+ inventory_id TEXT REFERENCES inventories(id), kind TEXT NOT NULL DEFAULT '', content TEXT NOT NULL DEFAULT '',
  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','processing','done','manual')),
  attempts INTEGER NOT NULL DEFAULT 0, last_error TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL,
  UNIQUE(order_id,ordinal)

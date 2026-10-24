@@ -2,15 +2,13 @@
 import { computed, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { NAlert, NButton, NSkeleton, NTag } from "naive-ui";
-import StoreLayout from "../components/StoreLayout.vue";
 import { api, errorText, money, paymentNames, type Donation } from "../api";
 import { formatTime, t } from "../i18n";
 import {
-  donationToken,
+  donationNickname,
   donationsCleared,
   rememberDonation,
 } from "../donationHistory";
-const props = defineProps<{ embedded?: boolean }>();
 
 const route = useRoute(),
   router = useRouter(),
@@ -64,7 +62,7 @@ async function load() {
     });
     if (current !== generation) return;
     detail.value = result;
-    storageError.value = !rememberDonation(result, token.value);
+    storageError.value = !rememberDonation(result);
     error.value = "";
     if (!["paid", "closed", "invalid"].includes(result.payment_status))
       timer = setTimeout(load, 6000);
@@ -75,24 +73,20 @@ async function load() {
   }
 }
 watch(
-  () => [route.params.id, route.hash],
+  () => route.params.id,
   () => {
     stop();
     detail.value = undefined;
     error.value = "";
     storageError.value = false;
     id.value = String(route.params.id ?? "");
-    const fromURL = new URLSearchParams(route.hash.slice(1)).get("token");
     try {
       token.value =
-        fromURL ??
-        (donationToken(id.value) ||
-          sessionStorage.getItem(`hashdrop:donation:${id.value}`) ||
-          "");
-      if (fromURL)
-        sessionStorage.setItem(`hashdrop:donation:${id.value}`, fromURL);
+        donationNickname(id.value) ||
+        sessionStorage.getItem(`hashdrop:donation:${id.value}`) ||
+        "";
     } catch {
-      token.value = fromURL ?? donationToken(id.value);
+      token.value = donationNickname(id.value);
       storageError.value = true;
     }
     void load();
@@ -106,8 +100,7 @@ watch(donationsCleared, (ids) => {
   detail.value = undefined;
   token.value = "";
   error.value = "";
-  if (props.embedded) void router.replace("/center/donations");
-  else if (route.hash) void router.replace({ path: route.path });
+  void router.replace("/center/donations");
 });
 function pay() {
   if (detail.value?.payment_status === "pending" && detail.value.checkout_url)
@@ -116,14 +109,11 @@ function pay() {
 </script>
 
 <template>
-  <component :is="embedded ? 'div' : StoreLayout">
-    <main :class="['donation-receipt grid', embedded ? 'is-embedded' : 'page']">
-      <n-button
-        v-if="embedded"
-        secondary
-        @click="router.push('/center/donations')"
-        >{{ t("center.back_donations") }}</n-button
-      >
+  <div>
+    <main class="donation-receipt grid">
+      <n-button secondary @click="router.push('/center/donations')">{{
+        t("center.back_donations")
+      }}</n-button>
       <section class="panel grid">
         <div class="section-title">
           <h1>
@@ -138,7 +128,7 @@ function pay() {
           }}</n-tag>
         </div>
         <n-alert v-if="!token" type="warning"
-          >{{ t("donation.missing_token") }}
+          >{{ t("donation.missing_nickname") }}
           <router-link to="/center/donations" class="text-link">{{
             t("donation.lookup")
           }}</router-link></n-alert
@@ -192,9 +182,7 @@ function pay() {
           }}</n-alert>
         </template>
         <n-alert v-if="storageError && detail" type="warning">{{
-          detail.nickname
-            ? t("donation.storage_help")
-            : t("donation.legacy_storage_help")
+          t("donation.storage_help")
         }}</n-alert>
         <div class="form-actions">
           <n-button
@@ -212,14 +200,11 @@ function pay() {
         </div>
       </section>
     </main>
-  </component>
+  </div>
 </template>
 
 <style scoped lang="scss">
 .donation-receipt {
-  max-width: 720px;
-}
-.donation-receipt.is-embedded {
   max-width: 100%;
 }
 .donation-total {

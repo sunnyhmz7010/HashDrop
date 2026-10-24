@@ -33,7 +33,9 @@ async function createDonation(page: Page, name: string) {
   const response = await created;
   expect(response.ok(), await response.text()).toBeTruthy();
   const result = (await response.json()) as { donation: Donation };
-  await expect(page).toHaveURL(`${base()}/donate/orders/${result.donation.id}`);
+  await expect(page).toHaveURL(
+    `${base()}/center/donations/${result.donation.id}`,
+  );
   await expect(
     page.getByRole("button", { name: "前往 HashPay 付款", exact: true }),
   ).toBeEnabled({ timeout: 30_000 });
@@ -213,7 +215,7 @@ test("多币种逐项配置、昵称付款与公开选择，停用后仍可查�
     };
     expect(donation.nickname).toBe(privateName);
     expect(donation.show_public).toBe(false);
-    await expect(page).toHaveURL(`${base()}/donate/orders/${donation.id}`);
+    await expect(page).toHaveURL(`${base()}/center/donations/${donation.id}`);
     await expect(page.locator(".donation-receipt")).toContainText(privateName);
     await expect(page.locator("#donation-receipt-link")).toHaveCount(0);
     const payButton = page.getByRole("button", {
@@ -221,11 +223,12 @@ test("多币种逐项配置、昵称付款与公开选择，停用后仍可查�
       exact: true,
     });
     await expect(payButton).toBeEnabled({ timeout: 30_000 });
-    const detail = (await (
+    const found = (await (
       await page.request.post(`${base()}/api/donations/lookup`, {
         data: { nickname: privateName },
       })
-    ).json()) as Donation;
+    ).json()) as { items: Donation[] };
+    const detail = found.items[0]!;
     await page.route(detail.checkout_url, (route) =>
       route.fulfill({
         contentType: "text/html",
@@ -237,7 +240,7 @@ test("多币种逐项配置、昵称付款与公开选择，停用后仍可查�
     expect(
       (await request.post(`${base()}/__test/pay-donation/${donation.id}`)).ok(),
     ).toBeTruthy();
-    await page.goto(`${base()}/donate/orders/${donation.id}`);
+    await page.goto(`${base()}/center/donations/${donation.id}`);
     await expect(
       page.getByRole("heading", { name: "感谢你的赞赏", exact: true }),
     ).toBeVisible();
@@ -464,7 +467,7 @@ test("赞赏创建响应丢失后重试沿用请求标识，只保留同一笔�
     expect(submissions).toHaveLength(2);
     expect(submissions[0]!.request_id).toBeTruthy();
     expect(submissions[1]).toEqual(submissions[0]);
-    await expect(page).toHaveURL(`${base()}/donate/orders/${recovered.id}`);
+    await expect(page).toHaveURL(`${base()}/center/donations/${recovered.id}`);
     await page.goto(`${base()}/center/donations`);
     await expect(page.locator(".donation-history-row")).toHaveCount(1);
     await expect(page.locator(".donation-history-row")).toContainText(

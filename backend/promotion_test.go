@@ -283,7 +283,7 @@ func TestPromotionPriceSnapshotAndGatewayVerification(t *testing.T) {
 		t.Fatalf("优惠变更破坏了订单快照: %+v %v", saved, err)
 	}
 	claim := httptest.NewRequest("GET", "/api/orders/"+order.ID, nil)
-	claim.Header.Set("Authorization", "Bearer "+token)
+	claim.Header.Set("Authorization", claimAuthorization(token))
 	response := httptest.NewRecorder()
 	a.routes().ServeHTTP(response, claim)
 	if response.Code != 200 || !strings.Contains(response.Body.String(), "卡密-0") {

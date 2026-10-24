@@ -2,6 +2,47 @@ import { test, expect } from "./fixture";
 import { placeTestOrder, stubPaymentPage } from "./checkout";
 import type { Product } from "../src/api";
 
+test("URL 凭证不自动读取，手动查询同一订单后可刷新恢复", async ({
+  page,
+  request,
+}) => {
+  const base = process.env.HASHDROP_TEST_URL!;
+  const products: Product[] = await (
+    await request.get(`${base}/api/products`)
+  ).json();
+  const product = products.find((item) => item.kind === "static")!;
+  const suffix = Date.now().toString(36) + Math.random().toString(36).slice(2);
+  const key = `fragment-test-${suffix}`;
+  const quote = await (
+    await request.post(`${base}/api/orders/quote`, {
+      data: { product_id: product.id, quantity: 1 },
+    })
+  ).json();
+  const created = await request.post(`${base}/api/orders`, {
+    data: {
+      product_id: product.id,
+      quantity: 1,
+      key,
+      request_id: suffix.padEnd(32, "x"),
+      quoted_total: quote.total,
+      quoted_currency: quote.currency,
+    },
+  });
+  expect(created.status()).toBe(201);
+  const { order } = await created.json();
+  const path = `${base}/center/orders/${order.id}`;
+  await page.goto(`${path}#token=${encodeURIComponent(key)}`);
+  await expect(page.locator(".checkout-copy-field")).toHaveCount(0);
+  await page.getByRole("button", { name: "查询", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "查询订单", exact: true });
+  await dialog.getByLabel("领取密钥", { exact: true }).fill(key);
+  await dialog.getByRole("button", { name: "查询", exact: true }).click();
+  await expect(page).toHaveURL(path);
+  await expect(page.locator(".checkout-copy-field code")).toHaveText(key);
+  await page.reload();
+  await expect(page.locator(".checkout-copy-field code")).toHaveText(key);
+});
+
 test("密钥生成、重复候选和跨设备领取", async ({ page, request, browser }) => {
   const base = process.env.HASHDROP_TEST_URL!;
   const products: Product[] = await (

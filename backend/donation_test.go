@@ -137,6 +137,24 @@ func TestDonationSettingsRejectInvalidValues(t *testing.T) {
 	}
 }
 
+func TestDonationSettingsRequireCurrencyGroups(t *testing.T) {
+	a, _ := newTestApp(t)
+	if _, err := a.db.Exec(`UPDATE donation_settings SET document='{"enabled":true,"title":"配置","currency":"CNY","amounts":[500],"min_amount":100,"max_amount":1000}' WHERE id=1`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readDonationSettings(a.db.QueryRow("SELECT document FROM donation_settings WHERE id=1")); err == nil {
+		t.Fatal("仍接受没有 currencies 分组的设置")
+	}
+}
+
+func TestDonationRequiresNickname(t *testing.T) {
+	a, _ := newTestApp(t)
+	if _, err := a.db.Exec(`INSERT INTO donations(id,title,nickname,amount,currency,gateway_url,gateway_merchant_id,payment_status,created_at,updated_at)
+VALUES('invalid','不应创建','',500,'CNY','https://pay.example','merchant-test','paid',1,1)`); err == nil {
+		t.Fatal("仍允许创建没有昵称的赞赏记录")
+	}
+}
+
 func TestDonationCallbackRequiresVerificationAndIsIdempotent(t *testing.T) {
 	a, gateway := newTestApp(t)
 	admin := enableDonations(t, a)
@@ -262,7 +280,7 @@ func TestDonationCreateRetryAndDisabledLatePayment(t *testing.T) {
 		t.Fatal("创建重试未复用同一商户订单号")
 	}
 	for _, returnURL := range gateway.returnURLs {
-		if strings.Contains(returnURL, token) || !strings.HasSuffix(returnURL, "/donate/orders/"+d.ID) {
+		if strings.Contains(returnURL, token) || !strings.HasSuffix(returnURL, "/center/donations/"+d.ID) {
 			t.Fatal("赞赏支付回跳地址错误或泄露了凭证")
 		}
 	}
@@ -329,7 +347,7 @@ func TestDonationSummarySeparatesCurrenciesAndPagination(t *testing.T) {
 		if i == 1 {
 			status = "pending"
 		}
-		if _, err := a.db.Exec(`INSERT INTO donations(id,title,amount,currency,token_hash,gateway_url,gateway_merchant_id,payment_status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, fmt.Sprintf("don_%02d", i), "历史赞赏", 100, currency, randomToken(), "https://pay.example", "merchant-test", status, i, i); err != nil {
+		if _, err := a.db.Exec(`INSERT INTO donations(id,title,nickname,amount,currency,gateway_url,gateway_merchant_id,payment_status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, fmt.Sprintf("don_%02d", i), "历史赞赏", fmt.Sprintf("支持者-%02d", i), 100, currency, "https://pay.example", "merchant-test", status, i, i); err != nil {
 			t.Fatal(err)
 		}
 	}

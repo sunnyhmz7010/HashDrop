@@ -45,11 +45,6 @@ const detail = ref<OrderDetail>(),
 let timer: ReturnType<typeof setTimeout> | undefined,
   controller: AbortController | undefined,
   generation = 0;
-const credential = computed(() =>
-  orderID.value && token.value
-    ? `${location.origin}/center/orders/${orderID.value}#token=${encodeURIComponent(token.value)}`
-    : "",
-);
 function stop() {
   clearTimeout(timer);
   controller?.abort();
@@ -87,7 +82,7 @@ async function load() {
   }
 }
 watch(
-  () => [route.params.id, route.hash],
+  () => route.params.id,
   () => {
     stop();
     detail.value = undefined;
@@ -95,16 +90,13 @@ watch(
     storageError.value = false;
     credentialSaved.value = false;
     orderID.value = String(route.params.id ?? "");
-    const fromURL = new URLSearchParams(route.hash.slice(1)).get("token");
     try {
       token.value =
-        fromURL ??
-        (restoreOrderKey(orderID.value) ||
-          sessionStorage.getItem(`hashdrop:${orderID.value}`) ||
-          "");
-      if (fromURL) sessionStorage.setItem(`hashdrop:${orderID.value}`, fromURL);
+        restoreOrderKey(orderID.value) ||
+        sessionStorage.getItem(`hashdrop:${orderID.value}`) ||
+        "";
     } catch {
-      token.value = fromURL ?? "";
+      token.value = restoreOrderKey(orderID.value);
       storageError.value = true;
     }
     void load();
@@ -123,20 +115,22 @@ watch(historyCleared, () => {
 });
 async function queried(result: OrderDetail, key: string) {
   const path = `/center/orders/${encodeURIComponent(result.order.id)}`;
-  if (route.path !== path || route.hash) await router.replace(path);
-  else {
-    stop();
-    detail.value = undefined;
-    error.value = "";
-    token.value = key;
-    credentialSaved.value = false;
-    await load();
+  if (route.path !== path) {
+    await router.replace(path);
+    return;
   }
+  if (route.hash) await router.replace(path);
+  stop();
+  detail.value = undefined;
+  error.value = "";
+  token.value = key;
+  credentialSaved.value = false;
+  await load();
 }
 async function copy(value: string) {
   try {
     await copyText(value);
-    if (value === credential.value) credentialSaved.value = true;
+    if (value === token.value) credentialSaved.value = true;
     message.success(t("common.copied"));
   } catch {
     message.warning(t("common.copy_fallback"));
@@ -302,10 +296,10 @@ const statusType = computed(() => {
           <small class="field-help">{{ t("claim.status_help") }}</small>
         </div>
         <div class="checkout-copy-field">
-          <span>{{ t("claim.link") }}</span>
-          <code :title="credential">{{ credential }}</code>
-          <n-button size="small" secondary @click="copy(credential)">{{
-            t("claim.copy_link")
+          <span>{{ t("claim.key") }}</span>
+          <code :title="token">{{ token }}</code>
+          <n-button size="small" secondary @click="copy(token)">{{
+            t("claim.copy_key")
           }}</n-button>
         </div>
         <n-alert v-if="storageError" type="warning">{{

@@ -62,11 +62,11 @@ async function load(next = page.value) {
       if (signal.aborted) return;
       try {
         const result = await api<Donation>(`/donations/${record.donation.id}`, {
-          token: record.token,
+          token: record.donation.nickname,
           signal,
         });
         if (current !== generation) return;
-        rememberDonation(result, record.token);
+        rememberDonation(result);
       } catch (cause) {
         if (signal.aborted || current !== generation) return;
         failures++;
@@ -110,7 +110,7 @@ async function lookup() {
       if (!result.has_more) break;
       next++;
     }
-    for (const donation of found) rememberDonation(donation, donation.nickname);
+    for (const donation of found) rememberDonation(donation);
     // 同昵称、同金额的旧记录不能解除另一笔结果未知的请求。
     if (matched) forgetDonationIntent();
     nickname.value = "";

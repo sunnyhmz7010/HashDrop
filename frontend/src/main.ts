@@ -19,12 +19,7 @@ const router = createRouter({
     { path: "/setup", component: () => import("./pages/Setup.vue") },
     { path: "/", component: Shop },
     { path: "/donate", component: () => import("./pages/Donate.vue") },
-    {
-      path: "/donate/orders/:id",
-      component: () => import("./pages/DonationOrder.vue"),
-    },
     { path: "/products/:id", component: () => import("./pages/Product.vue") },
-    { path: "/center/query", redirect: "/center/history" },
     {
       path: "/center/:section?/:id?",
       component: () => import("./pages/Center.vue"),
@@ -40,7 +35,7 @@ router.beforeEach(async (to) => {
         await api<{ initialized: boolean }>("/setup/status")
       ).initialized;
     } catch {
-      // 网络失败时保留目标路由和订单 Fragment，不能据此判断尚未初始化。
+      // 网络失败时保留目标路由，不能据此判断尚未初始化。
     }
   }
   if (initialized.value === false && to.path !== "/setup") return "/setup";

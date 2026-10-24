@@ -8,6 +8,23 @@ import (
 	"testing"
 )
 
+func TestUnknownDeliveryKindDoesNotChangeOrder(t *testing.T) {
+	a, _ := newTestApp(t)
+	product := insertProduct(t, a, "card", 1)
+	order, _ := reserve(t, a, product, 1)
+	order.PaymentStatus, order.Kind = "paid", "unsupported"
+	if err := a.deliverOrder(context.Background(), order); err == nil {
+		t.Fatal("接受了无效交付类型")
+	}
+	var orderStatus, deliveryStatus string
+	if err := a.db.QueryRow("SELECT delivery_status FROM orders WHERE id=?", order.ID).Scan(&orderStatus); err != nil || orderStatus != "pending" {
+		t.Fatal("无效类型改变了订单交付状态", orderStatus, err)
+	}
+	if err := a.db.QueryRow("SELECT status FROM deliveries WHERE order_id=?", order.ID).Scan(&deliveryStatus); err != nil || deliveryStatus != "pending" {
+		t.Fatal("无效类型改变了逐份交付状态", deliveryStatus, err)
+	}
+}
+
 func TestManualPurchaseAndPartialDelivery(t *testing.T) {
 	a, gateway := newTestApp(t)
 	admin := adminSessionRequest(t, a)

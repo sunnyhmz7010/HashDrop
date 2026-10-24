@@ -175,13 +175,24 @@ func TestDonationNicknameLookupExposesOnlyBuyerFields(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, response := range []*httptest.ResponseRecorder{
+		for index, response := range []*httptest.ResponseRecorder{
 			donationRequest(a, "POST", "/api/donations/lookup", string(body), ""),
 			donationRequest(a, "GET", "/api/donations/"+d.ID, "", nickname),
 		} {
+			payload := response.Body.Bytes()
+			if index == 0 {
+				var list struct {
+					Items []json.RawMessage `json:"items"`
+					Page  int               `json:"page"`
+				}
+				if json.Unmarshal(payload, &list) != nil || len(list.Items) != 1 || list.Page != 1 {
+					t.Fatalf("昵称查询未返回分页列表: %s", payload)
+				}
+				payload = list.Items[0]
+			}
 			var value map[string]json.RawMessage
 			var found Donation
-			if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &value) != nil || json.Unmarshal(response.Body.Bytes(), &found) != nil || found.ID != d.ID || found.Nickname != nickname || found.PaymentStatus != status {
+			if response.Code != 200 || json.Unmarshal(payload, &value) != nil || json.Unmarshal(payload, &found) != nil || found.ID != d.ID || found.Nickname != nickname || found.PaymentStatus != status {
 				t.Fatalf("昵称查询未恢复对应记录: %d %s", response.Code, response.Body)
 			}
 			for _, forbidden := range []string{"token_hash", "request_id", "gateway_id", "gateway_url", "gateway_merchant_id", "last_error", "attempts", "next_check"} {
@@ -202,21 +213,19 @@ func TestDonationNicknameLookupExposesOnlyBuyerFields(t *testing.T) {
 func TestDonationPublicListRequiresPaidAndExplicitConsent(t *testing.T) {
 	a, _ := newTestApp(t)
 	enableDonations(t, a)
-	for i := 0; i < 26; i++ {
+	for i := 0; i < 25; i++ {
 		nickname, status, shown := fmt.Sprintf("公开赞赏者-%02d", i), "paid", true
 		if i == 23 {
 			shown = false
 		} else if i == 24 {
 			status = "pending"
-		} else if i == 25 {
-			nickname = "" // 旧版本匿名记录不能因为迁移而被公开。
 		}
 		currency := "CNY"
 		if i%2 == 0 {
 			currency = "USD"
 		}
-		if _, err := a.db.Exec(`INSERT INTO donations(id,title,amount,currency,token_hash,gateway_url,gateway_merchant_id,payment_status,created_at,updated_at,paid_at,nickname,show_public)
- VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`, fmt.Sprintf("public_%02d", i), "公开记录测试", i+100, currency, randomToken(), "https://pay.example", "merchant-test", status, i, i, 1000+i, nickname, shown); err != nil {
+		if _, err := a.db.Exec(`INSERT INTO donations(id,title,amount,currency,gateway_url,gateway_merchant_id,payment_status,created_at,updated_at,paid_at,nickname,show_public)
+ VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, fmt.Sprintf("public_%02d", i), "公开记录测试", i+100, currency, "https://pay.example", "merchant-test", status, i, i, 1000+i, nickname, shown); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -247,19 +256,15 @@ func TestDonationPublicListRequiresPaidAndExplicitConsent(t *testing.T) {
 	}
 }
 
-func TestLegacyDonationBearerCredentialStillWorks(t *testing.T) {
+func TestDonationRejectsBearerCredential(t *testing.T) {
 	a, _ := newTestApp(t)
-	token := randomToken()
-	if _, err := a.db.Exec(`INSERT INTO donations(id,title,amount,currency,token_hash,gateway_url,gateway_merchant_id,payment_status,created_at,updated_at)
- VALUES('legacy-bearer','旧匿名赞赏',500,'CNY',?,'https://pay.example','merchant-test','paid',1,1)`, tokenHash(token)); err != nil {
-		t.Fatal(err)
-	}
-	request := httptest.NewRequest("GET", "/api/donations/legacy-bearer", nil)
-	request.Header.Set("Authorization", "Bearer "+token)
+	enableDonations(t, a)
+	donation, nickname := newDonation(t, a, 500, "CNY")
+	request := httptest.NewRequest("GET", "/api/donations/"+donation.ID, nil)
+	request.Header.Set("Authorization", "Bearer "+nickname)
 	response := httptest.NewRecorder()
 	a.routes().ServeHTTP(response, request)
-	var found Donation
-	if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &found) != nil || found.ID != "legacy-bearer" || found.PaymentStatus != "paid" || found.Nickname != "" {
-		t.Fatalf("升级后旧 Bearer 领取链接不可用: %d %s", response.Code, response.Body)
+	if response.Code != 401 {
+		t.Fatalf("接受了已移除的 Bearer 凭证: %d %s", response.Code, response.Body)
 	}
 }

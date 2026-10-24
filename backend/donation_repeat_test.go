@@ -75,11 +75,8 @@ func TestDonationGroupedPaginationKeepsCompleteHistoryAndAnonymousIdentity(t *te
 		} else if i == 1 {
 			status = "pending"
 		}
-		if i == 23 || i == 24 {
-			nickname = ""
-		}
-		if _, err := a.db.Exec(`INSERT INTO donations(id,title,nickname,amount,currency,token_hash,gateway_url,gateway_merchant_id,payment_status,created_at,updated_at)
-VALUES(?,'历史赞赏',?,100,?,?,'https://pay.example','merchant-test',?,?,?)`, fmt.Sprintf("history_%02d", i), nickname, currency, randomToken(), status, 100-i, 100-i); err != nil {
+		if _, err := a.db.Exec(`INSERT INTO donations(id,title,nickname,amount,currency,gateway_url,gateway_merchant_id,payment_status,created_at,updated_at)
+VALUES(?,'历史赞赏',?,100,?,'https://pay.example','merchant-test',?,?,?)`, fmt.Sprintf("history_%02d", i), nickname, currency, status, 100-i, 100-i); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -112,10 +109,10 @@ VALUES(?,'历史赞赏',?,100,?,?,'https://pay.example','merchant-test',?,?,?)`,
 		}
 	}
 	if len(seen) != 25 {
-		t.Fatal("分组分页合并了匿名记录或遗漏历史")
+		t.Fatal("分组分页遗漏历史")
 	}
-	if _, err := a.db.Exec(`INSERT INTO donations(id,title,nickname,amount,currency,token_hash,gateway_url,gateway_merchant_id,payment_status,created_at,updated_at)
-VALUES('search-literal','搜索测试','Sunny_100%',500,'USD',?,'https://pay.example','merchant-test','paid',101,101)`, randomToken()); err != nil {
+	if _, err := a.db.Exec(`INSERT INTO donations(id,title,nickname,amount,currency,gateway_url,gateway_merchant_id,payment_status,created_at,updated_at)
+VALUES('search-literal','搜索测试','Sunny_100%',500,'USD','https://pay.example','merchant-test','paid',101,101)`); err != nil {
 		t.Fatal(err)
 	}
 	for _, group := range []string{"nickname", ""} {
@@ -148,8 +145,8 @@ func TestDonationNicknameHistoryPaginatesAndMatchesOnlyProvidedRequest(t *testin
 	a, _ := newTestApp(t)
 	enableDonations(t, a)
 	for i := 0; i < 23; i++ {
-		if _, err := a.db.Exec(`INSERT INTO donations(id,title,nickname,request_id,amount,currency,token_hash,gateway_url,gateway_merchant_id,payment_status,created_at,updated_at)
-VALUES(?,'多页历史','长期支持者',?,100,'CNY',?,'https://pay.example','merchant-test','paid',?,?)`, fmt.Sprintf("history_%02d", i), fmt.Sprintf("request_%02d", i), randomToken(), i, i); err != nil {
+		if _, err := a.db.Exec(`INSERT INTO donations(id,title,nickname,request_id,amount,currency,gateway_url,gateway_merchant_id,payment_status,created_at,updated_at)
+VALUES(?,'多页历史','长期支持者',?,100,'CNY','https://pay.example','merchant-test','paid',?,?)`, fmt.Sprintf("history_%02d", i), fmt.Sprintf("request_%02d", i), i, i); err != nil {
 			t.Fatal(err)
 		}
 	}

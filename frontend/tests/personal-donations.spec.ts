@@ -20,7 +20,7 @@ async function createDonation(page: Page, name: string) {
   const response = await created;
   expect(response.ok(), await response.text()).toBeTruthy();
   const donation = ((await response.json()) as { donation: Donation }).donation;
-  await expect(page).toHaveURL(`${base()}/donate/orders/${donation.id}`);
+  await expect(page).toHaveURL(`${base()}/center/donations/${donation.id}`);
   await expect(
     page.getByRole("button", { name: "前往 HashPay 付款", exact: true }),
   ).toBeEnabled({ timeout: 30_000 });

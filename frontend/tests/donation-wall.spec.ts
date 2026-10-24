@@ -69,7 +69,7 @@ test("同昵称再次赞赏需确认，概览卡片聚合完整历史并可核�
     expect(firstResponse.ok()).toBeTruthy();
     const first = ((await firstResponse.json()) as { donation: Donation })
       .donation;
-    await expect(page).toHaveURL(`${base()}/donate/orders/${first.id}`);
+    await expect(page).toHaveURL(`${base()}/center/donations/${first.id}`);
     await expect(
       page.getByRole("button", { name: "前往 HashPay 付款", exact: true }),
     ).toBeEnabled({ timeout: 30_000 });
@@ -120,7 +120,7 @@ test("同昵称再次赞赏需确认，概览卡片聚合完整历史并可核�
     const second = ((await (await repeated).json()) as { donation: Donation })
       .donation;
     expect(second.id).not.toBe(first.id);
-    await expect(page).toHaveURL(`${base()}/donate/orders/${second.id}`);
+    await expect(page).toHaveURL(`${base()}/center/donations/${second.id}`);
     await expect(
       page.getByRole("button", { name: "前往 HashPay 付款", exact: true }),
     ).toBeEnabled({ timeout: 30_000 });
@@ -411,7 +411,7 @@ test("重复赞赏的网络失败保留请求，查询同昵称旧记录不会�
     await page
       .getByRole("button", { name: "确认金额并赞赏", exact: true })
       .click();
-    await expect(page).toHaveURL(`${base()}/donate/orders/${createdID}`);
+    await expect(page).toHaveURL(`${base()}/center/donations/${createdID}`);
     expect(confirmedCalls).toBe(3);
     const records = (await (
       await page.request.get(`${base()}/api/admin/donations?group_by=nickname`)

@@ -187,7 +187,7 @@ func TestDeleteProductPreservesOrdersAndClaims(t *testing.T) {
 			public := func(path, token string) *httptest.ResponseRecorder {
 				request := httptest.NewRequest("GET", path, nil)
 				if token != "" {
-					request.Header.Set("Authorization", "Bearer "+token)
+					request.Header.Set("Authorization", claimAuthorization(token))
 				}
 				response := httptest.NewRecorder()
 				a.routes().ServeHTTP(response, request)

@@ -163,7 +163,7 @@ test("查询中心保留浏览器订单，跨设备导入并同步清除", async
 
 test("同一框架按会话展示权限并允许重试会话错误", async ({ page }) => {
   const base = process.env.HASHDROP_TEST_URL!;
-  await page.goto(`${base}/center/query`);
+  await page.goto(`${base}/center/history`);
   await expect(page).toHaveURL(`${base}/center/history`);
   await expect(
     page.getByRole("heading", { name: "订单历史", exact: true }),

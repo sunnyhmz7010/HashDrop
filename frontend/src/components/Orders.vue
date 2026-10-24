@@ -484,8 +484,7 @@ async function copy(value: string) {
           v-if="
             selected.order.payment_status === 'paid' &&
             selected.order.delivery_status !== 'done' &&
-            selected.order.kind !== 'manual' &&
-            kindNames[selected.order.kind]
+            selected.order.kind !== 'manual'
           "
           :disabled="busy"
           :loading="activeAction === 'retry'"
@@ -556,9 +555,7 @@ async function copy(value: string) {
           </div>
           <div class="detail-item">
             <span>{{ t("product.kind") }}</span>
-            <strong>{{
-              kindNames[selected.order.kind] || t("kind.unsupported")
-            }}</strong>
+            <strong>{{ kindNames[selected.order.kind] }}</strong>
           </div>
         </div>
       </section>

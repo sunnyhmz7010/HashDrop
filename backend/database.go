@@ -13,6 +13,8 @@ import (
 	"time"
 )
 
+const databaseVersion = 6
+
 func openDatabase(path string) (*sql.DB, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return nil, err
@@ -42,7 +44,7 @@ func openDatabase(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, err
 	}
-	if version < 0 || version > 5 {
+	if version != 0 && version != databaseVersion {
 		db.Close()
 		return nil, fmt.Errorf("数据库结构版本 %d 不受支持", version)
 	}
@@ -52,150 +54,7 @@ func openDatabase(path string) (*sql.DB, error) {
 			return nil, err
 		}
 	}
-	if version == 1 {
-		if err = migrateDatabaseV2(db); err != nil {
-			db.Close()
-			return nil, err
-		}
-		version = 2
-	}
-	if version == 2 {
-		// 升级前保留可独立恢复的快照，迁移失败时原事务会回滚。
-		if err = backupDatabase(context.Background(), db, path+".pre-v3-"+newID()+".db"); err == nil {
-			err = migrateDatabaseV3(db)
-		}
-		if err != nil {
-			db.Close()
-			return nil, fmt.Errorf("升级交付结构失败: %w", err)
-		}
-		version = 3
-	}
-	if version == 3 {
-		if err = migrateDatabaseV4(db); err != nil {
-			db.Close()
-			return nil, fmt.Errorf("升级重复赞赏结构失败: %w", err)
-		}
-		version = 4
-	}
-	if version == 4 {
-		if err = migrateDatabaseV5(db); err != nil {
-			db.Close()
-			return nil, fmt.Errorf("升级赞赏删除结构失败: %w", err)
-		}
-	}
 	return db, nil
-}
-
-func migrateDatabaseV5(db *sql.DB) error {
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if _, err = tx.Exec(`ALTER TABLE donations ADD COLUMN deleted_at INTEGER;
-PRAGMA user_version = 5;`); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
-// 只放宽昵称索引，保留逐笔请求、旧凭证和付款记录。
-func migrateDatabaseV4(db *sql.DB) error {
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if _, err = tx.Exec(`
-DROP INDEX donations_nickname;
-CREATE INDEX donations_nickname ON donations(nickname,created_at DESC,id DESC) WHERE nickname <> '';
-PRAGMA user_version = 4;`); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
-// 按 SQLite 的建新表、复制、替换顺序修改上架约束，保留所有历史外键。
-func migrateDatabaseV3(db *sql.DB) (err error) {
-	ctx := context.Background()
-	conn, err := db.Conn(ctx)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-	if _, err = conn.ExecContext(ctx, "PRAGMA foreign_keys=OFF"); err != nil {
-		return err
-	}
-	defer func() {
-		if _, enableErr := conn.ExecContext(ctx, "PRAGMA foreign_keys=ON"); enableErr != nil {
-			err = fmt.Errorf("恢复外键约束失败: %w (迁移结果: %v)", enableErr, err)
-		}
-	}()
-	tx, err := conn.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if _, err = tx.ExecContext(ctx, `
-CREATE TABLE products_v3 (
- id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
- details TEXT NOT NULL DEFAULT '', price INTEGER NOT NULL CHECK(price > 0), currency TEXT NOT NULL,
- inventory_id TEXT REFERENCES inventories(id),
- active INTEGER NOT NULL DEFAULT 0 CHECK(active IN (0,1)),
- hidden INTEGER NOT NULL DEFAULT 0 CHECK(hidden IN (0,1)),
- delivery_mode TEXT NOT NULL DEFAULT 'automatic' CHECK(delivery_mode IN ('automatic','manual')),
- delivery_note TEXT NOT NULL DEFAULT '', buyer_note_label TEXT NOT NULL DEFAULT '',
- buyer_note_required INTEGER NOT NULL DEFAULT 0 CHECK(buyer_note_required IN (0,1)),
- min_quantity INTEGER NOT NULL DEFAULT 1 CHECK(min_quantity BETWEEN 1 AND 100),
- max_quantity INTEGER NOT NULL DEFAULT 100 CHECK(max_quantity BETWEEN min_quantity AND 100),
- created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, deleted_at INTEGER,
- CHECK(active=0 OR delivery_mode='manual' OR inventory_id IS NOT NULL)
-);
-INSERT INTO products_v3(id,name,description,details,price,currency,inventory_id,active,hidden,created_at,updated_at,deleted_at)
- SELECT id,name,description,details,price,currency,inventory_id,active,hidden,created_at,updated_at,deleted_at FROM products;
-DROP TABLE products;
-ALTER TABLE products_v3 RENAME TO products;
-CREATE INDEX products_inventory ON products(inventory_id);
-ALTER TABLE orders ADD COLUMN delivery_note TEXT NOT NULL DEFAULT '';
-ALTER TABLE orders ADD COLUMN buyer_note TEXT NOT NULL DEFAULT '';
-CREATE INDEX orders_delivery ON orders(delivery_status,created_at DESC) WHERE deleted_at IS NULL AND payment_status='paid';
-PRAGMA user_version=3;`); err != nil {
-		return err
-	}
-	rows, err := tx.QueryContext(ctx, "PRAGMA foreign_key_check")
-	if err != nil {
-		return err
-	}
-	broken := rows.Next()
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return err
-	}
-	if broken {
-		return fmt.Errorf("交付结构迁移外键校验失败")
-	}
-	return tx.Commit()
-}
-
-// 旧赞赏保持原凭证和隐私；新增字段默认不加入公开名单。
-func migrateDatabaseV2(db *sql.DB) error {
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if _, err = tx.Exec(`
-ALTER TABLE donations ADD COLUMN nickname TEXT NOT NULL DEFAULT '';
-ALTER TABLE donations ADD COLUMN show_public INTEGER NOT NULL DEFAULT 0 CHECK(show_public IN (0,1));
-ALTER TABLE donations ADD COLUMN request_id TEXT NOT NULL DEFAULT '';
-CREATE UNIQUE INDEX donations_nickname ON donations(nickname) WHERE nickname <> '';
-CREATE UNIQUE INDEX donations_request ON donations(request_id) WHERE request_id <> '';
-CREATE INDEX donations_public ON donations(payment_status,show_public,paid_at DESC,id DESC);
-PRAGMA user_version = 2;`); err != nil {
-		return err
-	}
-	return tx.Commit()
 }
 
 func initializeDatabase(db *sql.DB) error {

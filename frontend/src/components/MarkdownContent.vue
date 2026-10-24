@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, useId } from "vue";
 import createDOMPurify from "dompurify";
-import MarkdownIt, { type Delimiter, type RendererRule } from "markdown-it";
+import MarkdownIt, { type RendererRule } from "markdown-it";
 import container from "markdown-it-container";
 import { t } from "../i18n";
 
@@ -67,53 +67,6 @@ parser.core.ruler.after("inline", "task_list_checkbox", (state) => {
     checkbox.content = `<input type="checkbox" disabled${token.meta.taskChecked ? " checked" : ""}> `;
     token.children.unshift(checkbox);
   }
-});
-// 兼容旧内容的单波浪号删除线。独立分隔符组避免与原生 ~~ 删除线混配。
-const singleStrikeMarker = 0x7f;
-parser.inline.ruler.before(
-  "strikethrough",
-  "single_strike",
-  (state, silent) => {
-    if (silent || state.src[state.pos] !== "~") return false;
-    const scanned = state.scanDelims(state.pos, true);
-    if (scanned.length !== 1) return false;
-    state.push("text", "", 0).content = "~";
-    state.delimiters.push({
-      marker: singleStrikeMarker,
-      length: 0,
-      token: state.tokens.length - 1,
-      end: -1,
-      open: scanned.can_open,
-      close: scanned.can_close,
-    });
-    state.pos++;
-    return true;
-  },
-);
-parser.inline.ruler2.after("strikethrough", "single_strike", (state) => {
-  const apply = (delimiters: Delimiter[]) => {
-    for (const delimiter of delimiters) {
-      if (delimiter.marker !== singleStrikeMarker || delimiter.end === -1)
-        continue;
-      const open = state.tokens[delimiter.token];
-      const close = state.tokens[delimiters[delimiter.end].token];
-      Object.assign(open, {
-        type: "s_open",
-        tag: "s",
-        nesting: 1,
-        content: "",
-      });
-      Object.assign(close, {
-        type: "s_close",
-        tag: "s",
-        nesting: -1,
-        content: "",
-      });
-    }
-  };
-  apply(state.delimiters);
-  for (const meta of state.tokens_meta)
-    if (meta?.delimiters) apply(meta.delimiters);
 });
 const renderImage = parser.renderer.rules.image!;
 parser.renderer.rules.image = (tokens, index, options, env, renderer) => {

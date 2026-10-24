@@ -3,7 +3,6 @@ import type { Donation } from "./api";
 
 interface SavedDonation {
   donation: Donation;
-  token: string;
 }
 const prefix = "hashdrop:donation-history:";
 export const donationStorageError = ref(false);
@@ -20,13 +19,11 @@ function read(): SavedDonation[] {
           record &&
           /^don_[A-Za-z0-9_-]{22,64}$/.test(record.donation?.id) &&
           key === prefix + record.donation.id &&
-          typeof record.token === "string" &&
-          (typeof record.donation.nickname === "string" &&
-          record.donation.nickname
-            ? record.token === record.donation.nickname &&
-              record.token.trim() === record.token &&
-              Array.from(record.token).length <= 128
-            : /^[A-Za-z0-9_-]{43}$/.test(record.token)) &&
+          typeof record.donation.nickname === "string" &&
+          record.donation.nickname.length > 0 &&
+          record.donation.nickname.trim() === record.donation.nickname &&
+          Array.from(record.donation.nickname).length <= 128 &&
+          typeof record.donation.show_public === "boolean" &&
           typeof record.donation.title === "string" &&
           typeof record.donation.currency === "string" &&
           typeof record.donation.payment_status === "string" &&
@@ -34,14 +31,7 @@ function read(): SavedDonation[] {
           record.donation.amount > 0 &&
           Number.isSafeInteger(record.donation.created_at)
         )
-          records.push({
-            ...record,
-            donation: {
-              ...record.donation,
-              nickname: record.donation.nickname ?? "",
-              show_public: record.donation.show_public === true,
-            },
-          });
+          records.push({ donation: { ...record.donation } });
         else donationStorageError.value = true;
       } catch {
         donationStorageError.value = true;
@@ -57,14 +47,14 @@ function read(): SavedDonation[] {
   );
 }
 export const donationHistory = ref<SavedDonation[]>(read());
-export function donationToken(id: string): string {
+export function donationNickname(id: string): string {
   return (
-    donationHistory.value.find((record) => record.donation.id === id)?.token ??
-    ""
+    donationHistory.value.find((record) => record.donation.id === id)?.donation
+      .nickname ?? ""
   );
 }
-export function rememberDonation(donation: Donation, token: string): boolean {
-  const record = { donation: { ...donation }, token };
+export function rememberDonation(donation: Donation): boolean {
+  const record = { donation: { ...donation } };
   donationHistory.value = [
     record,
     ...donationHistory.value.filter((item) => item.donation.id !== donation.id),
@@ -75,7 +65,10 @@ export function rememberDonation(donation: Donation, token: string): boolean {
   );
   let saved = false;
   try {
-    sessionStorage.setItem(`hashdrop:donation:${donation.id}`, token);
+    sessionStorage.setItem(
+      `hashdrop:donation:${donation.id}`,
+      donation.nickname,
+    );
     saved = true;
   } catch {
     console.warn("无法在标签页中保存捐赠凭证");

@@ -42,16 +42,15 @@ type Donation struct {
 	PaidAt            int64  `json:"paid_at"`
 	CreatedAt         int64  `json:"created_at"`
 	LastError         string `json:"last_error"`
-	TokenHash         string `json:"-"`
 	GatewayURL        string `json:"-"`
 	GatewayMerchantID string `json:"-"`
 }
 
-const donationSelect = `SELECT id,title,amount,currency,COALESCE(gateway_id,''),checkout_url,payment_status,expires_at,COALESCE(paid_at,0),created_at,last_error,token_hash,gateway_url,gateway_merchant_id,nickname,show_public,request_id FROM donations`
+const donationSelect = `SELECT id,title,amount,currency,COALESCE(gateway_id,''),checkout_url,payment_status,expires_at,COALESCE(paid_at,0),created_at,last_error,gateway_url,gateway_merchant_id,nickname,show_public,request_id FROM donations`
 
 func scanDonation(row scanner) (Donation, error) {
 	var d Donation
-	err := row.Scan(&d.ID, &d.Title, &d.Amount, &d.Currency, &d.GatewayID, &d.CheckoutURL, &d.PaymentStatus, &d.ExpiresAt, &d.PaidAt, &d.CreatedAt, &d.LastError, &d.TokenHash, &d.GatewayURL, &d.GatewayMerchantID, &d.Nickname, &d.ShowPublic, &d.RequestID)
+	err := row.Scan(&d.ID, &d.Title, &d.Amount, &d.Currency, &d.GatewayID, &d.CheckoutURL, &d.PaymentStatus, &d.ExpiresAt, &d.PaidAt, &d.CreatedAt, &d.LastError, &d.GatewayURL, &d.GatewayMerchantID, &d.Nickname, &d.ShowPublic, &d.RequestID)
 	return d, err
 }
 
@@ -68,15 +67,8 @@ func readDonationSettings(row scanner) (DonationSettings, error) {
 	if err := json.Unmarshal([]byte(document), &settings); err != nil {
 		return settings, err
 	}
-	// v1 设置只在读取时归一化，保留原币种、金额与范围，不改写历史订单快照。
 	if len(settings.Currencies) == 0 {
-		var legacy DonationCurrencySettings
-		if err := json.Unmarshal([]byte(document), &legacy); err != nil {
-			return settings, err
-		}
-		if legacy.Currency != "" {
-			settings.Currencies = []DonationCurrencySettings{legacy}
-		}
+		return settings, errors.New("赞赏设置缺少币种配置")
 	}
 	return settings, nil
 }
@@ -194,20 +186,16 @@ func (a *App) createDonation(w http.ResponseWriter, r *http.Request) error {
 	if !a.limits.allow("donation-create:"+clientIP(r), 10, time.Minute) {
 		return &apiError{429, "下单过于频繁，请稍后再试"}
 	}
-	var used, legacyCredential bool
-	if err := a.db.QueryRowContext(r.Context(), "SELECT EXISTS(SELECT 1 FROM donations WHERE nickname=?),EXISTS(SELECT 1 FROM donations WHERE nickname='' AND token_hash=?)", input.Nickname, tokenHash(input.Nickname)).Scan(&used, &legacyCredential); err != nil {
+	var used bool
+	if err := a.db.QueryRowContext(r.Context(), "SELECT EXISTS(SELECT 1 FROM donations WHERE nickname=?)", input.Nickname).Scan(&used); err != nil {
 		return err
 	}
-	if legacyCredential || (used && !input.ConfirmRepeat) {
+	if used && !input.ConfirmRepeat {
 		suggestions, err := a.suggestDonationNicknames(r.Context(), input.Nickname)
 		if err != nil {
 			return err
 		}
-		if legacyCredential {
-			reply(w, 409, map[string]any{"error": "赞赏昵称已被使用，请更换或选择推荐昵称", "code": "donation_nickname_used", "suggestions": suggestions})
-		} else {
-			reply(w, 409, map[string]any{"error": "昵称已有赞赏记录，请确认是否为再次赞赏", "code": "donation_repeat_confirmation_required", "suggestions": suggestions})
-		}
+		reply(w, 409, map[string]any{"error": "昵称已有赞赏记录，请确认是否为再次赞赏", "code": "donation_repeat_confirmation_required", "suggestions": suggestions})
 		return nil
 	}
 	c := a.settings()
@@ -239,8 +227,8 @@ func (a *App) createDonation(w http.ResponseWriter, r *http.Request) error {
 	if input.Amount < group.MinAmount || input.Amount > group.MaxAmount {
 		return bad("赞赏金额不在允许范围内")
 	}
-	d := Donation{ID: "don_" + newID(), Title: s.Title, Nickname: input.Nickname, ShowPublic: input.ShowPublic, RequestID: input.RequestID, Amount: input.Amount, Currency: input.Currency, TokenHash: tokenHash(randomToken()), GatewayURL: strings.TrimRight(c.HashPay.BaseURL, "/"), GatewayMerchantID: c.HashPay.MerchantID, PaymentStatus: "creating", CreatedAt: unixNow()}
-	if _, err = tx.ExecContext(r.Context(), `INSERT INTO donations(id,title,nickname,show_public,request_id,amount,currency,token_hash,gateway_url,gateway_merchant_id,payment_status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`, d.ID, d.Title, d.Nickname, d.ShowPublic, d.RequestID, d.Amount, d.Currency, d.TokenHash, d.GatewayURL, d.GatewayMerchantID, d.PaymentStatus, d.CreatedAt, d.CreatedAt); err != nil {
+	d := Donation{ID: "don_" + newID(), Title: s.Title, Nickname: input.Nickname, ShowPublic: input.ShowPublic, RequestID: input.RequestID, Amount: input.Amount, Currency: input.Currency, GatewayURL: strings.TrimRight(c.HashPay.BaseURL, "/"), GatewayMerchantID: c.HashPay.MerchantID, PaymentStatus: "creating", CreatedAt: unixNow()}
+	if _, err = tx.ExecContext(r.Context(), `INSERT INTO donations(id,title,nickname,show_public,request_id,amount,currency,gateway_url,gateway_merchant_id,payment_status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, d.ID, d.Title, d.Nickname, d.ShowPublic, d.RequestID, d.Amount, d.Currency, d.GatewayURL, d.GatewayMerchantID, d.PaymentStatus, d.CreatedAt, d.CreatedAt); err != nil {
 		return err
 	}
 	if err = tx.Commit(); err != nil {
@@ -261,11 +249,7 @@ func (a *App) donationDetail(w http.ResponseWriter, r *http.Request) error {
 		return &apiError{401, "请输入有效的查询凭证"}
 	}
 	d, err := a.loadDonation(r.Context(), r.PathValue("id"))
-	credentialHash := d.TokenHash
-	if d.Nickname != "" {
-		credentialHash = tokenHash(d.Nickname)
-	}
-	if err == sql.ErrNoRows || (err == nil && !constantEqual(credentialHash, tokenHash(token))) {
+	if err == sql.ErrNoRows || (err == nil && !constantEqual(tokenHash(d.Nickname), tokenHash(token))) {
 		return &apiError{404, "赞赏记录或凭证无效"}
 	}
 	if err != nil {
@@ -292,7 +276,7 @@ func (a *App) suggestDonationNicknames(ctx context.Context, nickname string) ([]
 	for tries := 0; len(suggestions) < 3 && tries < 12; tries++ {
 		candidate := string(prefix) + "-" + randomToken()[:8]
 		var used bool
-		if err := a.db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM donations WHERE nickname=? OR token_hash=?)", candidate, tokenHash(candidate)).Scan(&used); err != nil {
+		if err := a.db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM donations WHERE nickname=?)", candidate).Scan(&used); err != nil {
 			return nil, err
 		}
 		if !used && !seen[candidate] {
@@ -328,54 +312,45 @@ func (a *App) lookupDonation(w http.ResponseWriter, r *http.Request) error {
 	if input.Page < 0 || input.Page > 100000 {
 		return bad("页码超限")
 	}
-	if input.Page > 0 {
-		rows, err := a.db.QueryContext(r.Context(), donationSelect+" WHERE nickname=? AND nickname<>'' ORDER BY created_at DESC,id DESC LIMIT 21 OFFSET ?", input.Nickname, (input.Page-1)*20)
-		if err != nil {
-			return err
-		}
-		items := []map[string]any{}
-		for rows.Next() {
-			d, err := scanDonation(rows)
-			if err != nil {
-				rows.Close()
-				return err
-			}
-			items = append(items, donationResponse(d))
-		}
-		err = rows.Err()
-		rows.Close()
-		if err != nil {
-			return err
-		}
-		if len(items) == 0 && input.Page == 1 {
-			return &apiError{404, "赞赏昵称不存在"}
-		}
-		more := len(items) > 20
-		if more {
-			items = items[:20]
-		}
-		matched := ""
-		if input.RequestID != "" {
-			var exists bool
-			if err := a.db.QueryRowContext(r.Context(), "SELECT EXISTS(SELECT 1 FROM donations WHERE nickname=? AND request_id=?)", input.Nickname, input.RequestID).Scan(&exists); err != nil {
-				return err
-			}
-			if exists {
-				matched = input.RequestID
-			}
-		}
-		reply(w, 200, map[string]any{"items": items, "page": input.Page, "has_more": more, "matched_request_id": matched})
-		return nil
+	if input.Page == 0 {
+		input.Page = 1
 	}
-	// 保留原单笔接口；未指定分页时返回该昵称最新的一笔。
-	d, err := scanDonation(a.db.QueryRowContext(r.Context(), donationSelect+" WHERE nickname=? AND nickname<>'' ORDER BY created_at DESC,id DESC LIMIT 1", input.Nickname))
-	if err == sql.ErrNoRows {
-		return &apiError{404, "赞赏昵称不存在"}
-	}
+	rows, err := a.db.QueryContext(r.Context(), donationSelect+" WHERE nickname=? ORDER BY created_at DESC,id DESC LIMIT 21 OFFSET ?", input.Nickname, (input.Page-1)*20)
 	if err != nil {
 		return err
 	}
-	reply(w, 200, donationResponse(d))
+	items := []map[string]any{}
+	for rows.Next() {
+		d, err := scanDonation(rows)
+		if err != nil {
+			rows.Close()
+			return err
+		}
+		items = append(items, donationResponse(d))
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	if len(items) == 0 && input.Page == 1 {
+		return &apiError{404, "赞赏昵称不存在"}
+	}
+	more := len(items) > 20
+	if more {
+		items = items[:20]
+	}
+	matched := ""
+	if input.RequestID != "" {
+		var exists bool
+		if err := a.db.QueryRowContext(r.Context(), "SELECT EXISTS(SELECT 1 FROM donations WHERE nickname=? AND request_id=?)", input.Nickname, input.RequestID).Scan(&exists); err != nil {
+			return err
+		}
+		if exists {
+			matched = input.RequestID
+		}
+	}
+	reply(w, 200, map[string]any{"items": items, "page": input.Page, "has_more": more, "matched_request_id": matched})
 	return nil
 }
 
@@ -387,7 +362,7 @@ func (a *App) publicDonations(w http.ResponseWriter, r *http.Request) error {
 	if page > 100000 {
 		return bad("页码超限")
 	}
-	rows, err := a.db.QueryContext(r.Context(), "SELECT nickname,amount,currency,paid_at FROM donations WHERE nickname<>'' AND show_public=1 AND payment_status='paid' ORDER BY paid_at DESC,id DESC LIMIT 21 OFFSET ?", (page-1)*20)
+	rows, err := a.db.QueryContext(r.Context(), "SELECT nickname,amount,currency,paid_at FROM donations WHERE show_public=1 AND payment_status='paid' ORDER BY paid_at DESC,id DESC LIMIT 21 OFFSET ?", (page-1)*20)
 	if err != nil {
 		return err
 	}
@@ -447,7 +422,7 @@ func (a *App) syncDonationLocked(ctx context.Context, id string) error {
 		return err
 	}
 	if d.GatewayID == "" {
-		remote, checkout, err := client.createPayment(ctx, paymentRequest{d.ID, d.Title, d.Currency, d.Amount}, strings.TrimRight(c.PublicURL, "/")+"/donate/orders/"+d.ID)
+		remote, checkout, err := client.createPayment(ctx, paymentRequest{d.ID, d.Title, d.Currency, d.Amount}, strings.TrimRight(c.PublicURL, "/")+"/center/donations/"+d.ID)
 		if err != nil {
 			return err
 		}
@@ -551,9 +526,9 @@ func (a *App) adminDonations(w http.ResponseWriter, r *http.Request) error {
 	defer tx.Rollback()
 	grouped := r.URL.Query().Get("group_by") == "nickname"
 	query := donationSelect + where + " ORDER BY created_at DESC,id DESC LIMIT 21 OFFSET ?"
-	const groupKey = "CASE WHEN donations.nickname='' THEN 'id:'||donations.id ELSE 'nickname:'||donations.nickname END"
+	const groupKey = "donations.nickname"
 	if grouped {
-		// 先按昵称分页，再取完整历史，避免同一个人被拆到不同页；匿名旧记录单独保留。
+		// 先按昵称分页，再取完整历史，避免同一个人被拆到不同页。
 		query = `WITH supporter_page AS (
 SELECT ` + groupKey + ` AS supporter,MAX(created_at) AS latest FROM donations` + where + `
 GROUP BY supporter ORDER BY latest DESC,supporter DESC LIMIT 21 OFFSET ?
@@ -603,11 +578,7 @@ ORDER BY (SELECT latest FROM supporter_page WHERE supporter=` + groupKey + `) DE
 	if grouped {
 		seen := map[string]bool{}
 		for i, item := range items {
-			key := "nickname:" + item.Nickname
-			if item.Nickname == "" {
-				key = "id:" + item.ID
-			}
-			seen[key] = true
+			seen[item.Nickname] = true
 			if len(seen) > 20 {
 				more = true
 				items = items[:i]

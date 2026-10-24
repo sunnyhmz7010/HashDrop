@@ -15,6 +15,10 @@ import (
 	"unicode/utf8"
 )
 
+func claimAuthorization(key string) string {
+	return "ClaimKey " + base64.RawURLEncoding.EncodeToString([]byte(key))
+}
+
 func claimRequest(t *testing.T, a *App, path string, value any) *httptest.ResponseRecorder {
 	t.Helper()
 	body, err := json.Marshal(value)
@@ -68,7 +72,7 @@ func TestClaimKeyLookupAndPayment(t *testing.T) {
 }
 
 func TestOrderDetailAcceptsClaimKeys(t *testing.T) {
-	for _, key := range []string{strings.Repeat("a1", 12), strings.Repeat("b2", 13), strings.Repeat("c", 43), "a", strings.Repeat("钥", 128), " 订单密钥🔑 ", "legacy%20key%25"} {
+	for _, key := range []string{strings.Repeat("a1", 12), strings.Repeat("b2", 13), strings.Repeat("c", 43), "a", strings.Repeat("钥", 128), " 订单密钥🔑 ", "literal%20key%25"} {
 		t.Run(key, func(t *testing.T) {
 			a, g := newTestApp(t)
 			product := insertProduct(t, a, "card", 1)
@@ -83,29 +87,23 @@ func TestOrderDetailAcceptsClaimKeys(t *testing.T) {
 				a.routes().ServeHTTP(w, r)
 				return w
 			}
-			if w := get("Bearer " + key); w.Code != 200 || strings.Contains(w.Body.String(), "卡密-0") {
-				t.Fatalf("付款前查询失败或泄漏交付: %d %s", w.Code, w.Body)
-			}
-			encoded := "ClaimKey " + base64.RawURLEncoding.EncodeToString([]byte(key))
+			encoded := claimAuthorization(key)
 			if w := get(encoded); w.Code != 200 || strings.Contains(w.Body.String(), "卡密-0") {
 				t.Fatalf("编码凭证查询失败或泄漏交付: %d %s", w.Code, w.Body)
 			}
 			syncPaid(t, a, g, o)
-			if w := get("Bearer " + key); w.Code != 200 || !strings.Contains(w.Body.String(), "卡密-0") {
-				t.Fatalf("领取链接未返回交付: %d %s", w.Code, w.Body)
-			}
 			if w := get(encoded); w.Code != 200 || !strings.Contains(w.Body.String(), "卡密-0") {
 				t.Fatalf("编码凭证未返回交付: %d %s", w.Code, w.Body)
 			}
-			for _, auth := range []string{"Bearer wrong", "Bearer " + strings.ToUpper(key)} {
-				if auth == "Bearer "+key {
+			for _, auth := range []string{claimAuthorization("wrong"), claimAuthorization(strings.ToUpper(key))} {
+				if auth == encoded {
 					continue
 				}
 				if w := get(auth); w.Code != 404 || strings.Contains(w.Body.String(), "卡密-0") {
 					t.Fatalf("错误密钥未被拒绝: %d", w.Code)
 				}
 			}
-			for _, auth := range []string{"", key, "Basic " + key, "Bearer ", "Bearer   ", "Bearer " + strings.Repeat("a", 129)} {
+			for _, auth := range []string{"", key, "Basic " + key, "Bearer " + key, "Bearer ", "Bearer   ", claimAuthorization(strings.Repeat("a", 129))} {
 				if w := get(auth); w.Code != 401 {
 					t.Fatalf("无效凭证未被拒绝: %d", w.Code)
 				}
@@ -254,7 +252,7 @@ func TestClaimKeyValidationAndFailureLimit(t *testing.T) {
 		t.Fatal("失败限流未覆盖查询接口")
 	}
 	r := httptest.NewRequest("GET", "/api/orders/"+id, nil)
-	r.Header.Set("Authorization", "Bearer "+randomToken())
+	r.Header.Set("Authorization", claimAuthorization(randomToken()))
 	w := httptest.NewRecorder()
 	a.routes().ServeHTTP(w, r)
 	if w.Code != 429 {

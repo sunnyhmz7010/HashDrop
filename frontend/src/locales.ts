@@ -55,9 +55,9 @@ const zh = {
   "center.donations_empty": "此浏览器还没有捐赠记录",
   "center.clear_donations": "清除本地捐赠记录",
   "center.clear_donations_warning":
-    "将清除此浏览器的捐赠记录，不影响商品订单或服务器记录。新记录可凭昵称恢复，旧版记录请先确认仍保留原有凭证。",
+    "将清除此浏览器的捐赠记录，不影响商品订单或服务器记录。记录可凭赞赏昵称恢复。",
   "center.donation_storage_error":
-    "浏览器无法可靠保存或读取捐赠记录，请记住赞赏昵称；旧版记录请保留原有凭证。",
+    "浏览器无法可靠保存或读取捐赠记录，请记住赞赏昵称。",
   "center.donation_refresh_error":
     "有 {count} 项赞赏记录未能刷新，已保留本地记录并继续刷新其余项目。{error}",
   "common.query": "查询",
@@ -140,12 +140,9 @@ const zh = {
   "donation.waiting_help":
     "页面会自动查询付款状态，过期记录仍会补查可能迟到的付款。",
   "donation.paid_at": "到账时间",
-  "donation.missing_token":
-    "此浏览器尚未保存这笔记录，请使用赞赏昵称查询。旧版记录仍需原有凭证。",
+  "donation.missing_nickname": "此浏览器尚未保存这笔记录，请使用赞赏昵称查询。",
   "donation.storage_help":
     "浏览器无法保存这笔记录，请记住上方昵称，之后可凭昵称查询付款结果。",
-  "donation.legacy_storage_help":
-    "浏览器无法保存这笔旧版记录，请保留原有查询凭证。",
   "donation.pay": "前往 HashPay 付款",
   "donation.back": "返回赞赏页",
   "donation.open_page": "打开赞赏页",
@@ -163,7 +160,6 @@ const zh = {
   "donation.gateway_help":
     "复用现有 HashPay 配置。停用页面后，历史记录和付款补查继续保留。",
   "donation.records": "赞赏记录",
-  "donation.legacy_supporter": "旧版匿名赞赏",
   "donation.search": "搜索昵称",
   "donation.no_matches": "没有匹配昵称的赞赏记录",
   "donation.total_count": "累计赞赏",
@@ -189,7 +185,6 @@ const zh = {
   "errors.donation_nickname": "赞赏昵称须为 1–128 个字符，不能全部为空白",
   "errors.donation_request_id": "赞赏请求标识无效，请重新打开赞赏页面",
   "errors.donation_request_changed": "赞赏请求内容已变化，请使用新的请求标识",
-  "errors.donation_nickname_used": "赞赏昵称已被使用，请更换或选择推荐昵称",
   "errors.donation_repeat_confirmation":
     "昵称已有赞赏记录，请确认是否为再次赞赏",
   "errors.donation_nickname_missing": "赞赏昵称不存在",
@@ -205,7 +200,6 @@ const zh = {
   "kind.card": "卡密",
   "kind.account": "账号",
   "kind.static": "固定文本",
-  "kind.unsupported": "已停止支持",
   "payment.creating": "正在创建支付单",
   "payment.pending": "等待付款",
   "payment.paid": "已付款",
@@ -226,7 +220,7 @@ const zh = {
   "orders.updated": "订单状态已更新",
   "orders.delete_title": "删除订单？",
   "orders.delete_warning":
-    "该订单将从后台列表移除。HashPay 订单、库存预留和购买者领取链接继续保留，付款状态仍由网关决定。",
+    "该订单将从后台列表移除。HashPay 订单、库存预留和购买者领取密钥继续保留，付款状态仍由网关决定。",
   "orders.delete": "删除订单",
   "common.cancel": "取消",
   "orders.deleted": "订单已删除",
@@ -411,7 +405,6 @@ const zh = {
     "输入下单时保存的密钥，继续付款或领取商品。请勿将密钥分享给他人。",
   "claim.missing": "当前浏览器没有该订单的凭证，请输入已保存的领取密钥。",
   "claim.view": "查看订单",
-  "claim.lost_help": "密钥丢失后无法自动找回。旧领取链接仍可直接打开。",
   "claim.receipt": "订单凭证",
   "claim.paid": "付款已确认",
   "claim.gateway_confirmed": "HashPay 已确认付款。",
@@ -419,8 +412,6 @@ const zh = {
   "claim.expired_help":
     "支付单已过期。若已经付款，请刷新状态等待 HashPay 核验。",
   "claim.closed_help": "该支付单已终止，请返回商城重新下单。",
-  "claim.link": "领取链接",
-  "claim.copy_link": "复制链接",
   "claim.storage_help":
     "浏览器无法保存密钥，请先复制或确认已手动保存，再继续付款。付款后在订单查询页面输入密钥领取。",
   "claim.saved_manually": "我已手动保存领取密钥",
@@ -657,7 +648,6 @@ const zh = {
   "errors.network": "网络请求失败，请重试",
   "errors.response_json": "服务响应格式无效，请重试",
   "errors.invalid_json": "JSON 格式无效，请检查配置",
-  "errors.product_retired": "商品交付类型已停止支持",
   "errors.product_details_limit": "商品详情不能超过 65536 字符",
   "errors.payment_delivery": "付款查询或交付暂时失败",
   "errors.gateway_mismatch": "HashPay 金额/币种/商户或映射不一致",
@@ -728,9 +718,9 @@ const en: Record<MessageKey, string> = {
   "center.donations_empty": "No donations saved in this browser",
   "center.clear_donations": "Clear local donation history",
   "center.clear_donations_warning":
-    "This removes local donation history without affecting product orders or server records. New records can be recovered by nickname. Keep the original credentials for legacy records.",
+    "This removes local donation history without affecting product orders or server records. Records can be recovered by donation nickname.",
   "center.donation_storage_error":
-    "This browser cannot reliably save or read donation history. Remember donation nicknames and keep original credentials for legacy records.",
+    "This browser cannot reliably save or read donation history. Remember donation nicknames.",
   "center.donation_refresh_error":
     "Could not refresh {count} donation records. Saved records are retained and other records have been refreshed. {error}",
   "common.query": "Find",
@@ -820,12 +810,10 @@ const en: Record<MessageKey, string> = {
   "donation.waiting_help":
     "Payment status updates automatically. Expired payments are still checked for late arrivals.",
   "donation.paid_at": "Payment received",
-  "donation.missing_token":
-    "This record is not saved in this browser. Find it using the donation nickname. Legacy records still require their original credentials.",
+  "donation.missing_nickname":
+    "This record is not saved in this browser. Find it using the donation nickname.",
   "donation.storage_help":
     "Your browser cannot save this record. Remember the nickname above to find the payment result later.",
-  "donation.legacy_storage_help":
-    "Your browser cannot save this legacy record. Keep its original query credential.",
   "donation.pay": "Pay with HashPay",
   "donation.back": "Back to donations",
   "donation.open_page": "Open donation page",
@@ -843,7 +831,6 @@ const en: Record<MessageKey, string> = {
   "donation.gateway_help":
     "Uses the existing HashPay configuration. Disabling donations preserves historical records and payment checks.",
   "donation.records": "Donation records",
-  "donation.legacy_supporter": "Legacy anonymous donation",
   "donation.search": "Search nicknames",
   "donation.no_matches": "No donations match this nickname",
   "donation.total_count": "Total donations",
@@ -875,8 +862,6 @@ const en: Record<MessageKey, string> = {
     "Invalid donation request ID. Reopen the donation page.",
   "errors.donation_request_changed":
     "Donation request details changed. Use a new request ID.",
-  "errors.donation_nickname_used":
-    "This donation nickname is taken. Choose another or use a suggestion.",
   "errors.donation_repeat_confirmation":
     "This nickname has donation records. Please confirm this is a repeat donation.",
   "errors.donation_nickname_missing": "Donation nickname not found",
@@ -892,7 +877,6 @@ const en: Record<MessageKey, string> = {
   "kind.card": "License key",
   "kind.account": "Account",
   "kind.static": "Static text",
-  "kind.unsupported": "No longer supported",
   "payment.creating": "Creating payment order",
   "payment.pending": "Awaiting payment",
   "payment.paid": "Paid",
@@ -914,7 +898,7 @@ const en: Record<MessageKey, string> = {
   "orders.updated": "Order status updated",
   "orders.delete_title": "Delete this order?",
   "orders.delete_warning":
-    "This order will be hidden from the admin list. The HashPay order, reserved stock and buyer's claim link are retained. Payment status is still controlled by the gateway.",
+    "This order will be hidden from the admin list. The HashPay order, reserved stock and buyer's claim key are retained. Payment status is still controlled by the gateway.",
   "orders.delete": "Delete order",
   "common.cancel": "Cancel",
   "orders.deleted": "Order deleted",
@@ -1116,8 +1100,6 @@ const en: Record<MessageKey, string> = {
   "claim.missing":
     "This browser has no credential for this order. Enter your saved claim key.",
   "claim.view": "View order",
-  "claim.lost_help":
-    "Lost keys cannot be recovered automatically. Existing claim links still work.",
   "claim.receipt": "Order receipt",
   "claim.paid": "Payment confirmed",
   "claim.gateway_confirmed": "HashPay has confirmed the payment.",
@@ -1126,8 +1108,6 @@ const en: Record<MessageKey, string> = {
     "The payment order has expired. If you have paid, refresh the status and wait for HashPay verification.",
   "claim.closed_help":
     "This payment order has ended. Return to the store to place a new order.",
-  "claim.link": "Claim link",
-  "claim.copy_link": "Copy link",
   "claim.storage_help":
     "This browser cannot save your key. Copy it or confirm you have saved it before paying. Enter it on the order lookup page after payment.",
   "claim.saved_manually": "I have saved the claim key manually",
@@ -1392,7 +1372,6 @@ const en: Record<MessageKey, string> = {
   "errors.network": "Network request failed. Try again.",
   "errors.response_json": "Invalid server response. Try again.",
   "errors.invalid_json": "Invalid JSON. Check the configuration.",
-  "errors.product_retired": "This product delivery type is no longer supported",
   "errors.product_details_limit":
     "Product details must not exceed 65536 characters",
   "errors.payment_delivery":

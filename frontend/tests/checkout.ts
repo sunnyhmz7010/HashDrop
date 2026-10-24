@@ -45,6 +45,6 @@ export async function placeTestOrder(page: Page, customKey?: string) {
     key,
     order,
     orderID: order.id,
-    receipt: `${base}/center/orders/${order.id}#token=${encodeURIComponent(key)}`,
+    receipt: `${base}/center/orders/${order.id}`,
   };
 }

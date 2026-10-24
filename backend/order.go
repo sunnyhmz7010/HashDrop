@@ -33,7 +33,6 @@ type Order struct {
 	ReservationStatus string          `json:"reservation_status"`
 	ExpiresAt         int64           `json:"expires_at"`
 	CreatedAt         int64           `json:"created_at"`
-	Content           string          `json:"-"`
 	TokenHash         string          `json:"-"`
 	Attempts          int             `json:"attempts"`
 	LastError         string          `json:"last_error"`
@@ -42,12 +41,12 @@ type Order struct {
 	buyerNoteCipher   string
 }
 
-const orderSelect = `SELECT id,product_id,product_name,kind,unit_price,currency,quantity,total,COALESCE(gateway_id,''),gateway_url,gateway_merchant_id,checkout_url,payment_status,delivery_status,reservation_status,expires_at,created_at,content,token_hash,attempts,last_error,discounts,COALESCE(inventory_id,''),delivery_note,buyer_note FROM orders`
+const orderSelect = `SELECT id,product_id,product_name,kind,unit_price,currency,quantity,total,COALESCE(gateway_id,''),gateway_url,gateway_merchant_id,checkout_url,payment_status,delivery_status,reservation_status,expires_at,created_at,token_hash,attempts,last_error,discounts,COALESCE(inventory_id,''),delivery_note,buyer_note FROM orders`
 
 func scanOrder(row scanner) (Order, error) {
 	var o Order
 	var discounts string
-	err := row.Scan(&o.ID, &o.ProductID, &o.ProductName, &o.Kind, &o.UnitPrice, &o.Currency, &o.Quantity, &o.Total, &o.GatewayID, &o.GatewayURL, &o.GatewayMerchantID, &o.CheckoutURL, &o.PaymentStatus, &o.DeliveryStatus, &o.ReservationStatus, &o.ExpiresAt, &o.CreatedAt, &o.Content, &o.TokenHash, &o.Attempts, &o.LastError, &discounts, &o.InventoryID, &o.DeliveryNote, &o.buyerNoteCipher)
+	err := row.Scan(&o.ID, &o.ProductID, &o.ProductName, &o.Kind, &o.UnitPrice, &o.Currency, &o.Quantity, &o.Total, &o.GatewayID, &o.GatewayURL, &o.GatewayMerchantID, &o.CheckoutURL, &o.PaymentStatus, &o.DeliveryStatus, &o.ReservationStatus, &o.ExpiresAt, &o.CreatedAt, &o.TokenHash, &o.Attempts, &o.LastError, &discounts, &o.InventoryID, &o.DeliveryNote, &o.buyerNoteCipher)
 	if err == nil {
 		err = json.Unmarshal([]byte(discounts), &o.Discounts)
 	}
@@ -228,7 +227,7 @@ func (a *App) reservePricedOrder(ctx context.Context, input orderInput) (Order, 
 	if o.InventoryID != "" {
 		inventoryID = o.InventoryID
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO orders(id,product_id,product_name,kind,unit_price,currency,quantity,total,content,token_hash,payment_status,created_at,updated_at,discounts,inventory_id,delivery_note,buyer_note) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, o.ID, o.ProductID, o.ProductName, o.Kind, o.UnitPrice, o.Currency, o.Quantity, o.Total, o.Content, o.TokenHash, o.PaymentStatus, o.CreatedAt, o.CreatedAt, string(snapshot), inventoryID, o.DeliveryNote, o.buyerNoteCipher); err != nil {
+	if _, err = tx.ExecContext(ctx, `INSERT INTO orders(id,product_id,product_name,kind,unit_price,currency,quantity,total,token_hash,payment_status,created_at,updated_at,discounts,inventory_id,delivery_note,buyer_note) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, o.ID, o.ProductID, o.ProductName, o.Kind, o.UnitPrice, o.Currency, o.Quantity, o.Total, o.TokenHash, o.PaymentStatus, o.CreatedAt, o.CreatedAt, string(snapshot), inventoryID, o.DeliveryNote, o.buyerNoteCipher); err != nil {
 		return Order{}, "", err
 	}
 	// 与库存预留同一写事务占用优惠次数；只有可靠终止且未付款的订单才归还名额。

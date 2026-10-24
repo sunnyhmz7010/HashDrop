@@ -259,7 +259,7 @@ func TestVerifiedPaymentAndToken(t *testing.T) {
 	}{{token, 200}, {randomToken(), 404}, {"", 401}} {
 		req := httptest.NewRequest("GET", "/api/orders/"+o.ID, nil)
 		if tc.token != "" {
-			req.Header.Set("Authorization", "Bearer "+tc.token)
+			req.Header.Set("Authorization", claimAuthorization(tc.token))
 		}
 		w := httptest.NewRecorder()
 		a.routes().ServeHTTP(w, req)

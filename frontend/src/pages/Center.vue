@@ -173,10 +173,7 @@ async function logout() {
               class="space-bottom"
               >{{ t("center.storage_error") }}</n-alert
             >
-            <DonationOrder
-              v-if="section === 'donations' && route.params.id"
-              embedded
-            />
+            <DonationOrder v-if="section === 'donations' && route.params.id" />
             <GuestDonations v-else-if="section === 'donations'" />
             <Order v-else-if="section === 'orders' && route.params.id" />
             <GuestOrders v-else-if="section === 'history'" />

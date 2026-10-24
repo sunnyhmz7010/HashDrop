@@ -83,7 +83,6 @@ async function lookup() {
         />
       </div>
       <n-alert v-if="error" type="error">{{ errorText(error) }}</n-alert>
-      <small class="field-help">{{ t("claim.lost_help") }}</small>
     </form>
     <template #footer>
       <n-button :disabled="busy" @click="show = false">{{

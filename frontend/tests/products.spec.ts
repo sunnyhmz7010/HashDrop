@@ -17,10 +17,8 @@ async function verifyRichContent(content: Locator) {
     content.locator("strong").filter({ hasText: "详细说明" }),
   ).toContainText("详细说明");
   await expect(content.locator("table")).toHaveCount(1);
-  await expect(content.locator("s, del")).toHaveText([
-    "旧版本说明",
-    "单波浪号说明",
-  ]);
+  await expect(content.locator("s, del")).toHaveText(["旧版本说明"]);
+  await expect(content).toContainText("~单波浪号说明~");
   await expect(
     content.locator("script, iframe, object, svg, form, style"),
   ).toHaveCount(0);
@@ -98,7 +96,7 @@ test("Markdown 详情保存、图片视频展示与首页直接下单", async ({
     "~~旧版本说明~~",
     "~单波浪号说明~",
     "| 项目 | 内容 |\n| --- | --- |\n| 格式 | Markdown |",
-    ":::: warning 购买须知\n请先确认商品适合你的用途。\n\n::: tip 温馨提示\n**嵌套提示**：请保存订单领取链接。\n:::\n::::",
+    ":::: warning 购买须知\n请先确认商品适合你的用途。\n\n::: tip 温馨提示\n**嵌套提示**：请保存订单领取密钥。\n:::\n::::",
     "::: custom 补充信息\n自定义容器也支持普通 Markdown。\n:::",
     `![商品展示](${image})`,
     "### 演示视频",

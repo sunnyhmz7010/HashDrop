@@ -176,8 +176,8 @@ async function submit() {
       signal: controller.signal,
     });
     if (controller.signal.aborted) return;
-    rememberDonation(result.donation, result.donation.nickname);
-    receiptPath.value = `/donate/orders/${result.donation.id}`;
+    rememberDonation(result.donation);
+    receiptPath.value = `/center/donations/${result.donation.id}`;
     forgetDonationIntent();
     intent.value = undefined;
     await router.push(receiptPath.value);
@@ -195,8 +195,6 @@ async function submit() {
     if (cause instanceof APIError && [400, 404, 409].includes(cause.status)) {
       forgetDonationIntent();
       intent.value = undefined;
-      if (cause.code === "donation_nickname_used")
-        suggestions.value = cause.suggestions;
     }
     error.value = errorText(cause);
   } finally {

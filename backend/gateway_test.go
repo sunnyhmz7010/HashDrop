@@ -87,7 +87,7 @@ func TestDeleteOrderPreservesLatePaymentAndClaim(t *testing.T) {
 	}
 	a.runPending(context.Background())
 	claim := httptest.NewRequest("GET", "/api/orders/"+order.ID, nil)
-	claim.Header.Set("Authorization", "Bearer "+token)
+	claim.Header.Set("Authorization", claimAuthorization(token))
 	receipt := httptest.NewRecorder()
 	a.routes().ServeHTTP(receipt, claim)
 	if receipt.Code != 200 || !strings.Contains(receipt.Body.String(), "卡密-") {
@@ -149,7 +149,7 @@ func TestMissingGatewayOrderReleasesOnlyItsReservation(t *testing.T) {
 		t.Fatalf("删除后未安全终止订单: %+v %v", closed, err)
 	}
 	claim := httptest.NewRequest("GET", "/api/orders/"+order.ID, nil)
-	claim.Header.Set("Authorization", "Bearer "+token)
+	claim.Header.Set("Authorization", claimAuthorization(token))
 	response := httptest.NewRecorder()
 	a.routes().ServeHTTP(response, claim)
 	if response.Code != 200 || !strings.Contains(response.Body.String(), `"payment_status":"closed"`) {
@@ -379,7 +379,7 @@ func TestGatewaySettingsAllowCompletedAndTerminatedOrders(t *testing.T) {
 				t.Fatal("更换配置改变了历史订单状态或商户归属")
 			}
 			claim := httptest.NewRequest("GET", "/api/orders/"+order.ID, nil)
-			claim.Header.Set("Authorization", "Bearer "+token)
+			claim.Header.Set("Authorization", claimAuthorization(token))
 			receipt := httptest.NewRecorder()
 			a.routes().ServeHTTP(receipt, claim)
 			if receipt.Code != 200 || !strings.Contains(receipt.Body.String(), `"payment_status":"`+sample.status+`"`) {

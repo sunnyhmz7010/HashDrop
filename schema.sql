@@ -29,7 +29,7 @@ CREATE TABLE orders (
  product_name TEXT NOT NULL, inventory_id TEXT REFERENCES inventories(id), kind TEXT NOT NULL,
  unit_price INTEGER NOT NULL CHECK(unit_price > 0), currency TEXT NOT NULL,
  quantity INTEGER NOT NULL CHECK(quantity BETWEEN 1 AND 100), total INTEGER NOT NULL CHECK(total > 0),
- content TEXT NOT NULL DEFAULT '', discounts TEXT NOT NULL DEFAULT '[]',
+ discounts TEXT NOT NULL DEFAULT '[]',
  delivery_note TEXT NOT NULL DEFAULT '', buyer_note TEXT NOT NULL DEFAULT '',
  token_hash TEXT NOT NULL UNIQUE, gateway_id TEXT UNIQUE,
  gateway_url TEXT NOT NULL DEFAULT '', gateway_merchant_id TEXT NOT NULL DEFAULT '',
@@ -97,11 +97,10 @@ INSERT INTO donation_settings(id,document) VALUES(1,
  '{"enabled":false,"title":"赞赏支持","description":"","currencies":[{"currency":"CNY","amounts":[500,1000,2000],"min_amount":100,"max_amount":100000}]}');
 CREATE TABLE donations (
  id TEXT PRIMARY KEY, title TEXT NOT NULL,
- nickname TEXT NOT NULL DEFAULT '', show_public INTEGER NOT NULL DEFAULT 0 CHECK(show_public IN (0,1)),
+ nickname TEXT NOT NULL CHECK(length(nickname) BETWEEN 1 AND 128), show_public INTEGER NOT NULL DEFAULT 0 CHECK(show_public IN (0,1)),
  request_id TEXT NOT NULL DEFAULT '',
  amount INTEGER NOT NULL CHECK(amount > 0 AND amount <= 9000000000000), currency TEXT NOT NULL,
- token_hash TEXT NOT NULL UNIQUE, gateway_id TEXT UNIQUE,
- gateway_url TEXT NOT NULL, gateway_merchant_id TEXT NOT NULL,
+ gateway_id TEXT UNIQUE, gateway_url TEXT NOT NULL, gateway_merchant_id TEXT NOT NULL,
  checkout_url TEXT NOT NULL DEFAULT '',
  payment_status TEXT NOT NULL CHECK(payment_status IN ('creating','pending','paid','expired','invalid','review','closed')),
  expires_at INTEGER NOT NULL DEFAULT 0, paid_at INTEGER,
@@ -110,7 +109,7 @@ CREATE TABLE donations (
 );
 CREATE INDEX donations_schedule ON donations(payment_status,next_check);
 CREATE INDEX donations_created ON donations(created_at DESC,id DESC);
-CREATE INDEX donations_nickname ON donations(nickname,created_at DESC,id DESC) WHERE nickname <> '';
+CREATE INDEX donations_nickname ON donations(nickname,created_at DESC,id DESC);
 CREATE UNIQUE INDEX donations_request ON donations(request_id) WHERE request_id <> '';
 CREATE INDEX donations_public ON donations(payment_status,show_public,paid_at DESC,id DESC);
-PRAGMA user_version = 5;
+PRAGMA user_version = 6;

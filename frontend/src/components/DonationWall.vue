@@ -50,9 +50,7 @@ const supporters = computed(() => {
     }
   >();
   for (const donation of records.value.items) {
-    const key = donation.nickname
-      ? `nickname:${donation.nickname}`
-      : `legacy:${donation.id}`;
+    const key = donation.nickname;
     let supporter = groups.get(key);
     if (!supporter) {
       supporter = {
@@ -127,7 +125,7 @@ function remove(donation: Donation) {
   const confirmation = dialog.warning({
     title: t("donation.delete_title"),
     content: t("donation.delete_warning", {
-      nickname: donation.nickname || t("donation.legacy_supporter"),
+      nickname: donation.nickname,
       amount: money(donation.amount, donation.currency),
       time: formatTime(donation.created_at),
     }),
@@ -247,7 +245,7 @@ defineExpose({ refresh, loading, processing });
         }"
       >
         <h3 class="supporter-name">
-          {{ supporter.nickname || t("donation.legacy_supporter") }}
+          {{ supporter.nickname }}
         </h3>
         <details class="supporter-history">
           <summary>

@@ -12,7 +12,7 @@ func TestProductChineseTextLimits(t *testing.T) {
 	admin := adminSessionRequest(t, a)
 	name := strings.Repeat("商", 119) + "📦"
 	description := strings.Repeat("介", 4000)
-	input := map[string]any{"name": name, "description": description, "price": 100, "currency": "CNY", "active": false}
+	input := map[string]any{"name": name, "description": description, "price": 100, "currency": "CNY", "active": false, "delivery_plan": testDocument("固定交付")}
 	body, err := json.Marshal(input)
 	if err != nil {
 		t.Fatal(err)
@@ -47,17 +47,17 @@ func TestInventoryChineseTextLimits(t *testing.T) {
 	admin := adminSessionRequest(t, a)
 	name := strings.Repeat("库", 119) + "📦"
 	content := strings.Repeat("文", 65536)
-	input := map[string]string{"name": name, "kind": "static", "static_content": content}
+	input := map[string]string{"name": name}
 	body, err := json.Marshal(input)
 	if err != nil {
 		t.Fatal(err)
 	}
 	response := admin("POST", "/api/admin/inventories", string(body))
 	var pool Inventory
-	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &pool) != nil || pool.Name != name || !pool.HasContent {
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &pool) != nil || pool.Name != name {
 		t.Fatalf("字符上限内的中文库存池未保存: %d %s", response.Code, response.Body)
 	}
-	for _, field := range []string{"name", "static_content"} {
+	for _, field := range []string{"name"} {
 		t.Run(field, func(t *testing.T) {
 			original := input[field]
 			input[field] = original + "多"
@@ -71,12 +71,24 @@ func TestInventoryChineseTextLimits(t *testing.T) {
 			}
 		})
 	}
-	var storedName, cipher string
-	if err := a.db.QueryRow("SELECT name,content FROM inventories WHERE id=?", pool.ID).Scan(&storedName, &cipher); err != nil {
+	importDocuments(t, a, pool.ID, testDocument(content))
+	tooLong, err := json.Marshal(map[string]any{"items": []ContentDocument{testDocument(content + "多")}})
+	if err != nil {
 		t.Fatal(err)
 	}
-	plain, err := a.vault.decrypt(cipher, "inventory:"+pool.ID)
-	if err != nil || storedName != name || plain != content {
+	if response := admin("POST", "/api/admin/inventories/"+pool.ID+"/stock", string(tooLong)); response.Code != http.StatusBadRequest {
+		t.Fatal("超过 65536 字符的中文库存文本未被拒绝")
+	}
+	var storedName, stockID, cipher string
+	if err := a.db.QueryRow("SELECT i.name,s.id,s.content FROM inventories i JOIN stock_items s ON s.inventory_id=i.id WHERE i.id=?", pool.ID).Scan(&storedName, &stockID, &cipher); err != nil {
+		t.Fatal(err)
+	}
+	plain, err := a.vault.decrypt(cipher, "stock:"+stockID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, err := decodeContent(plain)
+	if err != nil || storedName != name || len(doc.Blocks) != 1 || doc.Blocks[0].Text != content {
 		t.Fatal("固定文本未原样保存或被拒绝的修改改变了库存池", err)
 	}
 }

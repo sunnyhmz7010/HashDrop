@@ -1,3 +1,4 @@
+import { claimContents, importInventory } from "./fixture";
 import {
   loginAdmin,
   test,
@@ -28,19 +29,8 @@ test("库存池多选商品、商品分配策略与历史订单交付", async ({
       exact: true,
     });
     await editor.locator("#inventory-name input").fill(name);
-    if (content !== undefined) {
-      await editor.locator("#inventory-kind").click();
-      await page
-        .locator(".n-base-select-option")
-        .getByText("固定文本", { exact: true })
-        .click();
-      await editor
-        .getByRole("button", { name: "保存库存池", exact: true })
-        .click();
-      await expect(editor.getByRole("alert")).toContainText("固定内容不能为空");
-      await expect(editor.locator("#inventory-name input")).toHaveValue(name);
-      await editor.locator("#static-content textarea").fill(content);
-    }
+    if (content !== undefined)
+      await editor.locator("#inventory-reusable").click();
     const saved = page.waitForResponse(
       (response) =>
         response.url() === `${base}/api/admin/inventories` &&
@@ -52,7 +42,9 @@ test("库存池多选商品、商品分配策略与历史订单交付", async ({
     const response = await saved;
     expect(response.ok()).toBeTruthy();
     await expect(editor).toHaveCount(0);
-    return response.json();
+    const pool: Inventory = await response.json();
+    if (content !== undefined) await importInventory(page, pool, content);
+    return pool;
   }
   const pool = await createPool("多商品共享卡密库存");
   const poolRow = page.getByRole("row").filter({ hasText: pool.id });
@@ -194,16 +186,20 @@ test("库存池多选商品、商品分配策略与历史订单交付", async ({
     (await request.post(`${base}/__test/pay/${pending.id}`)).ok(),
   ).toBeTruthy();
   await viewOrder(pending);
-  await expect(page.locator(".delivery-item pre")).toHaveText(
-    /^SHARED-00[12]$/,
+  await claimContents(page);
+  await expect(page.locator(".delivery-item .markdown-content")).toHaveText(
+    /^SHARED-00[12]\s*$/,
   );
-  const originalContent = await page.locator(".delivery-item pre").innerText();
+  const originalContent = await page
+    .locator(".delivery-item .markdown-content")
+    .innerText();
   const fresh = await buy(first);
   expect(
     (await request.post(`${base}/__test/pay/${fresh.id}`)).ok(),
   ).toBeTruthy();
   await viewOrder(fresh);
-  await expect(page.locator(".delivery-item pre")).toHaveText(
+  await claimContents(page);
+  await expect(page.locator(".delivery-item .markdown-content")).toHaveText(
     "REBOUND-CONTENT",
   );
   const another = await buy(second);
@@ -211,12 +207,13 @@ test("库存池多选商品、商品分配策略与历史订单交付", async ({
     (await request.post(`${base}/__test/pay/${another.id}`)).ok(),
   ).toBeTruthy();
   await viewOrder(another);
-  await expect(page.locator(".delivery-item pre")).toHaveText(
-    /^SHARED-00[12]$/,
+  await claimContents(page);
+  await expect(page.locator(".delivery-item .markdown-content")).toHaveText(
+    /^SHARED-00[12]\s*$/,
   );
-  expect(await page.locator(".delivery-item pre").innerText()).not.toBe(
-    originalContent,
-  );
+  expect(
+    await page.locator(".delivery-item .markdown-content").innerText(),
+  ).not.toBe(originalContent);
   await page.goto(`${base}/center/inventories`);
   await expect(poolRow).toContainText("0 / 0 / 2");
   await expect(poolRow).toContainText("1 个商品");
@@ -233,7 +230,10 @@ test("库存池多选商品、商品分配策略与历史订单交付", async ({
     page.getByRole("row").filter({ hasText: fixed.id }),
   ).toContainText("0 个商品");
   await viewOrder(pending);
-  await expect(page.locator(".delivery-item pre")).toHaveText(originalContent);
+  await claimContents(page);
+  await expect(page.locator(".delivery-item .markdown-content")).toHaveText(
+    originalContent,
+  );
 
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });

@@ -90,8 +90,15 @@ func TestDeleteOrderPreservesLatePaymentAndClaim(t *testing.T) {
 	claim.Header.Set("Authorization", claimAuthorization(token))
 	receipt := httptest.NewRecorder()
 	a.routes().ServeHTTP(receipt, claim)
-	if receipt.Code != 200 || !strings.Contains(receipt.Body.String(), "卡密-") {
-		t.Fatalf("删除破坏了迟到付款领取: %s", receipt.Body)
+	if receipt.Code != 200 || strings.Contains(receipt.Body.String(), "卡密-") {
+		t.Fatalf("删除后查单失败或泄漏正文: %s", receipt.Body)
+	}
+	deliveries, err := a.deliveryMetadata(context.Background(), order.ID)
+	if err != nil || len(deliveries) != 1 {
+		t.Fatalf("交付状态: %v", err)
+	}
+	if claimed := claimDeliveryForTest(t, a, order.ID, deliveries[0].ID, token); claimed.Code != 200 || !strings.Contains(claimed.Body.String(), "卡密-") {
+		t.Fatalf("删除破坏了迟到付款领取: %s", claimed.Body)
 	}
 }
 
@@ -173,7 +180,7 @@ func TestMissingGatewayOrderReleasesOnlyItsReservation(t *testing.T) {
 		t.Fatal(err)
 	}
 	late, err := a.loadOrder(context.Background(), order.ID)
-	if err != nil || late.PaymentStatus != "paid" || late.DeliveryStatus != "manual" {
+	if err != nil || late.PaymentStatus != "paid" || late.DeliveryStatus != "failed" {
 		t.Fatal("释放后的迟到付款没有转人工")
 	}
 	var assigned, state string
@@ -218,7 +225,7 @@ func TestMissingGatewayOrderKeepsVerifiedPayment(t *testing.T) {
 				t.Fatalf("网关删除破坏了已付款交付: %+v %v", paid, err)
 			}
 			results, err := a.deliveryResults(context.Background(), order.ID)
-			if err != nil || len(results) != 1 || results[0].Content != "卡密-0" {
+			if err != nil || len(results) != 1 || deliveryText(results[0].Content) != "卡密-0" {
 				t.Fatal("网关删除破坏了原领取内容")
 			}
 		})
@@ -385,8 +392,18 @@ func TestGatewaySettingsAllowCompletedAndTerminatedOrders(t *testing.T) {
 			if receipt.Code != 200 || !strings.Contains(receipt.Body.String(), `"payment_status":"`+sample.status+`"`) {
 				t.Fatalf("更换配置破坏了历史领取链接: %s", receipt.Body)
 			}
-			if sample.status == "paid" && !strings.Contains(receipt.Body.String(), "卡密-0") {
-				t.Fatal("更换配置破坏了已完成交付的卡密")
+			if strings.Contains(receipt.Body.String(), "卡密-0") {
+				t.Fatal("状态查询泄露卡密")
+			}
+			if sample.status == "paid" {
+				entries, err := a.deliveryMetadata(context.Background(), order.ID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				claimed := claimDeliveryForTest(t, a, order.ID, entries[0].ID, token)
+				if claimed.Code != 200 || !strings.Contains(claimed.Body.String(), "卡密-0") {
+					t.Fatal("更换配置破坏历史领取", claimed.Body)
+				}
 			}
 		})
 	}
@@ -395,7 +412,7 @@ func TestGatewaySettingsAllowCompletedAndTerminatedOrders(t *testing.T) {
 func TestGatewaySettingsProtectUnfinishedOrders(t *testing.T) {
 	for _, state := range []struct{ payment, delivery string }{
 		{"creating", "pending"}, {"pending", "pending"}, {"expired", "pending"}, {"review", "pending"},
-		{"paid", "pending"}, {"paid", "processing"}, {"paid", "manual"},
+		{"paid", "pending"}, {"paid", "partial"}, {"paid", "failed"},
 	} {
 		t.Run(state.payment+"/"+state.delivery, func(t *testing.T) {
 			a, _ := newTestApp(t)

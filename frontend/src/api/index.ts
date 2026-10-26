@@ -16,7 +16,7 @@ export class APIError extends Error {
     super(message);
   }
 }
-export async function api<T>(
+async function request(
   path: string,
   options: {
     method?: string;
@@ -24,9 +24,10 @@ export async function api<T>(
     token?: string;
     signal?: AbortSignal;
   } = {},
-): Promise<T> {
+): Promise<Response> {
   const headers: Record<string, string> = {};
-  if (options.body !== undefined) headers["Content-Type"] = "application/json";
+  if (options.body !== undefined && !(options.body instanceof FormData))
+    headers["Content-Type"] = "application/json";
   if (options.token) {
     // Header 仅传 ASCII，避免浏览器拒绝中文或规范化密钥首尾空格。
     const bytes = new TextEncoder().encode(options.token);
@@ -42,7 +43,12 @@ export async function api<T>(
     headers,
     credentials: "same-origin",
     cache: "no-store",
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    body:
+      options.body instanceof FormData
+        ? options.body
+        : options.body === undefined
+          ? undefined
+          : JSON.stringify(options.body),
     signal: options.signal,
   }).catch((error: unknown) => {
     if (options.signal?.aborted) throw error;
@@ -57,10 +63,10 @@ export async function api<T>(
     csrf.value = "";
     adminAuthenticated.value = false;
   }
-  const value = await response.json().catch(() => {
-    throw new APIError(response.status, t("errors.response_json"));
-  });
   if (!response.ok) {
+    const value = await response
+      .json()
+      .catch(() => ({ error: t("errors.request_failed") }));
     throw new APIError(
       response.status,
       value.error ?? t("errors.request_failed"),
@@ -70,7 +76,78 @@ export async function api<T>(
         : [],
     );
   }
-  return value as T;
+  return response;
+}
+export async function api<T>(
+  path: string,
+  options: Parameters<typeof request>[1] = {},
+): Promise<T> {
+  const response = await request(path, options);
+  return response.json().catch(() => {
+    throw new APIError(response.status, t("errors.response_json"));
+  });
+}
+export async function assetBlob(
+  path: string,
+  token?: string,
+  signal?: AbortSignal,
+): Promise<{ blob: Blob; name: string }> {
+  const response = await request(path, { token, signal });
+  return {
+    blob: await response.blob(),
+    name: assetFilename(response.headers.get("Content-Disposition")),
+  };
+}
+function assetFilename(disposition: string | null): string {
+  const parameters = new Map<string, string>();
+  // 按完整参数读取，避免文件名内的分号被误识别为新参数。
+  for (const match of (disposition ?? "").matchAll(
+    /(?:^|;)\s*([a-z0-9_.*-]+)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^;]*))/gi,
+  )) {
+    parameters.set(
+      match[1]!.toLowerCase(),
+      match[2] !== undefined
+        ? match[2].replace(/\\(.)/g, "$1")
+        : match[3]!.trim(),
+    );
+  }
+  let name = parameters.get("filename") ?? "";
+  const extended = parameters.get("filename*")?.match(/^UTF-8'[^']*'(.*)$/i);
+  if (extended) {
+    try {
+      name = decodeURIComponent(extended[1]!);
+    } catch {
+      // 非法编码回退到普通 filename；标题不参与下载文件名。
+      name = parameters.get("filename") ?? "";
+    }
+  }
+  name = name
+    .replace(/[/\\]/g, "_")
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .trim();
+  return name && name !== "." && name !== ".." ? name : "download";
+}
+export interface ContentBlock {
+  id: string;
+  type: "text" | "image" | "file" | "link" | "stock";
+  text?: string;
+  label?: string;
+  url?: string;
+  asset_id?: string;
+  quantity?: number;
+}
+export interface ContentDocument {
+  blocks: ContentBlock[];
+}
+export interface Asset {
+  id: string;
+  name: string;
+  media_type: string;
+  size: number;
+}
+export interface InventoryBinding {
+  product_id: string;
+  slot_id: string;
 }
 export interface Product {
   id: string;
@@ -84,13 +161,10 @@ export interface Product {
   inventory_strategy: "random" | "oldest" | "newest";
   inventory_count: number;
   stock_unlimited: boolean;
-  delivery_mode: "automatic" | "manual";
+  delivery_plan?: ContentDocument;
   delivery_note: string;
-  buyer_note_label: string;
-  buyer_note_required: boolean;
   min_quantity: number;
   max_quantity: number;
-  kind: string;
   active: boolean;
   hidden: boolean;
   available: number;
@@ -100,19 +174,17 @@ export interface Product {
 export interface Inventory {
   id: string;
   name: string;
-  kind: string;
-  has_content: boolean;
+  reusable: boolean;
   available: number;
   reserved: number;
   sold: number;
   product_count: number;
-  product_ids: string[];
+  bindings: InventoryBinding[];
 }
 export interface Order {
   id: string;
   product_id: string;
   product_name: string;
-  kind: string;
   unit_price: number;
   currency: string;
   quantity: number;
@@ -129,7 +201,6 @@ export interface Order {
   created_at: number;
   last_error: string;
   delivery_note: string;
-  buyer_note?: string;
 }
 export interface OrderDiscount {
   id: string;
@@ -167,7 +238,8 @@ export interface Delivery {
   id: string;
   ordinal: number;
   status: string;
-  content?: string;
+  content?: ContentDocument;
+  error?: string;
 }
 export interface OrderDetail {
   order: Order;
@@ -263,13 +335,6 @@ export function toMinor(value: string, currency: string): number {
 export function priceText(minor: number, currency: string): string {
   return money(minor, currency).split(" ")[0]!;
 }
-export const kindNames = computed<Record<string, string>>(() => ({
-  card: t("kind.card"),
-  account: t("kind.account"),
-  static: t("kind.static"),
-  manual: t("kind.manual"),
-  mixed: t("kind.mixed"),
-}));
 export const paymentNames = computed<Record<string, string>>(() => ({
   creating: t("payment.creating"),
   pending: t("payment.pending"),
@@ -281,10 +346,10 @@ export const paymentNames = computed<Record<string, string>>(() => ({
 }));
 export const deliveryNames = computed<Record<string, string>>(() => ({
   pending: t("delivery.pending"),
-  processing: t("delivery.processing"),
+  partial: t("delivery.partial"),
+  failed: t("delivery.failed"),
   done: t("delivery.done"),
   cancelled: t("delivery.cancelled"),
-  manual: t("delivery.manual"),
 }));
 export function errorText(error: unknown): string {
   if (error instanceof SyntaxError) return t("errors.invalid_json");

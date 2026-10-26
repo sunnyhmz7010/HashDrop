@@ -1,3 +1,4 @@
+import { claimContents } from "./fixture";
 import { test, expect, loginAdmin } from "./fixture";
 import { placeTestOrder } from "./checkout";
 import type { Product } from "../src/api";
@@ -17,7 +18,7 @@ test("查询中心保留浏览器订单，跨设备导入并同步清除", async
   const products: Product[] = await (
     await request.get(`${base}/api/products`)
   ).json();
-  const product = products.find((item) => item.kind === "static")!;
+  const product = products.find((item) => item.stock_unlimited)!;
   const orders = [];
   for (let i = 0; i < 2; i++) {
     await page.goto(`${base}/products/${product.id}`);
@@ -51,9 +52,10 @@ test("查询中心保留浏览器订单，跨设备导入并同步清除", async
   await expect(page.locator("#claim-key")).toHaveValue("");
   const otherTab = await context.newPage();
   await otherTab.goto(`${base}/center/orders/${orders[0].orderID}`);
-  await expect(otherTab.locator(".delivery-item pre")).toContainText(
-    "购买时内容",
-  );
+  await claimContents(otherTab);
+  await expect(
+    otherTab.locator(".delivery-item .markdown-content"),
+  ).toContainText("购买时内容");
   expect(otherTab.url()).not.toContain(orders[0].key);
   const stored = await page.evaluate(() =>
     Object.entries(localStorage).filter(([key]) =>
@@ -105,9 +107,10 @@ test("查询中心保留浏览器订单，跨设备导入并同步清除", async
     .getByRole("dialog", { name: "查询订单", exact: true })
     .getByRole("button", { name: "查询", exact: true })
     .click();
-  await expect(importer.locator(".delivery-item pre")).toContainText(
-    "购买时内容",
-  );
+  await claimContents(importer);
+  await expect(
+    importer.locator(".delivery-item .markdown-content"),
+  ).toContainText("购买时内容");
   await importer.goto(`${base}/center`);
   await expect(importer.locator(".order-row")).toHaveCount(1);
   await remote.close();

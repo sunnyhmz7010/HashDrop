@@ -1,3 +1,4 @@
+import { testPlan } from "./fixture";
 import { randomBytes } from "node:crypto";
 import { resolve } from "node:path";
 import {
@@ -14,7 +15,7 @@ test("订单金额筛选、数字分页与失败查询重试", async ({ page }) 
   const pool = await createInventory(
     page,
     "分页验证库存",
-    "static",
+    true,
     "分页验证内容",
   );
   const session = await (
@@ -25,6 +26,7 @@ test("订单金额筛选、数字分页与失败查询重试", async ({ page }) 
     headers,
     data: {
       name: "分页验证商品",
+      delivery_plan: testPlan(),
       price: 987,
       currency: "JPY",
       active: true,

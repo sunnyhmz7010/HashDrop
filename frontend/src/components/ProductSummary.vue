@@ -29,11 +29,9 @@ withDefaults(
       </p>
       <p class="product-stock">
         {{
-          product.delivery_mode === "automatic" && !product.stock_unlimited
+          !product.stock_unlimited
             ? t("stock.count", { quantity: product.available })
-            : product.kind === "manual"
-              ? t("product.manual_help")
-              : t("shop.after_payment")
+            : t("shop.after_payment")
         }}
       </p>
       <p

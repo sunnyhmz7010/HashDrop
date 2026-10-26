@@ -1,3 +1,4 @@
+import { claimContents } from "./fixture";
 import { test, expect, type Page } from "./fixture";
 import type { Product } from "../src/api";
 import { placeTestOrder } from "./checkout";
@@ -65,7 +66,7 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
   const products: Product[] = await (
     await request.get(`${base}/api/products`)
   ).json();
-  const staticProduct = products.find((product) => product.kind === "static")!;
+  const staticProduct = products.find((product) => product.stock_unlimited)!;
   await page
     .locator(".product-card")
     .filter({ has: page.locator(`a[href="/products/${staticProduct.id}"]`) })
@@ -110,8 +111,10 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
       data: { key: token },
     })
   ).json();
-  await expect(page.locator(".delivery-item pre")).toHaveText(
-    order.deliveries[0].content,
+  await claimContents(page);
+  expect(order.deliveries[0].content).toBeUndefined();
+  await expect(page.locator(".delivery-item .markdown-content")).toHaveText(
+    "购买时内容",
   );
 
   await page.goto(`${base}/center?login=1`);
@@ -169,18 +172,10 @@ test("中英文切换、统一顶栏与管理入口", async ({ page, request }) 
   await page
     .getByRole("button", { name: "Add inventory pool", exact: true })
     .click();
-  await page.locator("#inventory-kind").click();
-  await expect(page.locator(".n-base-select-option:visible")).toHaveCount(3);
   await expect(
-    page
-      .locator(".n-base-select-option")
-      .getByText("License key", { exact: true }),
+    page.getByRole("switch", { name: "Reusable", exact: true }),
   ).toBeVisible();
-  await page
-    .locator(".n-base-select-option")
-    .getByText("Static text", { exact: true })
-    .click();
-  await expect(page.locator("#static-content textarea")).toBeVisible();
+  await expect(page.locator("#inventory-products")).toBeVisible();
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await page.locator(".topbar .brand").click();
   await expect(page).toHaveURL(`${base}/`);

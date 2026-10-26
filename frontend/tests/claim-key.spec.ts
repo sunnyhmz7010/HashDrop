@@ -1,3 +1,4 @@
+import { claimContents, testPlan, testContent } from "./fixture";
 import { test, expect } from "./fixture";
 import { placeTestOrder, stubPaymentPage } from "./checkout";
 import type { Product } from "../src/api";
@@ -10,7 +11,7 @@ test("URL 凭证不自动读取，手动查询同一订单后可刷新恢复", a
   const products: Product[] = await (
     await request.get(`${base}/api/products`)
   ).json();
-  const product = products.find((item) => item.kind === "static")!;
+  const product = products.find((item) => item.stock_unlimited)!;
   const suffix = Date.now().toString(36) + Math.random().toString(36).slice(2);
   const key = `fragment-test-${suffix}`;
   const quote = await (
@@ -48,7 +49,7 @@ test("密钥生成、重复候选和跨设备领取", async ({ page, request, br
   const products: Product[] = await (
     await request.get(`${base}/api/products`)
   ).json();
-  const product = products.find((item) => item.kind === "static")!;
+  const product = products.find((item) => item.stock_unlimited)!;
   const key = "自定密钥 AbC🔑-2026 ";
   await page.goto(`${base}/products/${product.id}`);
   await page.getByRole("button", { name: "下单", exact: true }).click();
@@ -119,15 +120,24 @@ test("密钥生成、重复候选和跨设备领取", async ({ page, request, br
   });
   await other.getByLabel("领取密钥", { exact: true }).fill(key);
   await query.getByRole("button", { name: "查询", exact: true }).click();
-  await expect(other.locator(".delivery-item pre")).toContainText("购买时内容");
+  await claimContents(other);
+  await expect(other.locator(".delivery-item .markdown-content")).toContainText(
+    "购买时内容",
+  );
   expect(other.url()).toBe(`${base}/center/orders/${first.orderID}`);
   // 会话失败不能阻断游客历史；详情 Header 需保留中文、emoji 和尾空格。
   await other.route("**/api/admin/session", (route) => route.abort());
   await other.goto(`${base}/center/history`);
   await other.getByRole("button", { name: first.orderID, exact: true }).click();
-  await expect(other.locator(".delivery-item pre")).toContainText("购买时内容");
+  await claimContents(other);
+  await expect(other.locator(".delivery-item .markdown-content")).toContainText(
+    "购买时内容",
+  );
   await other.reload();
-  await expect(other.locator(".delivery-item pre")).toContainText("购买时内容");
+  await claimContents(other);
+  await expect(other.locator(".delivery-item .markdown-content")).toContainText(
+    "购买时内容",
+  );
   await other.setViewportSize({ width: 390, height: 900 });
   await otherContext.close();
 });
@@ -144,13 +154,14 @@ test("下单响应中断后重试复用订单并直接支付", async ({ page, re
     `${base}/api/admin/inventories`,
     {
       headers,
-      data: { name: "密钥重试专用库存", kind: "card" },
+      data: { name: "密钥重试专用库存", reusable: false, bindings: [] },
     },
   );
   expect(inventoryResponse.ok()).toBeTruthy();
   const inventory = await inventoryResponse.json();
   const productInput = {
     name: "断网恢复专用商品",
+    delivery_plan: testPlan(),
     price: 1234,
     currency: "CNY",
     active: true,
@@ -168,8 +179,8 @@ test("下单响应中断后重试复用订单并直接支付", async ({ page, re
       headers,
       data: {
         name: inventory.name,
-        kind: inventory.kind,
-        product_ids: [product.id],
+        reusable: inventory.reusable,
+        bindings: [{ product_id: product.id, slot_id: "stock" }],
       },
     },
   );
@@ -180,7 +191,7 @@ test("下单响应中断后重试复用订单并直接支付", async ({ page, re
         `${base}/api/admin/inventories/${inventory.id}/stock`,
         {
           headers,
-          data: { content: "RETRY-ONLY-CARD" },
+          data: { items: [testContent("RETRY-ONLY-CARD")] },
         },
       )
     ).ok(),

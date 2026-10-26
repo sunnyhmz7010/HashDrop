@@ -8,15 +8,12 @@ import (
 	"net/http"
 	"strings"
 	"time"
-	"unicode/utf8"
 )
 
 type Order struct {
 	ID                string          `json:"id"`
 	ProductID         string          `json:"product_id"`
 	ProductName       string          `json:"product_name"`
-	InventoryID       string          `json:"-"`
-	Kind              string          `json:"kind"`
 	UnitPrice         int64           `json:"unit_price"`
 	Currency          string          `json:"currency"`
 	Quantity          int             `json:"quantity"`
@@ -37,16 +34,14 @@ type Order struct {
 	Attempts          int             `json:"attempts"`
 	LastError         string          `json:"last_error"`
 	DeliveryNote      string          `json:"delivery_note"`
-	BuyerNote         string          `json:"buyer_note,omitempty"`
-	buyerNoteCipher   string
 }
 
-const orderSelect = `SELECT id,product_id,product_name,kind,unit_price,currency,quantity,total,COALESCE(gateway_id,''),gateway_url,gateway_merchant_id,checkout_url,payment_status,delivery_status,reservation_status,expires_at,created_at,token_hash,attempts,last_error,discounts,COALESCE(inventory_id,''),delivery_note,buyer_note FROM orders`
+const orderSelect = `SELECT id,product_id,product_name,unit_price,currency,quantity,total,COALESCE(gateway_id,''),gateway_url,gateway_merchant_id,checkout_url,payment_status,delivery_status,reservation_status,expires_at,created_at,token_hash,attempts,last_error,discounts,delivery_note FROM orders`
 
 func scanOrder(row scanner) (Order, error) {
 	var o Order
 	var discounts string
-	err := row.Scan(&o.ID, &o.ProductID, &o.ProductName, &o.Kind, &o.UnitPrice, &o.Currency, &o.Quantity, &o.Total, &o.GatewayID, &o.GatewayURL, &o.GatewayMerchantID, &o.CheckoutURL, &o.PaymentStatus, &o.DeliveryStatus, &o.ReservationStatus, &o.ExpiresAt, &o.CreatedAt, &o.TokenHash, &o.Attempts, &o.LastError, &discounts, &o.InventoryID, &o.DeliveryNote, &o.buyerNoteCipher)
+	err := row.Scan(&o.ID, &o.ProductID, &o.ProductName, &o.UnitPrice, &o.Currency, &o.Quantity, &o.Total, &o.GatewayID, &o.GatewayURL, &o.GatewayMerchantID, &o.CheckoutURL, &o.PaymentStatus, &o.DeliveryStatus, &o.ReservationStatus, &o.ExpiresAt, &o.CreatedAt, &o.TokenHash, &o.Attempts, &o.LastError, &discounts, &o.DeliveryNote)
 	if err == nil {
 		err = json.Unmarshal([]byte(discounts), &o.Discounts)
 	}
@@ -63,7 +58,6 @@ type orderInput struct {
 	CouponCode     string `json:"coupon_code"`
 	QuotedTotal    *int64 `json:"quoted_total"`
 	QuotedCurrency string `json:"quoted_currency"`
-	BuyerNote      string `json:"buyer_note"`
 }
 
 func (a *App) loadOrder(ctx context.Context, id string) (Order, error) {
@@ -126,10 +120,6 @@ func (a *App) reserveOrder(ctx context.Context, productID string, quantity int, 
 }
 func (a *App) reservePricedOrder(ctx context.Context, input orderInput) (Order, string, error) {
 	productID, quantity := input.ProductID, input.Quantity
-	input.BuyerNote = strings.TrimSpace(input.BuyerNote)
-	if !utf8.ValidString(input.BuyerNote) || utf8.RuneCountInString(input.BuyerNote) > 2000 {
-		return Order{}, "", bad("买家信息不能超过 2000 字符")
-	}
 	token, id := input.Key, input.RequestID
 	// 内部调用沿用随机凭证；公开下单入口必须先验证买家设置的密钥。
 	if token == "" {
@@ -150,12 +140,6 @@ func (a *App) reservePricedOrder(ctx context.Context, input orderInput) (Order, 
 	existing, err := scanOrder(tx.QueryRowContext(ctx, orderSelect+" WHERE id=?", id))
 	if err == nil {
 		if existing.ProductID != productID || existing.Quantity != quantity || !constantEqual(existing.TokenHash, tokenHash(token)) {
-			return Order{}, "", &apiError{409, "下单请求标识无效，请重新打开下单弹窗"}
-		}
-		if err = a.decryptBuyerNote(&existing); err != nil {
-			return Order{}, "", err
-		}
-		if existing.BuyerNote != input.BuyerNote {
 			return Order{}, "", &apiError{409, "下单请求标识无效，请重新打开下单弹窗"}
 		}
 		return existing, token, nil
@@ -180,11 +164,8 @@ func (a *App) reservePricedOrder(ctx context.Context, input orderInput) (Order, 
 	if err = validatePurchaseQuantity(p, quantity); err != nil {
 		return Order{}, "", err
 	}
-	if p.BuyerNoteRequired && input.BuyerNote == "" {
-		return Order{}, "", bad("请填写商品要求的买家信息")
-	}
-	if p.BuyerNoteLabel == "" && input.BuyerNote != "" {
-		return Order{}, "", bad("该商品不接收买家信息，请重新确认商品")
+	if err = a.hydrateProduct(ctx, tx, &p); err != nil {
+		return Order{}, "", err
 	}
 	quote, err := quoteOrder(ctx, tx, p, quantity, input.CouponCode, unixNow())
 	if err != nil {
@@ -197,37 +178,19 @@ func (a *App) reservePricedOrder(ctx context.Context, input orderInput) (Order, 
 	if input.QuotedTotal != nil && (*input.QuotedTotal != quote.Total || input.QuotedCurrency != quote.Currency) {
 		return Order{}, "", &apiError{409, "优惠或价格已变化，请重新确认金额"}
 	}
-	allocations, err := a.allocateInventory(ctx, tx, p, quantity)
-	if err != nil {
-		return Order{}, "", err
-	}
-	kind, inventory := allocations[0].kind, allocations[0].inventory
-	for _, item := range allocations[1:] {
-		if item.kind != kind {
-			kind = "mixed"
-		}
-		if item.inventory != inventory {
-			inventory = ""
-		}
-	}
-	o := Order{ID: id, ProductID: p.ID, ProductName: p.Name, InventoryID: inventory, Kind: kind, UnitPrice: p.Price, Currency: p.Currency, Quantity: quantity, Total: p.Price * int64(quantity), TokenHash: tokenHash(token), PaymentStatus: "creating", DeliveryStatus: "pending", ReservationStatus: "reserved", CreatedAt: unixNow()}
+	o := Order{ID: id, ProductID: p.ID, ProductName: p.Name, UnitPrice: p.Price, Currency: p.Currency, Quantity: quantity, Total: p.Price * int64(quantity), TokenHash: tokenHash(token), PaymentStatus: "creating", DeliveryStatus: "pending", ReservationStatus: "reserved", CreatedAt: unixNow()}
 	o.Total, o.OriginalTotal, o.DiscountTotal, o.Discounts = quote.Total, quote.OriginalTotal, quote.DiscountTotal, quote.Discounts
-	o.DeliveryNote, o.BuyerNote = p.DeliveryNote, input.BuyerNote
-	if o.BuyerNote != "" {
-		o.buyerNoteCipher, err = a.vault.encrypt(o.BuyerNote, "buyer-note:"+id)
-		if err != nil {
-			return Order{}, "", err
-		}
-	}
+	o.DeliveryNote = p.DeliveryNote
 	snapshot, err := json.Marshal(o.Discounts)
 	if err != nil {
 		return Order{}, "", err
 	}
-	var inventoryID any
-	if o.InventoryID != "" {
-		inventoryID = o.InventoryID
+	if _, err = tx.ExecContext(ctx, `INSERT INTO orders(id,product_id,product_name,unit_price,currency,quantity,total,token_hash,payment_status,created_at,updated_at,discounts,delivery_note) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`, o.ID, o.ProductID, o.ProductName, o.UnitPrice, o.Currency, o.Quantity, o.Total, o.TokenHash, o.PaymentStatus, o.CreatedAt, o.CreatedAt, string(snapshot), o.DeliveryNote); err != nil {
+		return Order{}, "", err
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO orders(id,product_id,product_name,kind,unit_price,currency,quantity,total,token_hash,payment_status,created_at,updated_at,discounts,inventory_id,delivery_note,buyer_note) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, o.ID, o.ProductID, o.ProductName, o.Kind, o.UnitPrice, o.Currency, o.Quantity, o.Total, o.TokenHash, o.PaymentStatus, o.CreatedAt, o.CreatedAt, string(snapshot), inventoryID, o.DeliveryNote, o.buyerNoteCipher); err != nil {
+	// 所有必需取货项和订单在同一事务内预留，任一资源缺货会整体回滚。
+	allocations, err := a.allocateInventory(ctx, tx, p, quantity, id)
+	if err != nil {
 		return Order{}, "", err
 	}
 	// 与库存预留同一写事务占用优惠次数；只有可靠终止且未付款的订单才归还名额。
@@ -237,31 +200,25 @@ func (a *App) reservePricedOrder(ctx context.Context, input orderInput) (Order, 
 		}
 	}
 	for ordinal, item := range allocations {
-		var stock, inventoryID any
-		if item.stock != "" {
-			stock = item.stock
-			result, e := tx.ExecContext(ctx, "UPDATE stock_items SET status='reserved',order_id=? WHERE id=? AND inventory_id=? AND status='available'", id, item.stock, item.inventory)
-			if e != nil {
-				return Order{}, "", e
-			}
-			n, e := result.RowsAffected()
-			if e != nil || n != 1 {
-				return Order{}, "", &apiError{409, "库存发生变化，请重试"}
-			}
-		}
 		deliveryID := newID()
-		content := ""
-		if item.inventory != "" {
-			inventoryID = item.inventory
+		plain, err := encodeContent(item.content)
+		if err != nil {
+			return Order{}, "", err
 		}
-		if item.kind == "static" {
-			content, err = a.vault.encrypt(item.content, "delivery-content:"+deliveryID)
-			if err != nil {
+		content, err := a.vault.encrypt(plain, "delivery-content:"+deliveryID)
+		if err != nil {
+			return Order{}, "", err
+		}
+		if _, err = tx.ExecContext(ctx, "INSERT INTO deliveries(id,order_id,ordinal,content,updated_at) VALUES(?,?,?,?,?)", deliveryID, id, ordinal+1, content, unixNow()); err != nil {
+			return Order{}, "", err
+		}
+		if err = a.replaceAssetRefs(ctx, tx, "delivery", deliveryID, item.content); err != nil {
+			return Order{}, "", err
+		}
+		for index, resource := range item.resources {
+			if _, err = tx.ExecContext(ctx, `INSERT INTO delivery_allocations(id,delivery_id,stock_id,inventory_id,slot_id,ordinal,consumes,status) VALUES(?,?,?,?,?,?,?,'reserved')`, newID(), deliveryID, resource.stock, resource.inventory, resource.slot, index+1, resource.consumes); err != nil {
 				return Order{}, "", err
 			}
-		}
-		if _, err = tx.ExecContext(ctx, "INSERT INTO deliveries(id,order_id,ordinal,stock_id,inventory_id,kind,content,updated_at) VALUES(?,?,?,?,?,?,?,?)", deliveryID, id, ordinal+1, stock, inventoryID, item.kind, content, unixNow()); err != nil {
-			return Order{}, "", err
 		}
 	}
 	if err = tx.Commit(); err != nil {
@@ -271,50 +228,45 @@ func (a *App) reservePricedOrder(ctx context.Context, input orderInput) (Order, 
 	return o, token, nil
 }
 func (a *App) orderDetail(w http.ResponseWriter, r *http.Request) error {
+	o, err := a.authorizeOrderAccess(r)
+	if err != nil {
+		return err
+	}
+	return a.replyOrder(w, r, o)
+}
+
+// 身份凭证校验与领取动作分离，状态轮询不会隐式领取或消耗访问次数。
+func (a *App) authorizeOrderAccess(r *http.Request) (Order, error) {
 	refund, allowed := a.beginClaim(r)
 	if !allowed {
-		return &apiError{429, "密钥尝试过于频繁，请稍后再试"}
+		return Order{}, &apiError{429, "密钥尝试过于频繁，请稍后再试"}
 	}
 	token, valid := claimKeyFromAuthorization(r)
 	if !valid {
-		return &apiError{401, "请输入有效的领取凭证"}
+		return Order{}, &apiError{401, "请输入有效的领取凭证"}
 	}
 	o, err := a.loadOrder(r.Context(), r.PathValue("id"))
 	if err == sql.ErrNoRows {
-		return &apiError{404, "订单或凭证无效"}
+		return Order{}, &apiError{404, "订单或凭证无效"}
 	}
 	if err != nil {
 		refund()
-		return err
+		return Order{}, err
 	}
 	if !constantEqual(o.TokenHash, tokenHash(token)) {
-		return &apiError{404, "订单或凭证无效"}
+		return Order{}, &apiError{404, "订单或凭证无效"}
 	}
 	refund()
-	return a.replyOrder(w, r, o)
+	return o, nil
 }
 func (a *App) replyOrder(w http.ResponseWriter, r *http.Request, o Order) error {
-	if err := a.decryptBuyerNote(&o); err != nil {
-		return err
-	}
-	results, err := a.deliveryResults(r.Context(), o.ID)
+	results, err := a.deliveryMetadata(r.Context(), o.ID)
 	if err != nil {
 		return err
 	}
 	o.LastError = ""
 	reply(w, 200, map[string]any{"order": o, "deliveries": results})
 	return nil
-}
-
-func (a *App) decryptBuyerNote(o *Order) error {
-	if o.buyerNoteCipher == "" {
-		return nil
-	}
-	plain, err := a.vault.decrypt(o.buyerNoteCipher, "buyer-note:"+o.ID)
-	if err == nil {
-		o.BuyerNote = plain
-	}
-	return err
 }
 
 func validatePurchaseQuantity(p Product, quantity int) error {
@@ -435,10 +387,37 @@ func (a *App) terminateOrder(ctx context.Context, id, status, reason string) err
 		return err
 	}
 	defer tx.Rollback()
-	if _, err = tx.ExecContext(ctx, "UPDATE stock_items SET status='available',order_id=NULL WHERE order_id=? AND status='reserved'", id); err != nil {
+	var payment string
+	if err = tx.QueryRowContext(ctx, "SELECT payment_status FROM orders WHERE id=?", id).Scan(&payment); err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, "UPDATE deliveries SET stock_id=NULL,status='manual',last_error=?,updated_at=? WHERE order_id=? AND status<>'done'", reason, unixNow(), id); err != nil {
+	if payment == "paid" {
+		return nil
+	}
+	rows, err := tx.QueryContext(ctx, "SELECT id FROM deliveries WHERE order_id=? AND status<>'done'", id)
+	if err != nil {
+		return err
+	}
+	ids := []string{}
+	for rows.Next() {
+		var deliveryID string
+		if err = rows.Scan(&deliveryID); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, deliveryID)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	for _, deliveryID := range ids {
+		if err = releaseDeliveryAllocations(ctx, tx, id, deliveryID); err != nil {
+			return err
+		}
+	}
+	if _, err = tx.ExecContext(ctx, "UPDATE deliveries SET status='cancelled',last_error=?,updated_at=? WHERE order_id=? AND status<>'done'", reason, unixNow(), id); err != nil {
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, "UPDATE orders SET payment_status=?,reservation_status=CASE WHEN reservation_status='reserved' THEN 'released' ELSE reservation_status END,delivery_status=CASE WHEN delivery_status='done' THEN 'done' ELSE 'cancelled' END,last_error=?,updated_at=? WHERE id=?", status, reason, unixNow(), id); err != nil {
@@ -462,13 +441,13 @@ func (a *App) markPaid(ctx context.Context, id string) error {
 	}
 	delivery := "pending"
 	if reservation == "released" {
-		delivery = "manual"
+		delivery = "failed"
 	}
 	if _, err = tx.ExecContext(ctx, "UPDATE orders SET payment_status='paid',paid_at=COALESCE(paid_at,?),delivery_status=CASE WHEN payment_status='paid' THEN delivery_status ELSE ? END,last_error='',updated_at=? WHERE id=?", unixNow(), delivery, unixNow(), id); err != nil {
 		return err
 	}
 	if reservation == "released" {
-		if _, err = tx.ExecContext(ctx, "UPDATE deliveries SET status='manual',last_error='库存已释放，需人工补货',updated_at=? WHERE order_id=? AND status<>'done'", unixNow(), id); err != nil {
+		if _, err = tx.ExecContext(ctx, "UPDATE deliveries SET status='failed',last_error='原库存已释放，需要人工补交',updated_at=? WHERE order_id=? AND status<>'done'", unixNow(), id); err != nil {
 			return err
 		}
 	}

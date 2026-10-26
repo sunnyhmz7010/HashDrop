@@ -1,3 +1,4 @@
+import { claimContents } from "./fixture";
 import {
   test,
   expect,
@@ -15,7 +16,10 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   const products: Product[] = await (
     await request.get(`${base}/api/products`)
   ).json();
-  const cardProduct = products.find((product) => product.kind === "card")!;
+  const cardProduct = products.find(
+    (product) => product.name === "测试商品" && !product.stock_unlimited,
+  )!;
+  expect(cardProduct, "测试 fixture 应包含一次性库存的测试商品").toBeDefined();
   const card = page
     .locator(".product-card")
     .filter({ has: page.locator(`a[href="/products/${cardProduct.id}"]`) });
@@ -107,7 +111,10 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
     (await request.post(`${base}/__test/pay/${orderID}`)).ok(),
   ).toBeTruthy();
   await page.reload();
-  await expect(page.locator(".delivery-item pre")).toContainText("卡密-");
+  await claimContents(page);
+  await expect(page.locator(".delivery-item .markdown-content")).toContainText(
+    "卡密-",
+  );
   await page.goto(`${base}/center/orders/${orderID}`);
   await page.getByRole("button", { name: "查询其他订单", exact: true }).click();
   await page.locator("#claim-key").fill(token);
@@ -116,7 +123,10 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
     .getByRole("button", { name: "查询", exact: true })
     .click();
   await expect(page).toHaveURL(`${base}/center/orders/${orderID}`);
-  await expect(page.locator(".delivery-item pre")).toContainText("卡密-");
+  await claimContents(page);
+  await expect(page.locator(".delivery-item .markdown-content")).toContainText(
+    "卡密-",
+  );
   await page.goto(`${base}/center?login=1`);
   await page.locator("#password input").fill("test-password-only");
   await page.getByRole("button", { name: "登录", exact: true }).click();
@@ -276,13 +286,17 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   await editor.getByRole("button", { name: "取消", exact: true }).click();
   await page.setViewportSize({ width: 390, height: 900 });
   await page.goto(receipt);
-  await expect(page.locator(".delivery-item pre")).toContainText("卡密-");
+  await claimContents(page);
+  await expect(page.locator(".delivery-item .markdown-content")).toContainText(
+    "卡密-",
+  );
   const interrupted = await page.context().newPage();
   await interrupted.route("**/api/setup/status", (route) => route.abort());
   await interrupted.goto(receipt);
-  await expect(interrupted.locator(".delivery-item pre")).toContainText(
-    "卡密-",
-  );
+  await claimContents(interrupted);
+  await expect(
+    interrupted.locator(".delivery-item .markdown-content"),
+  ).toContainText("卡密-");
   expect(interrupted.url()).toBe(receipt);
   await interrupted.close();
   await page.goto(`${base}/center/products`);
@@ -349,16 +363,21 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   await paidRow.getByRole("button", { name: orderID, exact: true }).click();
   await page.getByRole("button", { name: "刷新状态", exact: true }).click();
   await expect(page.getByText("订单状态已更新", { exact: true })).toBeVisible();
-  await expect(page.locator(".form-modal .delivery-item pre")).toContainText(
-    "卡密-",
-  );
+  await claimContents(page);
+  await expect(
+    page.locator(".form-modal .delivery-item .markdown-content"),
+  ).toContainText("卡密-");
   await expect(page.locator(".form-modal")).toBeVisible();
   await expect(page.getByText("订单状态已更新", { exact: true })).toBeHidden();
   await page.setViewportSize({ width: 390, height: 900 });
   await expect(page.getByRole("dialog", { name: "订单详情" })).toBeInViewport();
   const orderDialog = page.getByRole("dialog", { name: "订单详情" });
-  await orderDialog.locator(".delivery-item pre").scrollIntoViewIfNeeded();
-  await expect(orderDialog.locator(".delivery-item pre")).toBeInViewport();
+  await orderDialog
+    .locator(".delivery-item .markdown-content")
+    .scrollIntoViewIfNeeded();
+  await expect(
+    orderDialog.locator(".delivery-item .markdown-content"),
+  ).toBeInViewport();
   await expect(
     orderDialog.getByText("订单详情", { exact: true }),
   ).toBeInViewport();
@@ -407,5 +426,8 @@ test("匿名购买、凭证领取与管理员库存管理", async ({ page, reque
   await page.reload();
   await expect(paidRow).toHaveCount(0);
   await page.goto(receipt);
-  await expect(page.locator(".delivery-item pre")).toContainText("卡密-");
+  await claimContents(page);
+  await expect(page.locator(".delivery-item .markdown-content")).toContainText(
+    "卡密-",
+  );
 });

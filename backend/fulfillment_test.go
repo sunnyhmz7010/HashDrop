@@ -8,158 +8,186 @@ import (
 	"testing"
 )
 
-func TestUnknownDeliveryKindDoesNotChangeOrder(t *testing.T) {
+func TestDeliveryUsesPersistedPaymentAndExplicitClaim(t *testing.T) {
 	a, _ := newTestApp(t)
-	product := insertProduct(t, a, "card", 1)
-	order, _ := reserve(t, a, product, 1)
-	order.PaymentStatus, order.Kind = "paid", "unsupported"
-	if err := a.deliverOrder(context.Background(), order); err == nil {
-		t.Fatal("接受了无效交付类型")
+	order, key := reserve(t, a, insertProduct(t, a, "card", 1), 1)
+	order.PaymentStatus = "paid"
+	if err := a.deliverOrder(context.Background(), order); err != nil {
+		t.Fatal(err)
 	}
-	var orderStatus, deliveryStatus string
-	if err := a.db.QueryRow("SELECT delivery_status FROM orders WHERE id=?", order.ID).Scan(&orderStatus); err != nil || orderStatus != "pending" {
-		t.Fatal("无效类型改变了订单交付状态", orderStatus, err)
+	entries, err := a.deliveryMetadata(context.Background(), order.ID)
+	if err != nil || entries[0].Status != "pending" {
+		t.Fatal("未付款交付被伪造调用放行", entries, err)
 	}
-	if err := a.db.QueryRow("SELECT status FROM deliveries WHERE order_id=?", order.ID).Scan(&deliveryStatus); err != nil || deliveryStatus != "pending" {
-		t.Fatal("无效类型改变了逐份交付状态", deliveryStatus, err)
+	if response := claimDeliveryForTest(t, a, order.ID, entries[0].ID, key); response.Code != 409 {
+		t.Fatal("未付款内容可领取", response.Body)
+	}
+	if err = a.markPaid(context.Background(), order.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err = a.deliverOrder(context.Background(), order); err != nil {
+		t.Fatal(err)
+	}
+	lookup := claimRequest(t, a, "/api/orders/lookup", map[string]string{"key": key})
+	if lookup.Code != 200 || strings.Contains(lookup.Body.String(), "卡密-") || strings.Contains(lookup.Body.String(), `"content"`) {
+		t.Fatal("查询泄露正文", lookup.Body)
+	}
+	claimed := claimDeliveryForTest(t, a, order.ID, entries[0].ID, key)
+	if claimed.Code != 200 || !strings.Contains(claimed.Body.String(), "卡密-0") {
+		t.Fatal("主动领取失败", claimed.Body)
+	}
+	if response := claimDeliveryForTest(t, a, order.ID, entries[0].ID, randomToken()); response.Code != 404 {
+		t.Fatal("错误凭证可领取", response.Body)
 	}
 }
 
-func TestManualPurchaseAndPartialDelivery(t *testing.T) {
-	a, gateway := newTestApp(t)
-	admin := adminSessionRequest(t, a)
-	created := admin("POST", "/api/admin/products", `{"name":"人工充值","price":100,"currency":"CNY","active":true,"delivery_mode":"manual","delivery_note":"两小时内完成，请保留密钥","buyer_note_label":"充值账号","buyer_note_required":true,"min_quantity":2,"max_quantity":3}`)
-	var p Product
-	if created.Code != 200 || json.Unmarshal(created.Body.Bytes(), &p) != nil || p.Kind != "manual" || p.InventoryCount != 0 {
-		t.Fatal("人工商品不能独立上架", created.Body)
-	}
-	input := orderInput{ProductID: p.ID, Quantity: 2, Key: "manual-order-key", RequestID: newID(), BuyerNote: "账号@example.com"}
-	for _, invalid := range []orderInput{
-		{ProductID: p.ID, Quantity: 1, Key: "invalid-quantity"},
-		{ProductID: p.ID, Quantity: 4, Key: "invalid-quantity"},
-		{ProductID: p.ID, Quantity: 2, Key: "missing-buyer"},
-	} {
-		if _, _, err := a.reservePricedOrder(context.Background(), invalid); err == nil {
-			t.Fatal("非法数量或缺失必填信息仍可下单")
-		}
-	}
-	o, _, err := a.reservePricedOrder(context.Background(), input)
+func TestPartialFailureRetryDoesNotReallocateOrQueryGateway(t *testing.T) {
+	a, g := newTestApp(t)
+	order, _ := reserve(t, a, insertProduct(t, a, "card", 2), 2)
+	entries, err := a.deliveryMetadata(context.Background(), order.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var stored string
-	if err = a.db.QueryRow("SELECT buyer_note FROM orders WHERE id=?", o.ID).Scan(&stored); err != nil || strings.Contains(stored, input.BuyerNote) {
-		t.Fatal("买家信息没有加密", err)
+	var snapshot string
+	if err = a.db.QueryRow("SELECT content FROM deliveries WHERE id=?", entries[0].ID).Scan(&snapshot); err != nil {
+		t.Fatal(err)
 	}
-	if _, _, err = a.reservePricedOrder(context.Background(), input); err != nil {
-		t.Fatal("下单重试无法恢复原订单", err)
+	if _, err = a.db.Exec("UPDATE deliveries SET content='broken' WHERE id=?", entries[0].ID); err != nil {
+		t.Fatal(err)
 	}
-	changed := input
-	changed.BuyerNote = "另一个账号"
-	if _, _, err = a.reservePricedOrder(context.Background(), changed); err == nil {
-		t.Fatal("同一请求标识可改写买家信息")
+	if err = a.markPaid(context.Background(), order.ID); err != nil {
+		t.Fatal(err)
 	}
-	lookup := func() *Order {
-		response := claimRequest(t, a, "/api/orders/lookup", map[string]string{"key": input.Key})
-		var detail struct {
-			Order Order `json:"order"`
-		}
-		if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &detail) != nil {
+	if err = a.deliverOrder(context.Background(), order); err == nil {
+		t.Fatal("损坏快照未报错")
+	}
+	got, err := a.loadOrder(context.Background(), order.ID)
+	if err != nil || got.DeliveryStatus != "partial" {
+		t.Fatal("未记录部分完成", got, err)
+	}
+	before, err := a.deliveryResults(context.Background(), order.ID)
+	if err != nil || before[0].Status != "failed" || before[1].Status != "done" {
+		t.Fatal(before, err)
+	}
+	if _, err = a.db.Exec("UPDATE deliveries SET content=? WHERE id=?", snapshot, entries[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	g.mu.Lock()
+	g.queryStatus = http.StatusServiceUnavailable
+	g.mu.Unlock()
+	admin := adminSessionRequest(t, a)
+	for range 2 {
+		if response := admin("POST", "/api/admin/orders/"+order.ID+"/retry", "{}"); response.Code != 200 {
 			t.Fatal(response.Body)
 		}
-		return &detail.Order
 	}
-	var deliveryID string
-	if err = a.db.QueryRow("SELECT id FROM deliveries WHERE order_id=? AND ordinal=1", o.ID).Scan(&deliveryID); err != nil {
+	after, err := a.deliveryResults(context.Background(), order.ID)
+	if err != nil || after[0].Status != "done" || after[1].Status != "done" || deliveryText(after[1].Content) != deliveryText(before[1].Content) {
+		t.Fatal("重试更改已完成结果", after, err)
+	}
+	var sold, allocations int
+	if err = a.db.QueryRow("SELECT COUNT(*) FROM stock_items WHERE status='sold'").Scan(&sold); err != nil {
 		t.Fatal(err)
 	}
-	fulfill := func(id, content string) int {
-		body, err := json.Marshal(map[string]string{"delivery_id": id, "content": content})
-		if err != nil {
-			t.Fatal(err)
+	if err = a.db.QueryRow("SELECT COUNT(*) FROM delivery_allocations").Scan(&allocations); err != nil {
+		t.Fatal(err)
+	}
+	if sold != 2 || allocations != 2 {
+		t.Fatal("重试重复分配库存", sold, allocations)
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.queries != 0 {
+		t.Fatal("交付重试依赖支付网关")
+	}
+}
+
+func TestManualRecoveryIsAtomicIdempotentAndScoped(t *testing.T) {
+	a, _ := newTestApp(t)
+	product := insertProduct(t, a, "card", 3)
+	order, _ := reserve(t, a, product, 2)
+	other, _ := reserve(t, a, product, 1)
+	entries, err := a.deliveryMetadata(context.Background(), order.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	others, err := a.deliveryMetadata(context.Background(), other.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin := adminSessionRequest(t, a)
+	fulfill := func(id, text string) int {
+		body, e := json.Marshal(map[string]any{"delivery_id": id, "content": testDocument(text)})
+		if e != nil {
+			t.Fatal(e)
 		}
-		return admin("POST", "/api/admin/orders/"+o.ID+"/fulfill", string(body)).Code
+		return admin("POST", "/api/admin/orders/"+order.ID+"/fulfill", string(body)).Code
 	}
-	if fulfill(deliveryID, "未付款发货") != 400 {
-		t.Fatal("未付款订单允许发货")
+	if fulfill(entries[0].ID, "补交") != 400 {
+		t.Fatal("未付款订单允许补交")
 	}
-	syncPaid(t, a, gateway, o)
-	if got := lookup(); got.DeliveryStatus != "manual" || got.BuyerNote != input.BuyerNote || got.DeliveryNote != o.DeliveryNote {
-		t.Fatal("人工订单状态或快照无效", got)
-	}
-	if response := admin("PUT", "/api/admin/products/"+p.ID, `{"name":"改名","price":200,"currency":"CNY","active":false,"delivery_note":"新说明"}`); response.Code != 200 {
-		t.Fatal(response.Body)
-	}
-	if fulfill(deliveryID, "首份已完成\n凭证-001") != 200 || fulfill(deliveryID, "首份已完成\n凭证-001") != 200 || fulfill(deliveryID, "覆盖内容") != 409 {
-		t.Fatal("人工交付未保持幂等与不可覆盖")
-	}
-	if got := lookup(); got.DeliveryStatus != "manual" || got.ProductName != "人工充值" || got.DeliveryNote != o.DeliveryNote {
-		t.Fatal("部分交付或商品快照被改变", got)
-	}
-	if err = a.db.QueryRow("SELECT id FROM deliveries WHERE order_id=? AND ordinal=2", o.ID).Scan(&deliveryID); err != nil {
+	if err = a.markPaid(context.Background(), order.ID); err != nil {
 		t.Fatal(err)
 	}
-	if fulfill(deliveryID, "第二份已完成") != 200 {
-		t.Fatal("无法完成剩余交付")
+	if fulfill(others[0].ID, "越权") != 404 {
+		t.Fatal("可补交其他订单")
 	}
-	if got := lookup(); got.DeliveryStatus != "done" || got.ReservationStatus != "consumed" {
-		t.Fatal("完成状态未收敛", got)
+	if fulfill(entries[0].ID, "第一份") != 200 || fulfill(entries[0].ID, "第一份") != 200 || fulfill(entries[0].ID, "覆盖") != 409 {
+		t.Fatal("补交未保持幂等及不可覆盖")
 	}
-	results, err := a.deliveryResults(context.Background(), o.ID)
-	if err != nil || len(results) != 2 || results[0].Content != "首份已完成\n凭证-001" || results[1].Content != "第二份已完成" {
-		t.Fatal("领取内容不正确", results, err)
+	got, err := a.loadOrder(context.Background(), order.ID)
+	if err != nil || got.DeliveryStatus != "partial" {
+		t.Fatal(got, err)
 	}
-	var stocks int
-	if err = a.db.QueryRow("SELECT COUNT(*) FROM stock_items").Scan(&stocks); err != nil || stocks != 0 {
-		t.Fatal("人工订单错误占用了库存", stocks, err)
+	if fulfill(entries[1].ID, "第二份") != 200 {
+		t.Fatal("剩余内容不能补交")
+	}
+	var available, reserved int
+	if err = a.db.QueryRow("SELECT SUM(status='available'),SUM(status='reserved') FROM stock_items").Scan(&available, &reserved); err != nil || available != 2 || reserved != 1 {
+		t.Fatal("补交未归还预留或影响了其他订单", available, reserved, err)
+	}
+	got, err = a.loadOrder(context.Background(), order.ID)
+	if err != nil || got.DeliveryStatus != "done" || got.ReservationStatus != "consumed" {
+		t.Fatal(got, err)
 	}
 }
 
 func TestVerifiedPaymentCannotRegressBeforeDelivery(t *testing.T) {
 	a, g := newTestApp(t)
-	o, _ := reserve(t, a, insertProduct(t, a, "card", 1), 1)
-	if err := a.syncOrder(context.Background(), o.ID); err != nil {
+	order, _ := reserve(t, a, insertProduct(t, a, "card", 1), 1)
+	if err := a.syncOrder(context.Background(), order.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := a.markPaid(context.Background(), o.ID); err != nil {
+	if err := a.markPaid(context.Background(), order.ID); err != nil {
 		t.Fatal(err)
 	}
-	g.set(o.ID, "invalid", "")
-	if err := a.syncOrder(context.Background(), o.ID); err != nil {
-		t.Fatal("已核验的订单因网关状态回退而无法交付", err)
+	g.set(order.ID, "invalid", "")
+	if err := a.syncOrder(context.Background(), order.ID); err != nil {
+		t.Fatal(err)
 	}
-	got, err := a.loadOrder(context.Background(), o.ID)
+	got, err := a.loadOrder(context.Background(), order.ID)
 	if err != nil || got.PaymentStatus != "paid" || got.DeliveryStatus != "done" {
-		t.Fatal("已核验付款回退或未完成交付", got, err)
+		t.Fatal("已核验付款回退", got, err)
 	}
 }
 
-func TestManualRecoveryReleasesReservationAndRejectsOtherOrderItems(t *testing.T) {
-	a, _ := newTestApp(t)
-	p := insertProduct(t, a, "card", 2)
-	o, _ := reserve(t, a, p, 1)
-	other, _ := reserve(t, a, p, 1)
-	if err := a.markPaid(context.Background(), o.ID); err != nil {
+func TestPaidSchedulerDoesNotDependOnGateway(t *testing.T) {
+	a, g := newTestApp(t)
+	order, _ := reserve(t, a, insertProduct(t, a, "card", 1), 1)
+	if err := a.markPaid(context.Background(), order.ID); err != nil {
 		t.Fatal(err)
 	}
-	admin := adminSessionRequest(t, a)
-	var id string
-	if err := a.db.QueryRow("SELECT id FROM deliveries WHERE order_id=?", other.ID).Scan(&id); err != nil {
-		t.Fatal(err)
+	g.mu.Lock()
+	g.queryStatus = 503
+	g.mu.Unlock()
+	a.runPending(context.Background())
+	got, err := a.loadOrder(context.Background(), order.ID)
+	if err != nil || got.DeliveryStatus != "done" {
+		t.Fatal("网关故障阻塞本地交付", got, err)
 	}
-	response := admin("POST", "/api/admin/orders/"+o.ID+"/fulfill", `{"delivery_id":"`+id+`","content":"补交内容"}`)
-	if response.Code != http.StatusNotFound {
-		t.Fatal("可以修改其他订单的交付", response.Body)
-	}
-	if err := a.db.QueryRow("SELECT id FROM deliveries WHERE order_id=?", o.ID).Scan(&id); err != nil {
-		t.Fatal(err)
-	}
-	response = admin("POST", "/api/admin/orders/"+o.ID+"/fulfill", `{"delivery_id":"`+id+`","content":"补交内容"}`)
-	if response.Code != 200 {
-		t.Fatal(response.Body)
-	}
-	var available, reserved int
-	if err := a.db.QueryRow("SELECT SUM(status='available'),SUM(status='reserved') FROM stock_items").Scan(&available, &reserved); err != nil || available != 1 || reserved != 1 {
-		t.Fatal("补交没有归还原预留或影响了其他订单", available, reserved, err)
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.queries != 0 {
+		t.Fatal("已付款调度仍访问网关")
 	}
 }

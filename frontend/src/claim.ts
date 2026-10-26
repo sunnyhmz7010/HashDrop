@@ -60,7 +60,7 @@ function readOrderHistory(): SavedOrder[] {
 export const orderHistory = ref<SavedOrder[]>(readOrderHistory());
 
 export function rememberOrder(order: Order, key: string): boolean {
-  const record = { key, order: { ...order, buyer_note: undefined } };
+  const record = { key, order: { ...order } };
   // 每笔订单独立写入，避免不同标签页下单时互相覆盖整份历史。
   orderHistory.value = [
     record,
@@ -158,7 +158,6 @@ export interface PurchaseIntent {
   quantity: number;
   key: string;
   couponCode?: string;
-  buyerNote?: string;
   quote?: OrderQuote;
 }
 const pendingPurchase = ref<PurchaseIntent>();

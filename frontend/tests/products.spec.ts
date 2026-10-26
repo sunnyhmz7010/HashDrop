@@ -1,3 +1,4 @@
+import { claimContents } from "./fixture";
 import {
   test,
   expect,
@@ -121,7 +122,7 @@ test("Markdown 详情保存、图片视频展示与首页直接下单", async ({
   const pool = await createInventory(
     page,
     "Markdown 交付库存",
-    "static",
+    true,
     "测试交付内容",
   );
   await page.getByRole("menuitem", { name: "商品", exact: true }).click();
@@ -402,8 +403,11 @@ test("隐藏商品通过链接购买，取消隐藏后恢复首页入口", async
     (await request.post(`${base}/__test/pay/${orderID}`)).ok(),
   ).toBeTruthy();
   await page.reload();
-  await expect(page.locator(".delivery-item pre")).toHaveCount(2);
-  for (const result of await page.locator(".delivery-item pre").all()) {
+  await claimContents(page);
+  await expect(page.locator(".delivery-item .markdown-content")).toHaveCount(2);
+  for (const result of await page
+    .locator(".delivery-item .markdown-content")
+    .all()) {
     await expect(result).toContainText("HIDDEN-");
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -474,7 +478,10 @@ test("删除商品保留订单和领取，失败可重试", async ({ page, reque
         (await request.post(`${base}/__test/pay/${receipt.id}`)).ok(),
       ).toBeTruthy();
       await page.reload();
-      await expect(page.locator(".delivery-item pre")).toContainText("DELETE-");
+      await claimContents(page);
+      await expect(
+        page.locator(".delivery-item .markdown-content"),
+      ).toContainText("DELETE-");
     }
   }
   await page.goto(`${base}/center/products`);
@@ -557,7 +564,10 @@ test("删除商品保留订单和领取，失败可重试", async ({ page, reque
   ).toBeTruthy();
   for (const receipt of receipts) {
     await page.goto(receipt.url);
-    await expect(page.locator(".delivery-item pre")).toContainText("DELETE-");
+    await claimContents(page);
+    await expect(
+      page.locator(".delivery-item .markdown-content"),
+    ).toContainText("DELETE-");
   }
   await page.goto(`${base}/center/orders`);
   for (const receipt of receipts) {

@@ -24,9 +24,9 @@ func TestDatabaseInitializesAndReopens(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err = db.Exec(`
-INSERT INTO products(id,name,price,currency,inventory_strategy,active,created_at,updated_at) VALUES('saved-product','已保存商品',100,'CNY','newest',1,1,1);
-INSERT INTO inventories(id,name,kind,created_at,updated_at) VALUES('saved-pool','已保存库存池','card',1,1);
-INSERT INTO inventory_products(inventory_id,product_id,created_at) VALUES('saved-pool','saved-product',1);`); err != nil {
+INSERT INTO products(id,name,price,currency,inventory_strategy,delivery_plan,active,created_at,updated_at) VALUES('saved-product','已保存商品',100,'CNY','newest','encrypted-fixture',1,1,1);
+INSERT INTO inventories(id,name,reusable,created_at,updated_at) VALUES('saved-pool','已保存库存池',0,1,1);
+INSERT INTO inventory_products(inventory_id,product_id,slot_id,created_at) VALUES('saved-pool','saved-product','license',1);`); err != nil {
 		t.Fatal("新建数据库不能保存商品分配策略或库存绑定", err)
 	}
 	if err = db.Close(); err != nil {
@@ -38,7 +38,7 @@ INSERT INTO inventory_products(inventory_id,product_id,created_at) VALUES('saved
 	}
 	defer db.Close()
 	var version, foreignKeys, sessions int
-	if err = db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 6 {
+	if err = db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 7 {
 		t.Fatal("数据库初始化版本无效", err)
 	}
 	if err = db.QueryRow("PRAGMA foreign_keys").Scan(&foreignKeys); err != nil || foreignKeys != 1 {
@@ -51,14 +51,14 @@ INSERT INTO inventory_products(inventory_id,product_id,created_at) VALUES('saved
 	if err != nil || settings.Title != "已保存的标题" {
 		t.Fatal("重新打开数据库重置了已保存的设置", err)
 	}
-	product, err := scanProduct(db.QueryRow(productSelect + " WHERE p.id='saved-product'"))
-	if err != nil || product.InventoryStrategy != "newest" || product.InventoryCount != 1 || product.Kind != "card" {
-		t.Fatal("重新打开数据库后丢失商品分配策略或库存绑定", product, err)
+	var strategy, slot string
+	if err = db.QueryRow("SELECT p.inventory_strategy,ip.slot_id FROM products p JOIN inventory_products ip ON ip.product_id=p.id WHERE p.id='saved-product'").Scan(&strategy, &slot); err != nil || strategy != "newest" || slot != "license" {
+		t.Fatal("重新打开数据库后丢失商品分配策略或库存绑定", strategy, slot, err)
 	}
-	if _, err = db.Exec("INSERT INTO inventory_products(inventory_id,product_id,created_at) VALUES('missing','saved-product',1)"); err == nil {
+	if _, err = db.Exec("INSERT INTO inventory_products(inventory_id,product_id,slot_id,created_at) VALUES('missing','saved-product','license',1)"); err == nil {
 		t.Fatal("数据库接受了不存在的库存池")
 	}
-	if _, err = db.Exec("INSERT INTO inventory_products(inventory_id,product_id,created_at) VALUES('saved-pool','missing',1)"); err == nil {
+	if _, err = db.Exec("INSERT INTO inventory_products(inventory_id,product_id,slot_id,created_at) VALUES('saved-pool','missing','license',1)"); err == nil {
 		t.Fatal("数据库接受了不存在的商品绑定")
 	}
 }
@@ -92,7 +92,7 @@ func TestDatabaseInitializationRollsBackOnFailure(t *testing.T) {
 }
 
 func TestDatabaseRejectsOtherVersionsWithoutChangingRecords(t *testing.T) {
-	for _, version := range []int{1, 2, 3, 4, 5, 7} {
+	for _, version := range []int{1, 2, 3, 4, 5, 6, 8} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "unsupported.db")
 			db, err := sql.Open("sqlite", databaseURI(path))

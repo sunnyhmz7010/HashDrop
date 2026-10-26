@@ -7,18 +7,22 @@ import {
   NInput,
   NSelect,
   NSkeleton,
+  NSwitch,
   useDialog,
   useMessage,
 } from "naive-ui";
 import {
   api,
   errorText,
-  kindNames,
+  type ContentDocument,
   type Inventory,
   type Product,
 } from "../api";
 import { t } from "../i18n";
 import FormDialog from "./FormDialog.vue";
+import ContentEditor from "./ContentEditor.vue";
+import ContentView from "./ContentView.vue";
+import { textContent, hasContent } from "../content";
 
 const message = useMessage(),
   dialog = useDialog();
@@ -34,24 +38,26 @@ const deleting = ref("");
 const model = reactive({
   id: "",
   name: "",
-  kind: "card",
-  static_content: "",
-  product_ids: [] as string[],
+  reusable: false,
+  bindingKeys: [] as string[],
 });
 const productOptions = computed(() =>
-  products.value
-    .filter((product) => product.delivery_mode === "automatic")
-    .map((product) => ({
-      value: product.id,
-      label: `${product.name} · ${product.id.slice(0, 6)}`,
-    })),
+  products.value.flatMap((product) =>
+    (product.delivery_plan?.blocks ?? [])
+      .filter((block) => block.type === "stock")
+      .map((block) => ({
+        value: `${product.id}:${block.id}`,
+        label: `${product.name} · ${block.label || t("content.stock")} × ${block.quantity || 1}`,
+      })),
+  ),
 );
-const kinds = computed(() =>
-  ["card", "account", "static"].map((value) => ({
-    value,
-    label: kindNames.value[value]!,
-  })),
-);
+function bindingLabel(productID: string, slotID: string) {
+  const product = products.value.find((item) => item.id === productID);
+  const slot = product?.delivery_plan?.blocks.find(
+    (item) => item.id === slotID,
+  );
+  return `${product?.name ?? productID} · ${slot?.label || slotID}`;
+}
 const stockNames = computed<Record<string, string>>(() => ({
   available: t("stock.available"),
   reserved: t("stock.reserved"),
@@ -92,9 +98,9 @@ function edit(pool?: Inventory) {
   Object.assign(model, {
     id: pool?.id ?? "",
     name: pool?.name ?? "",
-    kind: pool?.kind ?? "card",
-    static_content: "",
-    product_ids: [...(pool?.product_ids ?? [])],
+    reusable: pool?.reusable ?? false,
+    bindingKeys:
+      pool?.bindings.map((item) => `${item.product_id}:${item.slot_id}`) ?? [],
   });
   formError.value = "";
   editor.value = true;
@@ -110,9 +116,13 @@ async function save() {
         method: model.id ? "PUT" : "POST",
         body: {
           name: model.name,
-          kind: model.kind,
-          static_content: model.kind === "static" ? model.static_content : "",
-          product_ids: model.product_ids,
+          reusable: model.reusable,
+          bindings: model.bindingKeys.map((key) => {
+            const separator = key.indexOf(":");
+            const product_id = key.slice(0, separator),
+              slot_id = key.slice(separator + 1);
+            return { product_id, slot_id };
+          }),
         },
       },
     );
@@ -125,7 +135,6 @@ async function save() {
       ? inventories.value.map((item) => (item.id === saved.id ? saved : item))
       : [saved, ...inventories.value];
     editor.value = false;
-    model.static_content = "";
     message.success(t("inventory.saved"));
   } catch (e) {
     formError.value = errorText(e);
@@ -175,14 +184,19 @@ const stockPool = ref<Inventory>(),
   importBusy = ref(false);
 const stockText = ref(""),
   importError = ref("");
-function importFor(pool: Inventory) {
+const importMode = ref<"batch" | "document">("batch");
+const stockDocument = ref<ContentDocument>(textContent());
+const contentUploading = ref(false);
+function importFor(pool: Inventory, mode: "batch" | "document" = "batch") {
+  importMode.value = mode;
+  stockDocument.value = textContent();
   stockPool.value = pool;
   stockText.value = "";
   importError.value = "";
   importing.value = true;
 }
 async function importItems() {
-  if (importBusy.value || !stockPool.value) return;
+  if (importBusy.value || contentUploading.value || !stockPool.value) return;
   const id = stockPool.value.id;
   importBusy.value = true;
   importError.value = "";
@@ -191,7 +205,16 @@ async function importItems() {
       `/admin/inventories/${id}/stock`,
       {
         method: "POST",
-        body: { content: stockText.value },
+        body: {
+          items:
+            importMode.value === "document"
+              ? [stockDocument.value]
+              : stockText.value
+                  .split(/\r?\n/)
+                  .map((line) => line.trim())
+                  .filter(Boolean)
+                  .map(textContent),
+        },
       },
     );
     importing.value = false;
@@ -210,8 +233,15 @@ const stockDialog = ref(false),
   stockError = ref("");
 const stockDeleting = ref("");
 const stockItems = ref<
-  { id: string; status: string; order_id: string; created_at: number }[]
+  {
+    id: string;
+    content: ContentDocument;
+    status: string;
+    order_id: string;
+    created_at: number;
+  }[]
 >([]);
+const expandedStock = ref("");
 let stockGeneration = 0;
 let stockController: AbortController | undefined;
 function cancelStock() {
@@ -312,7 +342,7 @@ function removeStock(id: string) {
           <thead>
             <tr>
               <th>{{ t("inventory.name") }}</th>
-              <th>{{ t("inventory.delivery_type") }}</th>
+              <th>{{ t("content.distribution") }}</th>
               <th>{{ t("stock.summary") }}</th>
               <th>{{ t("inventory.products") }}</th>
               <th>{{ t("common.actions") }}</th>
@@ -329,25 +359,19 @@ function removeStock(id: string) {
                 {{ pool.name
                 }}<small class="muted code-cell">{{ pool.id }}</small>
               </td>
-              <td>{{ kindNames[pool.kind] }}</td>
               <td>
                 {{
-                  pool.kind === "static"
-                    ? pool.has_content
-                      ? t("stock.not_consumed")
-                      : t("inventory.content_missing")
-                    : `${pool.available} / ${pool.reserved} / ${pool.sold}`
+                  t(pool.reusable ? "content.reusable" : "content.single_use")
                 }}
               </td>
               <td>
+                {{ `${pool.available} / ${pool.reserved} / ${pool.sold}` }}
+              </td>
+              <td>
                 {{ t("inventory.shared_count", { count: pool.product_count }) }}
-                <small v-if="pool.product_ids.length" class="muted code-cell">{{
-                  pool.product_ids
-                    .map(
-                      (id) =>
-                        products.find((product) => product.id === id)?.name ??
-                        id,
-                    )
+                <small v-if="pool.bindings.length" class="muted code-cell">{{
+                  pool.bindings
+                    .map((item) => bindingLabel(item.product_id, item.slot_id))
                     .join("、")
                 }}</small>
               </td>
@@ -359,20 +383,24 @@ function removeStock(id: string) {
                     @click="edit(pool)"
                     >{{ t("common.edit") }}</n-button
                   >
-                  <template v-if="pool.kind !== 'static'">
-                    <n-button
-                      size="small"
-                      :disabled="!!deleting"
-                      @click="importFor(pool)"
-                      >{{ t("common.import") }}</n-button
-                    >
-                    <n-button
-                      size="small"
-                      :disabled="!!deleting"
-                      @click="viewStock(pool)"
-                      >{{ t("stock.label") }}</n-button
-                    >
-                  </template>
+                  <n-button
+                    size="small"
+                    :disabled="!!deleting"
+                    @click="importFor(pool, 'document')"
+                    >{{ t("content.add_item") }}</n-button
+                  >
+                  <n-button
+                    size="small"
+                    :disabled="!!deleting"
+                    @click="importFor(pool)"
+                    >{{ t("common.import") }}</n-button
+                  >
+                  <n-button
+                    size="small"
+                    :disabled="!!deleting"
+                    @click="viewStock(pool)"
+                    >{{ t("stock.label") }}</n-button
+                  >
                   <span
                     :title="
                       pool.product_count || pool.reserved
@@ -424,16 +452,16 @@ function removeStock(id: string) {
           />
         </div>
         <div>
-          <label class="field-label" for="inventory-kind">{{
-            t("inventory.delivery_type")
+          <label class="field-label" for="inventory-reusable">{{
+            t("content.reusable")
           }}</label>
-          <n-select
-            id="inventory-kind"
-            v-model:value="model.kind"
-            :options="kinds"
-            :disabled="!!model.id"
+          <n-switch
+            id="inventory-reusable"
+            v-model:value="model.reusable"
+            :disabled="saving"
+            :aria-label="t('content.reusable')"
           />
-          <p class="helper">{{ t("inventory.kind_help") }}</p>
+          <p class="helper">{{ t("content.reusable_help") }}</p>
         </div>
         <div>
           <label class="field-label" for="inventory-products">{{
@@ -441,7 +469,7 @@ function removeStock(id: string) {
           }}</label>
           <n-select
             id="inventory-products"
-            v-model:value="model.product_ids"
+            v-model:value="model.bindingKeys"
             :options="productOptions"
             :placeholder="t('inventory.select_products')"
             multiple
@@ -450,23 +478,6 @@ function removeStock(id: string) {
             :disabled="saving"
           />
           <p class="helper">{{ t("inventory.products_help") }}</p>
-        </div>
-        <div v-if="model.kind === 'static'">
-          <label class="field-label" for="static-content">{{
-            t("inventory.static_content")
-          }}</label>
-          <n-input
-            id="static-content"
-            v-model:value="model.static_content"
-            type="textarea"
-            :maxlength="65536"
-            :autosize="{ minRows: 8, maxRows: 18 }"
-            :placeholder="
-              model.id
-                ? t('inventory.static_keep')
-                : t('inventory.static_placeholder')
-            "
-          />
         </div>
       </div>
       <n-alert v-if="formError" type="error" class="space-top">{{
@@ -490,10 +501,19 @@ function removeStock(id: string) {
   <FormDialog
     v-model:show="importing"
     :title="t('stock.import_title', { name: stockPool?.name ?? '' })"
-    :busy="importBusy"
+    :busy="importBusy || contentUploading"
   >
-    <p class="muted">{{ t("stock.import_help") }}</p>
+    <p v-if="importMode === 'batch'" class="muted">
+      {{ t("stock.import_help") }}
+    </p>
+    <ContentEditor
+      v-if="importMode === 'document'"
+      v-model="stockDocument"
+      :disabled="importBusy"
+      @busy="contentUploading = $event"
+    />
     <n-input
+      v-else
       v-model:value="stockText"
       type="textarea"
       :autosize="{ minRows: 8, maxRows: 18 }"
@@ -504,12 +524,21 @@ function removeStock(id: string) {
       errorText(importError)
     }}</n-alert>
     <template #footer>
-      <n-button :disabled="importBusy" @click="importing = false">{{
-        t("common.cancel")
-      }}</n-button>
-      <n-button type="primary" :loading="importBusy" @click="importItems">{{
-        t("stock.import")
-      }}</n-button>
+      <n-button
+        :disabled="importBusy || contentUploading"
+        @click="importing = false"
+        >{{ t("common.cancel") }}</n-button
+      >
+      <n-button
+        type="primary"
+        :loading="importBusy"
+        :disabled="
+          contentUploading ||
+          (importMode === 'document' && !hasContent(stockDocument))
+        "
+        @click="importItems"
+        >{{ t("stock.import") }}</n-button
+      >
     </template>
   </FormDialog>
 
@@ -543,22 +572,33 @@ function removeStock(id: string) {
                 <td v-for="column in 3" :key="column"><n-skeleton text /></td>
               </tr>
             </template>
-            <tr v-for="item in stockItems" :key="item.id">
-              <td class="code-cell">{{ item.id }}</td>
-              <td>{{ stockNames[item.status] }}</td>
-              <td>
-                <n-button
-                  v-if="item.status === 'available'"
-                  size="small"
-                  type="error"
-                  secondary
-                  :disabled="!!stockDeleting"
-                  :loading="stockDeleting === item.id"
-                  @click="removeStock(item.id)"
-                  >{{ t("common.delete") }}</n-button
-                >
-              </td>
-            </tr>
+            <template v-for="item in stockItems" :key="item.id"
+              ><tr>
+                <td class="code-cell">{{ item.id }}</td>
+                <td>{{ stockNames[item.status] }}</td>
+                <td>
+                  <n-button
+                    size="small"
+                    @click="
+                      expandedStock = expandedStock === item.id ? '' : item.id
+                    "
+                    >{{ t("content.view") }}</n-button
+                  >
+                  <n-button
+                    v-if="item.status === 'available'"
+                    size="small"
+                    type="error"
+                    secondary
+                    :disabled="!!stockDeleting"
+                    :loading="stockDeleting === item.id"
+                    @click="removeStock(item.id)"
+                    >{{ t("common.delete") }}</n-button
+                  >
+                </td>
+              </tr>
+              <tr v-if="expandedStock === item.id">
+                <td colspan="3"><ContentView :content="item.content" /></td></tr
+            ></template>
           </tbody>
         </table>
       </div>

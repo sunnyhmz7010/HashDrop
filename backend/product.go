@@ -9,75 +9,105 @@ import (
 )
 
 type Product struct {
-	ID                string `json:"id"`
-	Name              string `json:"name"`
-	Description       string `json:"description"`
-	Details           string `json:"details"`
-	Price             int64  `json:"price"`
-	SalePrice         *int64 `json:"sale_price,omitempty"`
-	OfferName         string `json:"offer_name,omitempty"`
-	Currency          string `json:"currency"`
-	InventoryStrategy string `json:"inventory_strategy"`
-	InventoryCount    int    `json:"inventory_count"`
-	StockUnlimited    bool   `json:"stock_unlimited"`
-	DeliveryMode      string `json:"delivery_mode"`
-	DeliveryNote      string `json:"delivery_note"`
-	BuyerNoteLabel    string `json:"buyer_note_label"`
-	BuyerNoteRequired bool   `json:"buyer_note_required"`
-	MinQuantity       int    `json:"min_quantity"`
-	MaxQuantity       int    `json:"max_quantity"`
-	// 多种交付类型共享一个商品时标为 mixed，实际交付按每份库存快照处理。
-	Kind      string `json:"kind"`
-	Active    bool   `json:"active"`
-	Hidden    bool   `json:"hidden"`
-	Available int    `json:"available"`
-	Reserved  int    `json:"reserved"`
-	Sold      int    `json:"sold"`
-	UpdatedAt int64  `json:"updated_at"`
+	ID                string           `json:"id"`
+	Name              string           `json:"name"`
+	Description       string           `json:"description"`
+	Details           string           `json:"details"`
+	Price             int64            `json:"price"`
+	SalePrice         *int64           `json:"sale_price,omitempty"`
+	OfferName         string           `json:"offer_name,omitempty"`
+	Currency          string           `json:"currency"`
+	InventoryStrategy string           `json:"inventory_strategy"`
+	InventoryCount    int              `json:"inventory_count"`
+	StockUnlimited    bool             `json:"stock_unlimited"`
+	DeliveryPlan      *ContentDocument `json:"delivery_plan,omitempty"`
+	DeliveryNote      string           `json:"delivery_note"`
+	MinQuantity       int              `json:"min_quantity"`
+	MaxQuantity       int              `json:"max_quantity"`
+	Active            bool             `json:"active"`
+	Hidden            bool             `json:"hidden"`
+	Available         int              `json:"available"`
+	Reserved          int              `json:"reserved"`
+	Sold              int              `json:"sold"`
+	UpdatedAt         int64            `json:"updated_at"`
+	planCipher        string
 }
 
 const productSelect = `SELECT p.id,p.name,p.description,p.details,p.price,p.currency,
- CASE WHEN p.delivery_mode='manual' THEN 'manual' ELSE COALESCE(b.kind,'') END,p.active,p.hidden,p.updated_at,
- COALESCE(b.available,0),COALESCE(b.reserved,0),COALESCE(b.sold,0),p.inventory_strategy,COALESCE(b.pool_count,0),COALESCE(b.unlimited,0),
- p.delivery_mode,p.delivery_note,p.buyer_note_label,p.buyer_note_required,p.min_quantity,p.max_quantity
- FROM products p LEFT JOIN (
- SELECT ip.product_id,COUNT(*) pool_count,CASE WHEN COUNT(DISTINCT i.kind)=1 THEN MAX(i.kind) ELSE 'mixed' END kind,
- MAX(i.kind='static' AND i.content<>'') unlimited,
- SUM(COALESCE(s.available,0)) available,SUM(COALESCE(s.reserved,0)) reserved,SUM(COALESCE(s.sold,0)) sold
- FROM inventory_products ip JOIN inventories i ON i.id=ip.inventory_id AND i.deleted_at IS NULL
- LEFT JOIN (SELECT inventory_id,SUM(status='available') available,SUM(status='reserved') reserved,SUM(status='sold') sold FROM stock_items GROUP BY inventory_id) s ON s.inventory_id=i.id
- GROUP BY ip.product_id
- ) b ON b.product_id=p.id AND p.delivery_mode='automatic'`
+ p.active,p.hidden,p.updated_at,p.inventory_strategy,p.delivery_plan,p.delivery_note,p.min_quantity,p.max_quantity FROM products p`
 
 type scanner interface{ Scan(...any) error }
 
 func scanProduct(row scanner) (Product, error) {
 	var p Product
-	err := row.Scan(&p.ID, &p.Name, &p.Description, &p.Details, &p.Price, &p.Currency, &p.Kind, &p.Active, &p.Hidden, &p.UpdatedAt, &p.Available, &p.Reserved, &p.Sold, &p.InventoryStrategy, &p.InventoryCount, &p.StockUnlimited, &p.DeliveryMode, &p.DeliveryNote, &p.BuyerNoteLabel, &p.BuyerNoteRequired, &p.MinQuantity, &p.MaxQuantity)
+	err := row.Scan(&p.ID, &p.Name, &p.Description, &p.Details, &p.Price, &p.Currency, &p.Active, &p.Hidden, &p.UpdatedAt, &p.InventoryStrategy, &p.planCipher, &p.DeliveryNote, &p.MinQuantity, &p.MaxQuantity)
 	return p, err
 }
+
+// 查询与下单共用同一份计划和容量计算；传入 tx 时不占用第二条连接。
+func (a *App) hydrateProduct(ctx context.Context, q inventoryQuerier, p *Product) error {
+	plain, err := a.vault.decrypt(p.planCipher, "product-plan:"+p.ID)
+	if err != nil {
+		return err
+	}
+	doc, err := decodeContent(plain)
+	if err != nil {
+		return err
+	}
+	p.DeliveryPlan = &doc
+	catalog, err := loadInventoryCatalog(ctx, q, *p)
+	if err != nil {
+		return err
+	}
+	p.InventoryCount = len(catalog.pools)
+	p.Reserved, p.Sold = 0, 0
+	upper := 0
+	for _, pool := range catalog.pools {
+		p.Reserved += pool.reserved
+		p.Sold += pool.sold
+		upper += pool.available
+	}
+	p.StockUnlimited = true
+	for _, need := range catalog.needs {
+		unlimited := false
+		for _, id := range need.pools {
+			pool := catalog.pools[id]
+			unlimited = unlimited || pool.reusable && pool.available > 0
+		}
+		p.StockUnlimited = p.StockUnlimited && unlimited
+	}
+	p.Available = 0
+	if !p.StockUnlimited {
+		// 共享池使逐项取 min 得到虚高库存；与实际分配使用相同的容量匹配。
+		lo, hi := 0, upper
+		for lo < hi {
+			mid := lo + (hi-lo+1)/2
+			if _, ok := matchInventory(catalog, mid); ok {
+				lo = mid
+			} else {
+				hi = mid - 1
+			}
+		}
+		p.Available = lo
+	}
+	return nil
+}
+
 func (a *App) products(active bool) ([]Product, error) {
 	q := productSelect + " WHERE p.deleted_at IS NULL"
 	if active {
-		// 隐藏仅控制商城列表，直接访问详情和下单仍按上架状态判断。
 		q += " AND p.active=1 AND p.hidden=0"
 	}
-	q += " ORDER BY p.created_at DESC"
-	rows, err := a.db.Query(q)
+	rows, err := a.db.Query(q + " ORDER BY p.created_at DESC,p.id")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	result := []Product{}
 	for rows.Next() {
-		p, e := scanProduct(rows)
-		if e != nil {
-			return nil, e
-		}
-		if active {
-			p.Details = "" // 商城卡片只需简介，详细内容在打开商品时读取。
-			p.Reserved = 0
-			p.Sold = 0
+		p, err := scanProduct(rows)
+		if err != nil {
+			return nil, err
 		}
 		result = append(result, p)
 	}
@@ -86,9 +116,14 @@ func (a *App) products(active bool) ([]Product, error) {
 	if err != nil {
 		return nil, err
 	}
-	if active {
-		for i := range result {
-			if err = a.productOffer(context.Background(), &result[i]); err != nil {
+	for i := range result {
+		p := &result[i]
+		if err = a.hydrateProduct(context.Background(), a.db, p); err != nil {
+			return nil, err
+		}
+		if active {
+			p.Details, p.DeliveryPlan, p.Reserved, p.Sold = "", nil, 0, 0
+			if err = a.productOffer(context.Background(), p); err != nil {
 				return nil, err
 			}
 		}
@@ -124,15 +159,17 @@ func (a *App) adminProducts(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 func (a *App) productDetail(w http.ResponseWriter, r *http.Request) error {
-	p, err := scanProduct(a.db.QueryRow(productSelect+" WHERE p.id=? AND p.active=1 AND p.deleted_at IS NULL", r.PathValue("id")))
+	p, err := scanProduct(a.db.QueryRowContext(r.Context(), productSelect+" WHERE p.id=? AND p.active=1 AND p.deleted_at IS NULL", r.PathValue("id")))
 	if err == sql.ErrNoRows {
 		return &apiError{404, "商品不存在或已下架"}
 	}
 	if err != nil {
 		return err
 	}
-	p.Reserved = 0
-	p.Sold = 0
+	if err = a.hydrateProduct(r.Context(), a.db, &p); err != nil {
+		return err
+	}
+	p.DeliveryPlan, p.Reserved, p.Sold = nil, 0, 0
 	if err = a.productOffer(r.Context(), &p); err != nil {
 		return err
 	}
@@ -141,20 +178,18 @@ func (a *App) productDetail(w http.ResponseWriter, r *http.Request) error {
 }
 
 type productInput struct {
-	Name              string  `json:"name"`
-	Description       string  `json:"description"`
-	Details           *string `json:"details"`
-	Price             int64   `json:"price"`
-	Currency          string  `json:"currency"`
-	InventoryStrategy *string `json:"inventory_strategy"`
-	Active            bool    `json:"active"`
-	Hidden            *bool   `json:"hidden"`
-	DeliveryMode      *string `json:"delivery_mode"`
-	DeliveryNote      *string `json:"delivery_note"`
-	BuyerNoteLabel    *string `json:"buyer_note_label"`
-	BuyerNoteRequired *bool   `json:"buyer_note_required"`
-	MinQuantity       *int    `json:"min_quantity"`
-	MaxQuantity       *int    `json:"max_quantity"`
+	Name              string           `json:"name"`
+	Description       string           `json:"description"`
+	Details           *string          `json:"details"`
+	Price             int64            `json:"price"`
+	Currency          string           `json:"currency"`
+	InventoryStrategy *string          `json:"inventory_strategy"`
+	Active            bool             `json:"active"`
+	Hidden            *bool            `json:"hidden"`
+	DeliveryPlan      *ContentDocument `json:"delivery_plan"`
+	DeliveryNote      *string          `json:"delivery_note"`
+	MinQuantity       *int             `json:"min_quantity"`
+	MaxQuantity       *int             `json:"max_quantity"`
 }
 
 func (a *App) saveProduct(w http.ResponseWriter, r *http.Request) error {
@@ -162,8 +197,7 @@ func (a *App) saveProduct(w http.ResponseWriter, r *http.Request) error {
 	if err := readJSON(w, r, &input); err != nil {
 		return err
 	}
-	input.Name = strings.TrimSpace(input.Name)
-	input.Currency = strings.ToUpper(input.Currency)
+	input.Name, input.Currency = strings.TrimSpace(input.Name), strings.ToUpper(input.Currency)
 	if input.Name == "" || !utf8.ValidString(input.Name) || utf8.RuneCountInString(input.Name) > 120 || !utf8.ValidString(input.Description) || utf8.RuneCountInString(input.Description) > 4000 || input.Price <= 0 || input.Price > 9_000_000_000_000 {
 		return bad("商品名称、价格或内容长度无效")
 	}
@@ -179,84 +213,105 @@ func (a *App) saveProduct(w http.ResponseWriter, r *http.Request) error {
 	}
 	defer tx.Rollback()
 	id := r.PathValue("id")
-	details := ""
-	hidden := false
-	policy := Product{DeliveryMode: "automatic", InventoryStrategy: "oldest", MinQuantity: 1, MaxQuantity: 100}
+	p := Product{InventoryStrategy: "oldest", MinQuantity: 1, MaxQuantity: 100}
 	if id == "" {
 		id = newID()
 	} else {
-		if err := tx.QueryRowContext(r.Context(), "SELECT inventory_strategy,details,hidden,delivery_mode,delivery_note,buyer_note_label,buyer_note_required,min_quantity,max_quantity FROM products WHERE id=? AND deleted_at IS NULL", id).Scan(&policy.InventoryStrategy, &details, &hidden, &policy.DeliveryMode, &policy.DeliveryNote, &policy.BuyerNoteLabel, &policy.BuyerNoteRequired, &policy.MinQuantity, &policy.MaxQuantity); err == sql.ErrNoRows {
+		p, err = scanProduct(tx.QueryRowContext(r.Context(), productSelect+" WHERE p.id=? AND p.deleted_at IS NULL", id))
+		if err == sql.ErrNoRows {
 			return &apiError{404, "商品不存在"}
-		} else if err != nil {
+		}
+		if err != nil {
 			return err
+		}
+		if input.DeliveryPlan == nil {
+			plain, err := a.vault.decrypt(p.planCipher, "product-plan:"+id)
+			if err != nil {
+				return err
+			}
+			doc, err := decodeContent(plain)
+			if err != nil {
+				return err
+			}
+			p.DeliveryPlan = &doc
 		}
 	}
 	if input.Details != nil {
-		details = *input.Details
+		p.Details = *input.Details
 	}
 	if input.Hidden != nil {
-		hidden = *input.Hidden
+		p.Hidden = *input.Hidden
 	}
 	if input.InventoryStrategy != nil {
-		policy.InventoryStrategy = *input.InventoryStrategy
+		p.InventoryStrategy = *input.InventoryStrategy
 	}
-	if input.DeliveryMode != nil {
-		policy.DeliveryMode = *input.DeliveryMode
+	if input.DeliveryPlan != nil {
+		p.DeliveryPlan = input.DeliveryPlan
 	}
 	if input.DeliveryNote != nil {
-		policy.DeliveryNote = strings.TrimSpace(*input.DeliveryNote)
-	}
-	if input.BuyerNoteLabel != nil {
-		policy.BuyerNoteLabel = strings.TrimSpace(*input.BuyerNoteLabel)
-	}
-	if input.BuyerNoteRequired != nil {
-		policy.BuyerNoteRequired = *input.BuyerNoteRequired
+		p.DeliveryNote = strings.TrimSpace(*input.DeliveryNote)
 	}
 	if input.MinQuantity != nil {
-		policy.MinQuantity = *input.MinQuantity
+		p.MinQuantity = *input.MinQuantity
 	}
 	if input.MaxQuantity != nil {
-		policy.MaxQuantity = *input.MaxQuantity
+		p.MaxQuantity = *input.MaxQuantity
 	}
-	if policy.DeliveryMode != "automatic" && policy.DeliveryMode != "manual" {
-		return bad("交付方式无效")
-	}
-	if policy.InventoryStrategy != "random" && policy.InventoryStrategy != "oldest" && policy.InventoryStrategy != "newest" {
+	if p.InventoryStrategy != "random" && p.InventoryStrategy != "oldest" && p.InventoryStrategy != "newest" {
 		return bad("库存分配策略无效")
 	}
-	if policy.MinQuantity < 1 || policy.MaxQuantity > 100 || policy.MinQuantity > policy.MaxQuantity {
+	if p.MinQuantity < 1 || p.MaxQuantity > 100 || p.MinQuantity > p.MaxQuantity {
 		return bad("购买数量范围须在 1–100 之间，且下限不能大于上限")
 	}
-	if !utf8.ValidString(policy.DeliveryNote) || utf8.RuneCountInString(policy.DeliveryNote) > 4000 || !utf8.ValidString(policy.BuyerNoteLabel) || utf8.RuneCountInString(policy.BuyerNoteLabel) > 120 {
-		return bad("交付说明或买家信息标题过长")
+	if !utf8.ValidString(p.DeliveryNote) || utf8.RuneCountInString(p.DeliveryNote) > 4000 {
+		return bad("交付说明不能超过 4000 字符")
 	}
-	if policy.BuyerNoteRequired && policy.BuyerNoteLabel == "" {
-		return bad("请先设置买家信息标题")
+	if p.DeliveryPlan == nil {
+		return bad("请设置商品交付内容")
+	}
+	if err = validateContent(*p.DeliveryPlan, true); err != nil {
+		return err
+	}
+	plain, err := encodeContent(*p.DeliveryPlan)
+	if err != nil {
+		return err
+	}
+	cipher, err := a.vault.encrypt(plain, "product-plan:"+id)
+	if err != nil {
+		return err
 	}
 	now := unixNow()
-	result, err := tx.ExecContext(r.Context(), `INSERT INTO products(id,name,description,details,price,currency,inventory_strategy,active,hidden,created_at,updated_at,delivery_mode,delivery_note,buyer_note_label,buyer_note_required,min_quantity,max_quantity) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
- ON CONFLICT(id) DO UPDATE SET name=excluded.name,description=excluded.description,details=excluded.details,price=excluded.price,currency=excluded.currency,inventory_strategy=excluded.inventory_strategy,active=excluded.active,hidden=excluded.hidden,updated_at=excluded.updated_at,delivery_mode=excluded.delivery_mode,delivery_note=excluded.delivery_note,buyer_note_label=excluded.buyer_note_label,buyer_note_required=excluded.buyer_note_required,min_quantity=excluded.min_quantity,max_quantity=excluded.max_quantity WHERE products.deleted_at IS NULL`, id, input.Name, input.Description, details, input.Price, input.Currency, policy.InventoryStrategy, input.Active, hidden, now, now, policy.DeliveryMode, policy.DeliveryNote, policy.BuyerNoteLabel, policy.BuyerNoteRequired, policy.MinQuantity, policy.MaxQuantity)
-	if err != nil {
+	if _, err = tx.ExecContext(r.Context(), `INSERT INTO products(id,name,description,details,price,currency,inventory_strategy,active,hidden,created_at,updated_at,delivery_plan,delivery_note,min_quantity,max_quantity) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+ ON CONFLICT(id) DO UPDATE SET name=excluded.name,description=excluded.description,details=excluded.details,price=excluded.price,currency=excluded.currency,inventory_strategy=excluded.inventory_strategy,active=excluded.active,hidden=excluded.hidden,updated_at=excluded.updated_at,delivery_plan=excluded.delivery_plan,delivery_note=excluded.delivery_note,min_quantity=excluded.min_quantity,max_quantity=excluded.max_quantity`, id, input.Name, input.Description, p.Details, input.Price, input.Currency, p.InventoryStrategy, input.Active, p.Hidden, now, now, cipher, p.DeliveryNote, p.MinQuantity, p.MaxQuantity); err != nil {
 		return err
 	}
-	count, err := result.RowsAffected()
-	if err != nil {
+	if err = a.replaceAssetRefs(r.Context(), tx, "product", id, *p.DeliveryPlan); err != nil {
 		return err
 	}
-	if count == 0 {
-		return &apiError{404, "商品不存在"}
-	}
-	if policy.DeliveryMode == "manual" {
-		if _, err = tx.ExecContext(r.Context(), "DELETE FROM inventory_products WHERE product_id=?", id); err != nil {
-			return err
+	// 移除已删除取货项的绑定；历史订单仍使用原分配与快照。
+	query, args := "DELETE FROM inventory_products WHERE product_id=?", []any{id}
+	slots := []string{}
+	for _, b := range p.DeliveryPlan.Blocks {
+		if b.Type == "stock" {
+			slots = append(slots, b.ID)
+			args = append(args, b.ID)
 		}
+	}
+	if len(slots) > 0 {
+		query += " AND slot_id NOT IN (" + strings.TrimSuffix(strings.Repeat("?,", len(slots)), ",") + ")"
+	}
+	if _, err = tx.ExecContext(r.Context(), query, args...); err != nil {
+		return err
 	}
 	if err = tx.Commit(); err != nil {
 		return err
 	}
 	audit("product_saved", id)
-	p, err := scanProduct(a.db.QueryRow(productSelect+" WHERE p.id=?", id))
+	p, err = scanProduct(a.db.QueryRowContext(r.Context(), productSelect+" WHERE p.id=?", id))
 	if err != nil {
+		return err
+	}
+	if err = a.hydrateProduct(r.Context(), a.db, &p); err != nil {
 		return err
 	}
 	reply(w, 200, p)
@@ -264,8 +319,13 @@ func (a *App) saveProduct(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (a *App) deleteProduct(w http.ResponseWriter, r *http.Request) error {
-	// 保留订单外键、库存预留及交付密文，原订单继续核验付款和领取。
-	result, err := a.db.ExecContext(r.Context(), "UPDATE products SET active=0,deleted_at=COALESCE(deleted_at,?),updated_at=? WHERE id=?", unixNow(), unixNow(), r.PathValue("id"))
+	// 订单快照保留自己的附件引用；删除商品只移除商品当前计划的引用。
+	tx, err := a.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(r.Context(), "UPDATE products SET active=0,deleted_at=COALESCE(deleted_at,?),updated_at=? WHERE id=?", unixNow(), unixNow(), r.PathValue("id"))
 	if err != nil {
 		return err
 	}
@@ -275,6 +335,12 @@ func (a *App) deleteProduct(w http.ResponseWriter, r *http.Request) error {
 	}
 	if count == 0 {
 		return &apiError{404, "商品不存在"}
+	}
+	if err = a.replaceAssetRefs(r.Context(), tx, "product", r.PathValue("id"), ContentDocument{}); err != nil {
+		return err
+	}
+	if err = tx.Commit(); err != nil {
+		return err
 	}
 	audit("product_deleted", r.PathValue("id"))
 	reply(w, 200, map[string]bool{"ok": true})

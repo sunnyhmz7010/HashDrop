@@ -286,7 +286,14 @@ func TestPromotionPriceSnapshotAndGatewayVerification(t *testing.T) {
 	claim.Header.Set("Authorization", claimAuthorization(token))
 	response := httptest.NewRecorder()
 	a.routes().ServeHTTP(response, claim)
-	if response.Code != 200 || !strings.Contains(response.Body.String(), "卡密-0") {
+	if response.Code != 200 || strings.Contains(response.Body.String(), "卡密-0") {
+		t.Fatal("优惠订单查询失败或泄漏正文")
+	}
+	deliveries, err := a.deliveryMetadata(context.Background(), order.ID)
+	if err != nil || len(deliveries) != 1 {
+		t.Fatalf("交付状态: %v", err)
+	}
+	if claimed := claimDeliveryForTest(t, a, order.ID, deliveries[0].ID, token); claimed.Code != 200 || !strings.Contains(claimed.Body.String(), "卡密-0") {
 		t.Fatal("优惠订单无法领取原库存")
 	}
 }

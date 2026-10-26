@@ -43,7 +43,6 @@ const router = useRouter(),
   message = useMessage();
 const product = ref<Product>(),
   quantity = ref(1),
-  buyerNote = ref(""),
   key = ref(""),
   loading = ref(false),
   busy = ref(false),
@@ -64,17 +63,11 @@ const coupon = ref(""),
 let requestID = "",
   controller: AbortController | undefined;
 const max = computed(() =>
-  product.value?.delivery_mode === "automatic" && !product.value.stock_unlimited
+  product.value && !product.value.stock_unlimited
     ? Math.min(product.value.max_quantity, product.value.available)
     : (product.value?.max_quantity ?? 100),
 );
 const min = computed(() => product.value?.min_quantity ?? 1);
-const validBuyerNote = computed(
-  () =>
-    locked.value ||
-    ((!product.value?.buyer_note_required || !!buyerNote.value.trim()) &&
-      Array.from(buyerNote.value).length <= 2000),
-);
 const validQuantity = computed(
   () =>
     Number.isInteger(quantity.value) &&
@@ -171,7 +164,6 @@ watch(
       const pending = restorePurchase(id);
       key.value = pending?.key ?? generateClaimKey();
       quantity.value = pending?.quantity ?? 1;
-      buyerNote.value = pending?.buyerNote ?? "";
       requestID = pending?.requestID ?? newPurchaseID();
       locked.value = !!pending;
       coupon.value = pending?.couponCode ?? "";
@@ -211,7 +203,6 @@ watch(
         restored.value.order.product_id === id
       ) {
         order.value = restored.value.order;
-        buyerNote.value = restored.value.order.buyer_note ?? "";
       }
       if (!product.value && !order.value && result.status === "rejected")
         error.value = errorText(result.reason);
@@ -282,7 +273,6 @@ async function buy() {
     (!product.value && !order.value) ||
     !pricingReady.value ||
     !validKey.value ||
-    !validBuyerNote.value ||
     (!locked.value && !validQuantity.value)
   )
     return;
@@ -301,7 +291,6 @@ async function buy() {
     key: key.value,
     couponCode: coupon.value,
     quote: frozenQuote.value,
-    buyerNote: buyerNote.value,
   });
   storageError.value = !rememberClaimKey(key.value) || !saved;
   if (storageError.value && !keySaved.value) {
@@ -319,7 +308,6 @@ async function buy() {
         coupon_code: coupon.value,
         quoted_total: frozenQuote.value?.total,
         quoted_currency: frozenQuote.value?.currency,
-        buyer_note: buyerNote.value,
       },
       signal,
     });
@@ -414,11 +402,6 @@ async function buy() {
             class="delivery-note"
             >{{ order?.delivery_note || product?.delivery_note }}</n-alert
           >
-          <small
-            v-if="(order?.kind ?? product?.kind) === 'manual'"
-            class="field-help"
-            >{{ t("product.manual_help") }}</small
-          >
         </div>
         <div class="field-stack">
           <label class="field-label" for="purchase-quantity">{{
@@ -439,23 +422,6 @@ async function buy() {
               max: product?.max_quantity ?? 100,
             })
           }}</small>
-        </div>
-        <div v-if="product?.buyer_note_label || buyerNote" class="field-stack">
-          <label class="field-label" for="purchase-buyer-note"
-            >{{ locked ? t("orders.buyer_note") : product?.buyer_note_label
-            }}{{
-              !locked && product?.buyer_note_required
-                ? t("common.required")
-                : ""
-            }}</label
-          >
-          <n-input
-            v-model:value="buyerNote"
-            type="textarea"
-            :maxlength="2000"
-            :disabled="busy || locked"
-            :input-props="{ id: 'purchase-buyer-note', autocomplete: 'off' }"
-          />
         </div>
         <div class="field-stack">
           <label class="field-label" for="purchase-coupon">{{
@@ -592,7 +558,6 @@ async function buy() {
           loading ||
           (!product && !order) ||
           !validKey ||
-          !validBuyerNote ||
           !pricingReady ||
           (!locked && !validQuantity) ||
           busy ||

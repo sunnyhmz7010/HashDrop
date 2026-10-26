@@ -106,17 +106,17 @@ func (a *App) logout(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 func (a *App) overview(w http.ResponseWriter, r *http.Request) error {
-	var products, stock, orders, paid, manual int
+	var products, stock, orders, paid, attention int
 	var err error
 	for _, q := range []struct {
 		query  string
 		target *int
-	}{{"SELECT COUNT(*) FROM products WHERE deleted_at IS NULL", &products}, {"SELECT COUNT(*) FROM stock_items WHERE status='available' AND inventory_id IN (SELECT id FROM inventories WHERE deleted_at IS NULL)", &stock}, {"SELECT COUNT(*) FROM orders WHERE deleted_at IS NULL", &orders}, {"SELECT COUNT(*) FROM orders WHERE deleted_at IS NULL AND payment_status='paid'", &paid}, {"SELECT COUNT(*) FROM orders WHERE deleted_at IS NULL AND (payment_status='review' OR delivery_status='manual')", &manual}} {
+	}{{"SELECT COUNT(*) FROM products WHERE deleted_at IS NULL", &products}, {"SELECT COUNT(*) FROM stock_items WHERE deleted_at IS NULL AND status='available' AND inventory_id IN (SELECT id FROM inventories WHERE deleted_at IS NULL)", &stock}, {"SELECT COUNT(*) FROM orders WHERE deleted_at IS NULL", &orders}, {"SELECT COUNT(*) FROM orders WHERE deleted_at IS NULL AND payment_status='paid'", &paid}, {"SELECT COUNT(*) FROM orders o WHERE o.deleted_at IS NULL AND (o.payment_status='review' OR EXISTS(SELECT 1 FROM deliveries d WHERE d.order_id=o.id AND d.status='failed'))", &attention}} {
 		if err = a.db.QueryRowContext(r.Context(), q.query).Scan(q.target); err != nil {
 			return err
 		}
 	}
-	reply(w, 200, map[string]int{"products": products, "stock": stock, "orders": orders, "paid": paid, "manual": manual})
+	reply(w, 200, map[string]int{"products": products, "stock": stock, "orders": orders, "paid": paid, "delivery_attention": attention})
 	return nil
 }
 
@@ -135,7 +135,7 @@ func (a *App) adminOrders(w http.ResponseWriter, r *http.Request) error {
 	args := []any{}
 	if delivery := values.Get("delivery_status"); delivery != "" {
 		switch delivery {
-		case "pending", "processing", "done", "manual", "cancelled":
+		case "pending", "partial", "done", "failed", "cancelled":
 		default:
 			return bad("交付状态无效")
 		}
@@ -253,9 +253,6 @@ func (a *App) adminOrder(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	if err = a.decryptBuyerNote(&o); err != nil {
-		return err
-	}
 	deliveries, err := a.deliveryResults(r.Context(), o.ID)
 	if err != nil {
 		return err
@@ -292,6 +289,9 @@ func (a *App) retryOrder(w http.ResponseWriter, r *http.Request) error {
 	}
 	if o.PaymentStatus != "paid" || o.ReservationStatus == "released" {
 		return bad("订单尚未核实付款或库存已释放")
+	}
+	if _, err = a.db.ExecContext(r.Context(), "UPDATE deliveries SET status='pending',last_error='' WHERE order_id=? AND status='failed'", o.ID); err != nil {
+		return err
 	}
 	if err = a.deliverOrder(r.Context(), o); err != nil {
 		return err

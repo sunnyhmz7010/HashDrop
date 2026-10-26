@@ -16,6 +16,8 @@ import {
 } from "naive-ui";
 import FormDialog from "./FormDialog.vue";
 import MarkdownEditor from "./MarkdownEditor.vue";
+import ContentEditor from "./ContentEditor.vue";
+import { cloneContent, stockPlan, hasContent } from "../content";
 import {
   api,
   errorText,
@@ -34,6 +36,7 @@ const message = useMessage(),
   saving = ref(false),
   deleting = ref(""),
   formError = ref("");
+const contentUploading = ref(false);
 const model = reactive({
   id: "",
   name: "",
@@ -44,10 +47,8 @@ const model = reactive({
   inventory_strategy: "oldest" as Product["inventory_strategy"],
   active: false,
   hidden: false,
-  delivery_mode: "automatic" as "automatic" | "manual",
   delivery_note: "",
-  buyer_note_label: "",
-  buyer_note_required: false,
+  delivery_plan: stockPlan(t("content.stock")),
   min_quantity: 1,
   max_quantity: 100,
 });
@@ -108,10 +109,10 @@ function edit(product?: Product) {
           details: product.details ?? "",
           price: priceText(product.price, product.currency),
           inventory_strategy: product.inventory_strategy,
-          delivery_mode: product.delivery_mode,
           delivery_note: product.delivery_note,
-          buyer_note_label: product.buyer_note_label,
-          buyer_note_required: product.buyer_note_required,
+          delivery_plan: cloneContent(
+            product.delivery_plan ?? stockPlan(t("content.stock")),
+          ),
           min_quantity: product.min_quantity,
           max_quantity: product.max_quantity,
         }
@@ -125,10 +126,8 @@ function edit(product?: Product) {
           inventory_strategy: "oldest",
           active: false,
           hidden: false,
-          delivery_mode: "automatic",
           delivery_note: "",
-          buyer_note_label: "",
-          buyer_note_required: false,
+          delivery_plan: stockPlan(t("content.stock")),
           min_quantity: 1,
           max_quantity: 100,
         },
@@ -137,7 +136,12 @@ function edit(product?: Product) {
   editor.value = true;
 }
 async function save() {
-  if (saving.value) return;
+  if (
+    saving.value ||
+    contentUploading.value ||
+    !hasContent(model.delivery_plan)
+  )
+    return;
   saving.value = true;
   formError.value = "";
   try {
@@ -154,11 +158,8 @@ async function save() {
           inventory_strategy: model.inventory_strategy,
           active: model.active,
           hidden: model.hidden,
-          delivery_mode: model.delivery_mode,
           delivery_note: model.delivery_note,
-          buyer_note_label: model.buyer_note_label,
-          buyer_note_required:
-            !!model.buyer_note_label.trim() && model.buyer_note_required,
+          delivery_plan: model.delivery_plan,
           min_quantity: model.min_quantity,
           max_quantity: model.max_quantity,
         },
@@ -266,12 +267,8 @@ function removeProduct(product: Product) {
                 <template v-else>{{ p.name }}</template>
               </td>
               <td class="name-cell">
-                {{
-                  p.delivery_mode === "manual"
-                    ? t("kind.manual")
-                    : t(`inventory.strategy_${p.inventory_strategy}`)
-                }}
-                <span v-if="p.delivery_mode === 'automatic'" class="muted">
+                {{ t(`inventory.strategy_${p.inventory_strategy}`) }}
+                <span class="muted">
                   ·
                   {{
                     t("inventory.bound_count", { count: p.inventory_count })
@@ -281,18 +278,10 @@ function removeProduct(product: Product) {
               <td>{{ money(p.price, p.currency) }}</td>
               <td>
                 {{
-                  !p.inventory_count
-                    ? "—"
-                    : p.kind !== "static"
-                      ? `${p.available} / ${p.reserved} / ${p.sold}`
-                      : t("stock.not_consumed")
+                  p.stock_unlimited
+                    ? t("stock.not_consumed")
+                    : `${p.available} / ${p.reserved} / ${p.sold}`
                 }}
-                <small
-                  v-if="p.stock_unlimited && p.kind !== 'static'"
-                  class="muted"
-                >
-                  · {{ t("stock.unlimited_pool") }}</small
-                >
               </td>
               <td>
                 {{ p.active ? t("product.active") : t("product.inactive") }}
@@ -330,7 +319,7 @@ function removeProduct(product: Product) {
   <FormDialog
     v-model:show="editor"
     :title="model.id ? t('product.edit') : t('product.add')"
-    :busy="saving"
+    :busy="saving || contentUploading"
     ><form id="product-form" @submit.prevent="save">
       <div class="form-grid two">
         <div class="wide">
@@ -344,29 +333,16 @@ function removeProduct(product: Product) {
           />
         </div>
         <div class="wide">
-          <label class="field-label" for="product-delivery-mode">{{
-            t("product.delivery_mode")
-          }}</label>
-          <n-select
-            id="product-delivery-mode"
-            v-model:value="model.delivery_mode"
+          <h3>{{ t("content.plan") }}</h3>
+          <p class="helper">{{ t("content.plan_help") }}</p>
+          <ContentEditor
+            v-model="model.delivery_plan"
+            allow-stock
             :disabled="saving"
-            :options="[
-              { label: t('product.automatic'), value: 'automatic' },
-              { label: t('kind.manual'), value: 'manual' },
-            ]"
+            @busy="contentUploading = $event"
           />
-          <p class="helper">
-            {{
-              t(
-                model.delivery_mode === "manual"
-                  ? "product.manual_help"
-                  : "inventory.association_help",
-              )
-            }}
-          </p>
         </div>
-        <div v-if="model.delivery_mode === 'automatic'">
+        <div>
           <label class="field-label" for="product-inventory-strategy">{{
             t("inventory.strategy")
           }}</label
@@ -461,29 +437,6 @@ function removeProduct(product: Product) {
           />
         </div>
         <div class="wide">
-          <label class="field-label" for="product-buyer-note-label">{{
-            t("product.buyer_note_label")
-          }}</label>
-          <n-input
-            id="product-buyer-note-label"
-            v-model:value="model.buyer_note_label"
-            :maxlength="120"
-            :disabled="saving"
-            :placeholder="t('product.buyer_note_help')"
-          />
-        </div>
-        <div v-if="model.buyer_note_label.trim()" class="wide">
-          <label class="field-label" for="product-buyer-note-required">{{
-            t("product.buyer_note_required")
-          }}</label>
-          <n-switch
-            id="product-buyer-note-required"
-            v-model:value="model.buyer_note_required"
-            :disabled="saving"
-            :aria-label="t('product.buyer_note_required')"
-          />
-        </div>
-        <div class="wide">
           <label class="field-label" for="description">{{
             t("product.description")
           }}</label
@@ -511,14 +464,16 @@ function removeProduct(product: Product) {
       }}</n-alert>
     </form>
     <template #footer>
-      <n-button :disabled="saving" @click="editor = false">{{
-        t("common.cancel")
-      }}</n-button
+      <n-button
+        :disabled="saving || contentUploading"
+        @click="editor = false"
+        >{{ t("common.cancel") }}</n-button
       ><n-button
         attr-type="submit"
         form="product-form"
         type="primary"
         :loading="saving"
+        :disabled="contentUploading || !hasContent(model.delivery_plan)"
         >{{ t("product.save") }}</n-button
       >
     </template>

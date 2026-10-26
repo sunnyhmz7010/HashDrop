@@ -14,7 +14,7 @@ const labels = computed(() => [
   ["stock", t("overview.stock")],
   ["orders", t("overview.orders")],
   ["paid", t("overview.paid")],
-  ["manual", t("overview.manual")],
+  ["delivery_attention", t("overview.manual")],
 ]);
 const controller = new AbortController();
 async function load() {

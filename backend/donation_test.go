@@ -255,7 +255,7 @@ func TestDonationPrefixDoesNotMisrouteProductCallback(t *testing.T) {
 	a, gateway := newTestApp(t)
 	product := insertProduct(t, a, "card", 0)
 	const id = "don_product_callback"
-	if _, err := a.db.Exec(`INSERT INTO orders(id,product_id,product_name,kind,unit_price,currency,quantity,total,token_hash,gateway_id,payment_status,created_at,updated_at) VALUES(?,?,'前缀相同的商品','card',1234,'CNY',1,1234,?,'prefix-gateway','pending',?,?)`, id, product, randomToken(), unixNow(), unixNow()); err != nil {
+	if _, err := a.db.Exec(`INSERT INTO orders(id,product_id,product_name,unit_price,currency,quantity,total,token_hash,gateway_id,payment_status,created_at,updated_at) VALUES(?,?,'前缀相同的商品',1234,'CNY',1,1234,?,'prefix-gateway','pending',?,?)`, id, product, randomToken(), unixNow(), unixNow()); err != nil {
 		t.Fatal(err)
 	}
 	gateway.orders[id] = GatewayOrder{ID: "prefix-gateway", MerchantID: "merchant-test", MerchantNo: id, Currency: "CNY", Amount: json.Number("12.34"), Status: "pending"}

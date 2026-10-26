@@ -8,6 +8,7 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import {
   NAlert,
   NButton,
+  NEmpty,
   NDatePicker,
   NPagination,
   NInput,
@@ -19,12 +20,15 @@ import {
 } from "naive-ui";
 import FormDialog from "./FormDialog.vue";
 import OrderTable from "./OrderTable.vue";
+import ContentEditor from "./ContentEditor.vue";
+import ContentView from "./ContentView.vue";
+import { textContent, hasContent } from "../content";
 import {
   api,
   copyText,
   deliveryNames,
   errorText,
-  kindNames,
+  type ContentDocument,
   money,
   paymentNames,
   type Order,
@@ -44,7 +48,8 @@ const message = useMessage(),
   busy = ref(false),
   detailError = ref("");
 const editingDelivery = ref(""),
-  deliveryContent = ref(""),
+  deliveryContent = ref<ContentDocument>(textContent()),
+  contentUploading = ref(false),
   activeAction = ref("");
 const statusOptions = computed(() => [
   { label: t("orders.all_statuses"), value: "" },
@@ -195,7 +200,8 @@ async function open(order: Order | string) {
   controller = new AbortController();
   selectedID.value = id;
   selected.value = undefined;
-  editingDelivery.value = deliveryContent.value = "";
+  editingDelivery.value = "";
+  deliveryContent.value = textContent();
   show.value = true;
   detailError.value = "";
   busy.value = true;
@@ -240,14 +246,21 @@ async function action(name: string, body: unknown = {}) {
   }
 }
 async function fulfill() {
-  if (!editingDelivery.value || !deliveryContent.value.trim()) return;
+  if (
+    !editingDelivery.value ||
+    contentUploading.value ||
+    !hasContent(deliveryContent.value)
+  )
+    return;
   if (
     await action("fulfill", {
       delivery_id: editingDelivery.value,
       content: deliveryContent.value,
     })
-  )
-    editingDelivery.value = deliveryContent.value = "";
+  ) {
+    editingDelivery.value = "";
+    deliveryContent.value = textContent();
+  }
 }
 function remove() {
   if (busy.value || !selected.value) return;
@@ -444,7 +457,7 @@ async function copy(value: string) {
   <FormDialog
     v-model:show="show"
     :title="t('orders.detail')"
-    :busy="busy && !!selected"
+    :busy="(busy && !!selected) || contentUploading"
   >
     <template #header>
       <div class="order-modal-title">
@@ -483,8 +496,7 @@ async function copy(value: string) {
         <n-button
           v-if="
             selected.order.payment_status === 'paid' &&
-            selected.order.delivery_status !== 'done' &&
-            selected.order.kind !== 'manual'
+            selected.order.delivery_status !== 'done'
           "
           :disabled="busy"
           :loading="activeAction === 'retry'"
@@ -553,10 +565,6 @@ async function copy(value: string) {
             <span>{{ t("common.created_at") }}</span>
             <strong>{{ formatTime(selected.order.created_at) }}</strong>
           </div>
-          <div class="detail-item">
-            <span>{{ t("product.kind") }}</span>
-            <strong>{{ kindNames[selected.order.kind] }}</strong>
-          </div>
         </div>
       </section>
 
@@ -605,10 +613,6 @@ async function copy(value: string) {
       </section>
 
       <section class="order-modal-section">
-        <template v-if="selected.order.buyer_note">
-          <h3>{{ t("orders.buyer_note") }}</h3>
-          <pre class="order-note">{{ selected.order.buyer_note }}</pre>
-        </template>
         <template v-if="selected.order.delivery_note">
           <h3>{{ t("product.delivery_note") }}</h3>
           <p class="order-note">{{ selected.order.delivery_note }}</p>
@@ -631,33 +635,17 @@ async function copy(value: string) {
               >{{ t("delivery.item", { ordinal: delivery.ordinal }) }} ·
               {{ deliveryNames[delivery.status] }}</span
             >
-            <n-button
-              v-if="delivery.content"
-              size="small"
-              secondary
-              @click="copy(delivery.content)"
-              >{{ t("common.copy") }}</n-button
-            >
           </div>
-          <pre v-if="delivery.content">{{ delivery.content }}</pre>
+          <ContentView v-if="delivery.content" :content="delivery.content" />
           <form
             v-else-if="editingDelivery === delivery.id"
             class="grid"
             @submit.prevent="fulfill"
           >
-            <label
-              class="field-label"
-              :for="'delivery-content-' + delivery.id"
-              >{{ t("delivery.content") }}</label
-            >
-            <n-input
-              v-model:value="deliveryContent"
-              type="textarea"
-              :maxlength="65536"
-              :autosize="{ minRows: 4, maxRows: 12 }"
+            <ContentEditor
+              v-model="deliveryContent"
               :disabled="busy"
-              :input-props="{ id: 'delivery-content-' + delivery.id }"
-              :placeholder="t('delivery.fulfill_help')"
+              @busy="contentUploading = $event"
             />
             <small class="field-help">{{ t("delivery.immutable_help") }}</small>
             <div class="row-actions">
@@ -665,14 +653,16 @@ async function copy(value: string) {
                 type="primary"
                 attr-type="submit"
                 :loading="busy"
-                :disabled="!deliveryContent.trim() || busy"
+                :disabled="
+                  !hasContent(deliveryContent) || busy || contentUploading
+                "
                 >{{ t("delivery.fulfill") }}</n-button
               >
               <n-button
-                :disabled="busy"
+                :disabled="busy || contentUploading"
                 @click="
                   editingDelivery = '';
-                  deliveryContent = '';
+                  deliveryContent = textContent();
                 "
                 >{{ t("common.cancel") }}</n-button
               >
@@ -688,10 +678,13 @@ async function copy(value: string) {
             :disabled="busy || !!editingDelivery"
             @click="
               editingDelivery = delivery.id;
-              deliveryContent = '';
+              deliveryContent = textContent();
             "
             >{{ t("delivery.fulfill") }}</n-button
           >
+          <n-alert v-if="delivery.error" type="warning">{{
+            errorText(delivery.error)
+          }}</n-alert>
         </article>
         <n-empty
           v-if="!selected.deliveries.length"

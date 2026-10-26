@@ -1,32 +1,72 @@
-import { test, expect, loginAdmin } from "./fixture";
+import {
+  test,
+  expect,
+  loginAdmin,
+  createInventory,
+  importInventory,
+  bindInventoryProducts,
+  claimContents,
+  testPlan,
+} from "./fixture";
 import { placeTestOrder } from "./checkout";
 import type { Product } from "../src/api";
 
-test("人工商品配置、购买、分份交付与密钥领取", async ({
+test("组合交付包含卡密、图文、文件和链接，主动领取并校验附件权限", async ({
   page,
   request,
-  context,
 }) => {
   const base = process.env.HASHDROP_TEST_URL!;
   await loginAdmin(page);
+  const pool = await createInventory(page, "组合交付独占池");
+  await importInventory(page, pool, "COMPOSED-CODE-001\nCOMPOSED-CODE-002");
   await page.goto(`${base}/center/products`);
   await page.getByRole("button", { name: "新增商品", exact: true }).click();
-  await page.locator("#product-name input").fill("人工交付浏览器商品");
-  await page.locator("#product-delivery-mode").click();
-  await page
-    .locator(".n-base-select-option")
-    .filter({ hasText: "人工交付" })
-    .click();
-  await expect(page.locator("#product-inventory")).toHaveCount(0);
+  await page.locator("#product-name input").fill("图文文件组合交付");
   await page.locator("#price input").fill("12.00");
   await page.locator("#product-min-quantity").fill("2");
   await page.locator("#product-max-quantity").fill("3");
-  await page
-    .locator("#product-delivery-note textarea")
-    .fill("两小时内处理，完成后凭密钥领取。");
-  await page.locator("#product-buyer-note-label input").fill("接收账号");
-  await page.locator("#product-buyer-note-required").click();
   await page.locator("#active").click();
+  await page.getByRole("button", { name: "添加文字", exact: true }).click();
+  await page
+    .locator(".content-editor textarea")
+    .fill("## 使用指南\n\n请保管本份内容。");
+  for (const file of [
+    {
+      button: "上传图片",
+      name: "说明.png",
+      mimeType: "image/png",
+      buffer: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6M6YAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    },
+    {
+      button: "上传文件",
+      name: "资料.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from("PRIVATE-FILE-CONTENT"),
+    },
+  ]) {
+    const chooser = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: file.button, exact: true }).click();
+    await (
+      await chooser
+    ).setFiles({
+      name: file.name,
+      mimeType: file.mimeType,
+      buffer: file.buffer,
+    });
+    await expect(
+      page
+        .locator(".content-editor")
+        .getByText("附件已上传，保存后加入本份内容。", { exact: true }),
+    ).toHaveCount(file.mimeType === "image/png" ? 1 : 2);
+  }
+  await page.locator('[data-content-type="file"] input').fill("资料下载");
+  await page.getByRole("button", { name: "添加链接", exact: true }).click();
+  const link = page.locator('[data-content-type="link"]');
+  await link.locator('input[id^="content-label-"]').fill("操作手册");
+  await link.locator('input[type="url"]').fill("https://example.com/guide");
   const saved = page.waitForResponse(
     (response) =>
       response.url() === `${base}/api/admin/products` &&
@@ -37,72 +77,155 @@ test("人工商品配置、购买、分份交付与密钥领取", async ({
   expect(saveResponse.ok(), await saveResponse.text()).toBeTruthy();
   const product = (await saveResponse.json()) as Product;
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await page
-    .getByRole("row")
-    .filter({ hasText: product.name })
-    .getByRole("button", { name: "编辑", exact: true })
-    .click();
-  await expect(page.locator("#product-min-quantity")).toHaveValue("2");
-  await expect(page.locator("#product-buyer-note-label input")).toHaveValue(
-    "接收账号",
-  );
-  await page.getByRole("button", { name: "取消", exact: true }).click();
+  await bindInventoryProducts(page, pool, [product.id]);
+  expect(product.delivery_plan?.blocks.map((block) => block.type)).toEqual([
+    "stock",
+    "text",
+    "image",
+    "file",
+    "link",
+  ]);
+  expect(
+    (await (await request.get(`${base}/api/products/${product.id}`)).json())
+      .delivery_plan,
+  ).toBeUndefined();
 
   await page.setViewportSize({ width: 390, height: 900 });
   await page.goto(`${base}/products/${product.id}`);
   await page.getByRole("button", { name: "下单", exact: true }).click();
-  await expect(page.locator("#purchase-quantity")).toHaveValue("2");
-  await expect(
-    page.getByRole("button", { name: "前往支付", exact: true }),
-  ).toBeDisabled();
-  await page.locator("#purchase-buyer-note").fill("收货账号@example.com");
-  let interruptedOrderID = "";
-  await page.route(
-    "**/api/orders",
-    async (route) => {
-      const response = await route.fetch();
-      expect(response.status()).toBe(201);
-      interruptedOrderID = (await response.json()).order.id;
-      await route.abort("failed");
-    },
-    { times: 1 },
-  );
-  await page.getByRole("button", { name: "前往支付", exact: true }).click();
-  await expect(
-    page.getByRole("alert").filter({ hasText: "网络" }),
-  ).toBeVisible();
-  await page.reload();
-  await page.getByRole("button", { name: "下单", exact: true }).click();
-  await expect(page.locator("#purchase-buyer-note")).toHaveValue(
-    "收货账号@example.com",
-  );
-  await expect(page.locator("#purchase-buyer-note")).toBeDisabled();
   const purchase = await placeTestOrder(page);
-  expect(purchase.orderID).toBe(interruptedOrderID);
   expect(purchase.order.quantity).toBe(2);
-  expect(purchase.order.total).toBe(2400);
   expect(
     (await request.post(`${base}/__test/pay/${purchase.orderID}`)).ok(),
   ).toBeTruthy();
+  const lookup = await request.post(`${base}/api/orders/lookup`, {
+    data: { key: purchase.key },
+  });
+  const metadata = await lookup.json();
+  expect(
+    metadata.deliveries.every(
+      (delivery: { content?: unknown }) => delivery.content === undefined,
+    ),
+  ).toBeTruthy();
+  let claimRequests = 0;
+  page.on("request", (event) => {
+    if (event.url().endsWith("/claim")) claimRequests++;
+  });
   await page.goto(purchase.receipt);
   await expect(
-    page.getByText(
-      "付款已确认，等待商家交付。已完成的部分可在下方领取，请保留领取密钥。",
+    page.getByRole("button", { name: "领取内容", exact: true }),
+  ).toHaveCount(2);
+  expect(claimRequests).toBe(0);
+  await claimContents(page);
+  expect(claimRequests).toBe(2);
+  const receipts = page.locator(".delivery-item");
+  const codes = await receipts
+    .locator('[data-content-type="text"] .markdown-content')
+    .allTextContents();
+  expect(
+    codes
+      .filter((text) => text.startsWith("COMPOSED-CODE-"))
+      .map((text) => text.trim())
+      .sort(),
+  ).toEqual(["COMPOSED-CODE-001", "COMPOSED-CODE-002"]);
+  await expect(receipts.getByRole("heading", { name: "使用指南" })).toHaveCount(
+    2,
+  );
+  await expect(receipts.getByRole("link", { name: "操作手册" })).toHaveCount(2);
+  await expect
+    .poll(() =>
+      receipts
+        .locator("img")
+        .evaluateAll(
+          (images) =>
+            images.length === 2 &&
+            images.every(
+              (image) => (image as HTMLImageElement).naturalWidth > 0,
+            ),
+        ),
+    )
+    .toBeTruthy();
+  const download = page.waitForEvent("download");
+  await receipts
+    .first()
+    .getByRole("button", { name: "下载 · 资料下载", exact: true })
+    .click();
+  const downloaded = await download;
+  expect(downloaded.suggestedFilename()).toBe("资料.txt");
+  const stream = await downloaded.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream!) chunks.push(chunk);
+  expect(Buffer.concat(chunks).toString()).toBe("PRIVATE-FILE-CONTENT");
+  const assetID = product.delivery_plan!.blocks.find(
+    (block) => block.type === "file",
+  )!.asset_id;
+  const unauthorized = await request.get(
+    `${base}/api/orders/${purchase.orderID}/deliveries/${metadata.deliveries[0].id}/assets/${assetID}`,
+  );
+  expect([401, 404]).toContain(unauthorized.status());
+  expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain(
+    "COMPOSED-CODE",
+  );
+  await page.getByRole("button", { name: "刷新状态", exact: true }).click();
+  expect(claimRequests).toBe(2);
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "领取内容", exact: true }),
+  ).toHaveCount(2);
+  expect(claimRequests).toBe(2);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth + 1,
     ),
-  ).toBeVisible();
+  ).toBeFalsy();
+});
 
+test("失败交付按份补交，响应丢失后恢复原结果且买家显式领取", async ({
+  page,
+  request,
+  context,
+}) => {
+  const base = process.env.HASHDROP_TEST_URL!;
+  await loginAdmin(page);
+  const pool = await createInventory(page, "补交测试预留池");
+  await importInventory(page, pool, "RESERVED-001\nRESERVED-002");
+  const session = await (
+    await page.request.get(`${base}/api/admin/session`)
+  ).json();
+  const created = await page.request.post(`${base}/api/admin/products`, {
+    headers: { Origin: base, "X-CSRF-Token": session.csrf },
+    data: {
+      name: "失败补交浏览器商品",
+      price: 1200,
+      currency: "CNY",
+      active: true,
+      min_quantity: 2,
+      max_quantity: 3,
+      delivery_plan: testPlan(),
+    },
+  });
+  expect(created.ok(), await created.text()).toBeTruthy();
+  const product: Product = await created.json();
+  await bindInventoryProducts(page, pool, [product.id]);
+  await page.goto(`${base}/products/${product.id}`);
+  await page.getByRole("button", { name: "下单", exact: true }).click();
+  const purchase = await placeTestOrder(page);
+  expect(
+    (await request.post(`${base}/__test/paid-only/${purchase.orderID}`)).ok(),
+  ).toBeTruthy();
   const buyer = await context.newPage();
   await buyer.goto(purchase.receipt);
+  await expect(
+    buyer.getByRole("button", { name: "领取内容", exact: true }),
+  ).toHaveCount(0);
   await page.goto(`${base}/center/orders`);
   await page.locator("#orders-search").fill(purchase.orderID);
   await page.getByRole("button", { name: "筛选", exact: true }).click();
-  const row = page.locator(".order-row").filter({ hasText: product.name });
-  await row
+  await page
+    .locator(".order-row")
+    .filter({ hasText: product.name })
     .getByRole("button", { name: purchase.orderID, exact: true })
     .click();
-  await expect(
-    page.locator(".order-note").filter({ hasText: "收货账号@example.com" }),
-  ).toBeVisible();
   for (const [index, content] of [
     "第一份凭证-001",
     "第二份凭证-002",
@@ -111,16 +234,14 @@ test("人工商品配置、购买、分份交付与密钥领取", async ({
       .getByRole("button", { name: "交付此份商品", exact: true })
       .first()
       .click();
-    await page.locator("textarea[id^='delivery-content-']").fill(content);
-    const form = page
-      .locator("form")
-      .filter({ has: page.locator("textarea[id^='delivery-content-']") });
+    const form = page.locator(".order-modal-body form");
+    await form.locator(".content-editor textarea").fill(content);
     if (index === 0)
       await page.route(
         `**/api/admin/orders/${purchase.orderID}/fulfill`,
         async (route) => {
           const response = await route.fetch();
-          expect(response.ok()).toBeTruthy();
+          expect(response.ok(), await response.text()).toBeTruthy();
           await route.abort("failed");
         },
         { times: 1 },
@@ -138,13 +259,16 @@ test("人工商品配置、购买、分份交付与密钥领取", async ({
         .click();
     }
     await expect(
-      page.locator(".order-modal-body .delivery-item pre"),
+      page.locator(".order-modal-body .delivery-item .markdown-content"),
     ).toHaveCount(index + 1);
     await buyer.reload();
-    await expect(buyer.locator(".delivery-item pre")).toHaveCount(index + 1);
-    await expect(buyer.locator(".delivery-item pre").nth(index)).toHaveText(
-      content,
+    await claimContents(buyer);
+    await expect(buyer.locator(".delivery-item .markdown-content")).toHaveCount(
+      index + 1,
     );
+    await expect(
+      buyer.locator(".delivery-item .markdown-content").nth(index),
+    ).toHaveText(content);
     await expect(
       buyer.getByText(`已交付 ${index + 1} / 2 份`, { exact: true }),
     ).toBeVisible();
@@ -152,10 +276,5 @@ test("人工商品配置、购买、分份交付与密钥领取", async ({
   await expect(
     page.getByRole("button", { name: "交付此份商品", exact: true }),
   ).toHaveCount(0);
-  expect(
-    await buyer.evaluate(
-      () => document.documentElement.scrollWidth > innerWidth + 1,
-    ),
-  ).toBeFalsy();
   await buyer.close();
 });

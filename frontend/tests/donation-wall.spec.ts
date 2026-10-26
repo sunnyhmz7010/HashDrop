@@ -363,7 +363,7 @@ test("重复赞赏的网络失败保留请求，查询同昵称旧记录不会�
   try {
     const first = await donate(page, name);
     expect(first.ok()).toBeTruthy();
-    await expect(page).toHaveURL(/\/donate\/orders\//);
+    await expect(page).toHaveURL(/\/center\/donations\//);
     let requestID = "",
       createdID = "",
       confirmedCalls = 0;

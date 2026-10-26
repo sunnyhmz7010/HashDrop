@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -12,9 +13,9 @@ import (
 func TestProductDetailsPersistAndDoNotBloatCatalog(t *testing.T) {
 	a, _ := newTestApp(t)
 	request := adminSessionRequest(t, a)
-	inventory := createInventoryViaAPI(t, a, "card", "")
+	inventory := createInventoryViaAPI(t, a, false)
 	details := "## 商品介绍\n\n**加粗内容**\n\n![图片](https://example.com/image.png)\n\n![视频](https://example.com/video.webm)"
-	input := map[string]any{"name": "详情商品", "description": "卡片简介 <保留原文>", "details": details, "price": 1234, "currency": "CNY", "active": true}
+	input := map[string]any{"name": "详情商品", "description": "卡片简介 <保留原文>", "details": details, "price": 1234, "currency": "CNY", "active": true, "delivery_plan": ContentDocument{Blocks: []ContentBlock{{ID: "stock", Type: "stock"}, {ID: "secret", Type: "text", Text: "付款后可见教程"}}}}
 	body, _ := json.Marshal(input)
 	created := request("POST", "/api/admin/products", string(body))
 	if created.Code != http.StatusOK {
@@ -35,18 +36,22 @@ func TestProductDetailsPersistAndDoNotBloatCatalog(t *testing.T) {
 	if err := json.Unmarshal(public.Body.Bytes(), &fetched); err != nil || fetched.Details != details || fetched.Description != input["description"] {
 		t.Fatal("公开详情读取不一致")
 	}
+	if fetched.DeliveryPlan != nil || strings.Contains(public.Body.String(), "付款后可见教程") || strings.Contains(public.Body.String(), "delivery_plan") {
+		t.Fatal("公开商品泄露交付计划")
+	}
 	var catalog []Product
 	if err := json.Unmarshal(read("/api/products").Body.Bytes(), &catalog); err != nil || len(catalog) != 1 || catalog[0].Details != "" || catalog[0].Description != input["description"] {
 		t.Fatal("商城列表泄入完整长详情或丢失简介")
 	}
 	delete(input, "details")
+	delete(input, "delivery_plan")
 	input["description"] = "修改后的简介"
 	body, _ = json.Marshal(input)
 	updated := request("PUT", "/api/admin/products/"+product.ID, string(body))
 	if updated.Code != 200 {
 		t.Fatal(updated.Body)
 	}
-	if err := json.Unmarshal(updated.Body.Bytes(), &fetched); err != nil || fetched.Details != details {
+	if err := json.Unmarshal(updated.Body.Bytes(), &fetched); err != nil || fetched.Details != details || fetched.DeliveryPlan == nil || len(fetched.DeliveryPlan.Blocks) != 2 {
 		t.Fatal("仅修改介绍时清空了已有详情")
 	}
 	input["details"] = strings.Repeat("详", 65536)
@@ -127,6 +132,9 @@ func TestHiddenProductCanBePurchasedWithoutAppearingInCatalog(t *testing.T) {
 		t.Fatalf("隐藏商品匿名下单失败: %s", response.Body)
 	}
 	product, err := scanProduct(a.db.QueryRow(productSelect+" WHERE p.id=?", hiddenID))
+	if err == nil {
+		err = a.hydrateProduct(context.Background(), a.db, &product)
+	}
 	if err != nil || product.Available != 1 || product.Reserved != 2 {
 		t.Fatal("隐藏商品下单未正确预留库存")
 	}
@@ -162,7 +170,7 @@ func TestDeleteProductPreservesOrdersAndClaims(t *testing.T) {
 			paid, paidToken := reserve(t, a, product, 1)
 			syncPaid(t, a, gateway, paid)
 			before, err := a.deliveryResults(context.Background(), paid.ID)
-			if err != nil || len(before) != 1 || before[0].Content == "" {
+			if err != nil || len(before) != 1 || before[0].Content == nil {
 				t.Fatal("已付款订单未准备好领取内容")
 			}
 			pending, pendingToken := reserve(t, a, product, 1)
@@ -203,7 +211,7 @@ func TestDeleteProductPreservesOrdersAndClaims(t *testing.T) {
 			if response := admin("PUT", "/api/admin/products/"+product, stale); response.Code != 404 {
 				t.Fatal("旧编辑窗口可以重新保存已删除商品")
 			}
-			if response := admin("GET", "/api/admin/inventories/"+product+"/stock"); response.Code != 200 {
+			if response := admin("GET", "/api/admin/inventories/"+product+"/stock"); kind == "card" && response.Code != 200 {
 				t.Fatal("删除商品破坏了独立库存管理")
 			}
 			if response := admin("POST", "/api/orders", `{"product_id":"`+product+`","quantity":1}`); response.Code != 400 {
@@ -233,10 +241,22 @@ func TestDeleteProductPreservesOrdersAndClaims(t *testing.T) {
 					Deliveries []Delivery `json:"deliveries"`
 				}
 				response := public("/api/orders/"+claim.id, claim.token)
-				if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &receipt) != nil || receipt.Order.PaymentStatus != "paid" || receipt.Order.DeliveryStatus != "done" || len(receipt.Deliveries) != 1 || receipt.Deliveries[0].Content == "" {
+				if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &receipt) != nil || receipt.Order.PaymentStatus != "paid" || receipt.Order.DeliveryStatus != "done" || len(receipt.Deliveries) != 1 || receipt.Deliveries[0].Content != nil {
 					t.Fatalf("删除商品破坏了原订单或迟到付款的领取: %s", response.Body)
 				}
-				if claim.id == paid.ID && receipt.Deliveries[0].Content != before[0].Content {
+				request := httptest.NewRequest("POST", "/api/orders/"+claim.id+"/deliveries/"+receipt.Deliveries[0].ID+"/claim", strings.NewReader(`{}`))
+				request.Header.Set("Authorization", claimAuthorization(claim.token))
+				request.Header.Set("Origin", a.config.PublicURL)
+				request.Header.Set("Content-Type", "application/json")
+				claimed := httptest.NewRecorder()
+				a.routes().ServeHTTP(claimed, request)
+				var result struct {
+					Delivery Delivery `json:"delivery"`
+				}
+				if claimed.Code != 200 || json.Unmarshal(claimed.Body.Bytes(), &result) != nil || result.Delivery.Content == nil {
+					t.Fatalf("删除商品后主动领取失败: %s", claimed.Body)
+				}
+				if claim.id == paid.ID && !reflect.DeepEqual(result.Delivery.Content, before[0].Content) {
 					t.Fatal("删除商品改变了已交付内容")
 				}
 				if response := admin("GET", "/api/admin/orders/"+claim.id); response.Code != 200 {

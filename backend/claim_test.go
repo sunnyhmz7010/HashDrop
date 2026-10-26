@@ -56,8 +56,15 @@ func TestClaimKeyLookupAndPayment(t *testing.T) {
 	}
 	syncPaid(t, a, g, o)
 	paid := lookup(key)
-	if paid.Code != 200 || !strings.Contains(paid.Body.String(), "卡密-0") || paid.Header().Get("Cache-Control") != "no-store" {
-		t.Fatal("密钥领取未返回已核验交付")
+	if paid.Code != 200 || strings.Contains(paid.Body.String(), "卡密-0") || paid.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal("订单状态查询失败或泄漏交付正文")
+	}
+	deliveries, err := a.deliveryMetadata(context.Background(), o.ID)
+	if err != nil || len(deliveries) != 1 {
+		t.Fatalf("交付状态: %v", err)
+	}
+	if claimed := claimDeliveryForTest(t, a, o.ID, deliveries[0].ID, key); claimed.Code != 200 || !strings.Contains(claimed.Body.String(), "卡密-0") || claimed.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal("主动领取未返回已核验交付")
 	}
 	if response := lookup("其他密钥"); response.Code != 404 || strings.Contains(response.Body.String(), "卡密-0") {
 		t.Fatal("错误密钥可读取交付内容")
@@ -92,8 +99,15 @@ func TestOrderDetailAcceptsClaimKeys(t *testing.T) {
 				t.Fatalf("编码凭证查询失败或泄漏交付: %d %s", w.Code, w.Body)
 			}
 			syncPaid(t, a, g, o)
-			if w := get(encoded); w.Code != 200 || !strings.Contains(w.Body.String(), "卡密-0") {
-				t.Fatalf("编码凭证未返回交付: %d %s", w.Code, w.Body)
+			if w := get(encoded); w.Code != 200 || strings.Contains(w.Body.String(), "卡密-0") {
+				t.Fatalf("编码凭证查询失败或泄漏正文: %d %s", w.Code, w.Body)
+			}
+			deliveries, err := a.deliveryMetadata(context.Background(), o.ID)
+			if err != nil || len(deliveries) != 1 {
+				t.Fatalf("交付状态: %v", err)
+			}
+			if w := claimDeliveryForTest(t, a, o.ID, deliveries[0].ID, key); w.Code != 200 || !strings.Contains(w.Body.String(), "卡密-0") {
+				t.Fatalf("编码凭证主动领取失败: %d %s", w.Code, w.Body)
 			}
 			for _, auth := range []string{claimAuthorization("wrong"), claimAuthorization(strings.ToUpper(key))} {
 				if auth == encoded {
@@ -343,8 +357,12 @@ func TestPricedCheckoutRetryPreservesDiscountSnapshot(t *testing.T) {
 		Order      Order      `json:"order"`
 		Deliveries []Delivery `json:"deliveries"`
 	}
-	if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &result) != nil || result.Order.Total != quote.Total || len(result.Order.Discounts) != 1 || result.Order.Discounts[0].Name != rule.Name || len(result.Deliveries) != 1 || result.Deliveries[0].Content != "卡密-0" {
+	if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &result) != nil || result.Order.Total != quote.Total || len(result.Order.Discounts) != 1 || result.Order.Discounts[0].Name != rule.Name || len(result.Deliveries) != 1 || result.Deliveries[0].Content != nil {
 		t.Fatal("密钥查询丢失原优惠快照或交付")
+	}
+	claimed := claimDeliveryForTest(t, a, created.Order.ID, result.Deliveries[0].ID, "discount-retry")
+	if claimed.Code != 200 || !strings.Contains(claimed.Body.String(), "卡密-0") {
+		t.Fatal("主动领取内容无效", claimed.Body)
 	}
 }
 

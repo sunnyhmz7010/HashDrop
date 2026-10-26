@@ -155,35 +155,69 @@ func (g *fakeGateway) set(id, status, by string) {
 	o.Payment.TX.ConfirmedBy = by
 	g.orders[id] = o
 }
+func testDocument(text string) ContentDocument {
+	return ContentDocument{Blocks: []ContentBlock{{ID: "text", Type: "text", Text: text}}}
+}
+func deliveryText(doc *ContentDocument) string {
+	if doc == nil {
+		return ""
+	}
+	parts := []string{}
+	for _, block := range doc.Blocks {
+		if block.Type == "text" {
+			parts = append(parts, block.Text)
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+func claimDeliveryForTest(t *testing.T, a *App, orderID, deliveryID, key string) *httptest.ResponseRecorder {
+	t.Helper()
+	request := httptest.NewRequest("POST", "/api/orders/"+orderID+"/deliveries/"+deliveryID+"/claim", strings.NewReader("{}"))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", claimAuthorization(key))
+	response := httptest.NewRecorder()
+	a.routes().ServeHTTP(response, request)
+	return response
+}
 func insertProduct(t *testing.T, a *App, kind string, stock int) string {
 	t.Helper()
 	id := newID()
-	content := ""
-	var err error
+	plan := ContentDocument{Blocks: []ContentBlock{{ID: "stock", Type: "stock", Label: "激活码", Quantity: 1}}}
 	if kind == "static" {
-		content, err = a.vault.encrypt("购买时内容", "inventory:"+id)
-		if err != nil {
+		plan = testDocument("购买时内容")
+	}
+	raw, err := encodeContent(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encrypted, err := a.vault.encrypt(raw, "product-plan:"+id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = a.db.Exec("INSERT INTO products(id,name,price,currency,active,delivery_plan,created_at,updated_at) VALUES(?,?,?,?,1,?,?,?)", id, "测试商品", 1234, "CNY", encrypted, unixNow(), unixNow()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = a.db.Exec("INSERT INTO inventories(id,name,reusable,created_at,updated_at) VALUES(?,?,0,?,?)", id, "测试库存池", unixNow(), unixNow()); err != nil {
+		t.Fatal(err)
+	}
+	if kind != "static" {
+		if _, err = a.db.Exec("INSERT INTO inventory_products(inventory_id,product_id,slot_id,created_at) VALUES(?,?,?,?)", id, id, "stock", unixNow()); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err = a.db.Exec("INSERT INTO inventories(id,name,kind,content,created_at,updated_at) VALUES(?,?,?,?,?,?)", id, "测试库存池", kind, content, unixNow(), unixNow()); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = a.db.Exec("INSERT INTO products(id,name,price,currency,active,created_at,updated_at) VALUES(?,?,?,?,1,?,?)", id, "测试商品", 1234, "CNY", unixNow(), unixNow()); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = a.db.Exec("INSERT INTO inventory_products(inventory_id,product_id,created_at) VALUES(?,?,?)", id, id, unixNow()); err != nil {
-		t.Fatal(err)
-	}
 	for i := 0; i < stock; i++ {
 		stockID := newID()
-		plain := fmt.Sprintf("卡密-%d", i)
-		encrypted, e := a.vault.encrypt(plain, "stock:"+stockID)
-		if e != nil {
-			t.Fatal(e)
+		doc := testDocument(fmt.Sprintf("卡密-%d", i))
+		plain, err := encodeContent(doc)
+		if err != nil {
+			t.Fatal(err)
 		}
-		if _, e = a.db.Exec("INSERT INTO stock_items(id,inventory_id,content,fingerprint,created_at) VALUES(?,?,?,?,?)", stockID, id, encrypted, a.vault.fingerprint(id, plain), unixNow()); e != nil {
-			t.Fatal(e)
+		content, err := a.vault.encrypt(plain, "stock:"+stockID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = a.db.Exec("INSERT INTO stock_items(id,inventory_id,content,fingerprint,created_at) VALUES(?,?,?,?,?)", stockID, id, content, a.vault.fingerprint(id, plain), unixNow()+int64(i)); err != nil {
+			t.Fatal(err)
 		}
 	}
 	return id
@@ -269,8 +303,18 @@ func TestVerifiedPaymentAndToken(t *testing.T) {
 		if w.Header().Get("Cache-Control") != "no-store" {
 			t.Fatal("敏感响应未禁止缓存")
 		}
-		if tc.want == 200 && !strings.Contains(w.Body.String(), "卡密-") {
-			t.Fatal("缺少真实交付内容")
+		if tc.want == 200 {
+			if strings.Contains(w.Body.String(), "卡密-") {
+				t.Fatal("状态查询泄露了交付正文")
+			}
+			results, err := a.deliveryMetadata(context.Background(), o.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			claimed := claimDeliveryForTest(t, a, o.ID, results[0].ID, tc.token)
+			if claimed.Code != 200 || !strings.Contains(claimed.Body.String(), "卡密-") {
+				t.Fatal("主动领取未返回真实内容", claimed.Body)
+			}
 		}
 	}
 	raw, err := os.ReadFile(a.config.Database)
@@ -317,11 +361,12 @@ func TestStaticSnapshotAndGatewayAdminPayment(t *testing.T) {
 	a, g := newTestApp(t)
 	id := insertProduct(t, a, "static", 0)
 	o, _ := reserve(t, a, id, 1)
-	changed, err := a.vault.encrypt("后来修改的内容", "inventory:"+id)
+	raw, _ := encodeContent(testDocument("后来修改的内容"))
+	changed, err := a.vault.encrypt(raw, "product-plan:"+id)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = a.db.Exec("UPDATE inventories SET content=? WHERE id=?", changed, id); err != nil {
+	if _, err = a.db.Exec("UPDATE products SET delivery_plan=? WHERE id=?", changed, id); err != nil {
 		t.Fatal(err)
 	}
 	if err = a.syncOrder(context.Background(), o.ID); err != nil {
@@ -346,7 +391,7 @@ func TestStaticSnapshotAndGatewayAdminPayment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) != 1 || results[0].Content != "购买时内容" {
+	if len(results) != 1 || deliveryText(results[0].Content) != "购买时内容" {
 		t.Fatalf("快照未保存 %+v", results)
 	}
 }
@@ -549,6 +594,24 @@ func TestBrowserFixture(t *testing.T) {
 		}
 		reply(w, 200, map[string]string{"url": freshServer.URL, "hashpay_url": g.server.URL, "private_key": string(key)})
 	})
+	mux.HandleFunc("POST /__test/paid-only/{id}", func(w http.ResponseWriter, r *http.Request) {
+		a.workerMu.Lock()
+		defer a.workerMu.Unlock()
+		g.set(r.PathValue("id"), "paid", "system")
+		if err := a.markPaid(r.Context(), r.PathValue("id")); err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		if _, err := a.db.Exec("UPDATE deliveries SET status='failed',last_error='测试模拟交付失败' WHERE order_id=?", r.PathValue("id")); err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		if _, err := a.db.Exec("UPDATE orders SET delivery_status='failed' WHERE id=?", r.PathValue("id")); err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		reply(w, 200, map[string]bool{"ok": true})
+	})
 	mux.HandleFunc("POST /__test/pay/{id}", func(w http.ResponseWriter, r *http.Request) {
 		g.set(r.PathValue("id"), "paid", "system")
 		if err := a.syncOrder(r.Context(), r.PathValue("id")); err != nil {
@@ -647,7 +710,7 @@ func TestGatewayTerminalStatePreservesAllocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if old.PaymentStatus != "paid" || old.DeliveryStatus != "manual" {
+	if old.PaymentStatus != "paid" || old.DeliveryStatus != "failed" {
 		t.Fatal("释放后的迟到付款未转人工")
 	}
 	var assigned string

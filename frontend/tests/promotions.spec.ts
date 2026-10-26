@@ -1,3 +1,4 @@
+import { claimContents, testPlan } from "./fixture";
 import {
   loginAdmin,
   test,
@@ -26,7 +27,7 @@ test("优惠管理保存、叠加报价、价格变化确认与历史领取", as
   const pool = await createInventory(
     page,
     "优惠验证交付库存",
-    "static",
+    true,
     "PROMOTION-CONTENT",
   );
   async function createProduct(name: string, hidden: boolean) {
@@ -35,6 +36,7 @@ test("优惠管理保存、叠加报价、价格变化确认与历史领取", as
       data: {
         name,
         description: "优惠验证介绍",
+        delivery_plan: testPlan(),
         details: "",
         price: 10000,
         currency: "CNY",
@@ -216,7 +218,8 @@ test("优惠管理保存、叠加报价、价格变化确认与历史领取", as
     (await request.post(`${base}/__test/pay/${orderID}`)).ok(),
   ).toBeTruthy();
   await page.reload();
-  await expect(page.locator(".delivery-item pre")).toHaveText(
+  await claimContents(page);
+  await expect(page.locator(".delivery-item .markdown-content")).toHaveText(
     "PROMOTION-CONTENT",
   );
 
@@ -284,7 +287,8 @@ test("优惠管理保存、叠加报价、价格变化确认与历史领取", as
   await expect(page.locator(".checkout-receipt-meta")).toContainText(
     "限时九折优惠码",
   );
-  await expect(page.locator(".delivery-item pre")).toHaveText(
+  await claimContents(page);
+  await expect(page.locator(".delivery-item .markdown-content")).toHaveText(
     "PROMOTION-CONTENT",
   );
   expect(

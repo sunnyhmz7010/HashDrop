@@ -55,7 +55,7 @@ test("个人捐赠记录按昵称查询和清除，管理员及会话故障时�
     const products: Product[] = await (
       await request.get(`${base()}/api/products`)
     ).json();
-    const product = products.find((item) => item.kind === "static")!;
+    const product = products.find((item) => item.stock_unlimited)!;
     await page.goto(`${base()}/products/${product.id}`);
     await expect(
       page

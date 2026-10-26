@@ -105,7 +105,6 @@ onMounted(load);
                       size="large"
                       :aria-label="t('shop.buy')"
                       :disabled="
-                        product.delivery_mode === 'automatic' &&
                         !product.stock_unlimited &&
                         product.available < product.min_quantity &&
                         !restorePurchase(product.id)
@@ -113,7 +112,6 @@ onMounted(load);
                       @click="openPurchase(product.id)"
                       ><ProductIcon name="buy" /></n-button></template
                   >{{
-                    product.delivery_mode === "automatic" &&
                     !product.stock_unlimited &&
                     product.available < product.min_quantity &&
                     !restorePurchase(product.id)

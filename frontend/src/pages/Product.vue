@@ -77,14 +77,12 @@ watch(
                 type="primary"
                 size="large"
                 :disabled="
-                  product.delivery_mode === 'automatic' &&
                   !product.stock_unlimited &&
                   product.available < product.min_quantity &&
                   !restorePurchase(product.id)
                 "
                 @click="purchaseOpen = true"
                 >{{
-                  product.delivery_mode === "automatic" &&
                   !product.stock_unlimited &&
                   product.available < product.min_quantity &&
                   !restorePurchase(product.id)

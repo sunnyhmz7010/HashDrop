@@ -21,6 +21,8 @@ import {
   money,
   paymentNames,
   type OrderDetail,
+  type Delivery,
+  type ContentDocument,
 } from "../api";
 import {
   forgetPurchase,
@@ -30,6 +32,7 @@ import {
   historyCleared,
 } from "../claim";
 import OrderQueryDialog from "../components/OrderQueryDialog.vue";
+import ContentView from "../components/ContentView.vue";
 
 const route = useRoute(),
   router = useRouter(),
@@ -42,10 +45,18 @@ const detail = ref<OrderDetail>(),
   queryOpen = ref(false),
   storageError = ref(false),
   credentialSaved = ref(false);
+const claimed = ref<Record<string, ContentDocument>>({});
+const claiming = ref("");
+const claimError = ref<Record<string, string>>({});
+let claimController: AbortController | undefined;
 let timer: ReturnType<typeof setTimeout> | undefined,
   controller: AbortController | undefined,
   generation = 0;
 function stop() {
+  claimController?.abort();
+  claimed.value = {};
+  claiming.value = "";
+  claimError.value = {};
   clearTimeout(timer);
   controller?.abort();
   generation++;
@@ -126,6 +137,34 @@ async function queried(result: OrderDetail, key: string) {
   token.value = key;
   credentialSaved.value = false;
   await load();
+}
+async function claim(delivery: Delivery) {
+  if (
+    claiming.value ||
+    claimed.value[delivery.id] ||
+    delivery.status !== "done"
+  )
+    return;
+  const current = generation,
+    id = orderID.value,
+    key = token.value;
+  claiming.value = delivery.id;
+  claimError.value[delivery.id] = "";
+  claimController = new AbortController();
+  try {
+    const result = await api<{ delivery: Delivery }>(
+      `/orders/${id}/deliveries/${delivery.id}/claim`,
+      { method: "POST", body: {}, token: key, signal: claimController.signal },
+    );
+    if (current !== generation) return;
+    if (!result.delivery.content) throw new Error(t("errors.response_json"));
+    claimed.value[delivery.id] = result.delivery.content;
+  } catch (cause) {
+    if (current === generation)
+      claimError.value[delivery.id] = errorText(cause);
+  } finally {
+    if (current === generation) claiming.value = "";
+  }
 }
 async function copy(value: string) {
   try {
@@ -243,10 +282,6 @@ const statusType = computed(() => {
               <dd>{{ expires }}</dd>
             </div>
           </dl>
-          <div v-if="detail.order.buyer_note" class="order-note-block">
-            <strong>{{ t("orders.buyer_note") }}</strong>
-            <p>{{ detail.order.buyer_note }}</p>
-          </div>
           <div v-if="detail.order.delivery_note" class="order-note-block">
             <strong>{{ t("product.delivery_note") }}</strong>
             <p>{{ detail.order.delivery_note }}</p>
@@ -325,16 +360,10 @@ const statusType = computed(() => {
           <n-alert
             v-else-if="
               detail.order.payment_status === 'paid' &&
-              detail.order.delivery_status === 'manual'
+              detail.order.delivery_status === 'failed'
             "
             type="warning"
-            >{{
-              t(
-                detail.order.kind === "manual"
-                  ? "claim.manual_waiting"
-                  : "claim.manual_help",
-              )
-            }}</n-alert
+            >{{ t("claim.delivery_failed") }}</n-alert
           >
           <n-checkbox
             v-if="storageError && detail.order.payment_status === 'pending'"
@@ -384,12 +413,26 @@ const statusType = computed(() => {
               class="delivery-item checkout-result"
             >
               <div class="section-title">
-                <span>{{ t("delivery.item", { ordinal: item.ordinal }) }}</span
-                ><n-button size="small" @click="copy(item.content ?? '')">{{
-                  t("delivery.copy_content")
-                }}</n-button>
+                <span>{{ t("delivery.item", { ordinal: item.ordinal }) }}</span>
+                <n-button
+                  v-if="!claimed[item.id]"
+                  size="small"
+                  type="primary"
+                  :loading="claiming === item.id"
+                  :disabled="!!claiming && claiming !== item.id"
+                  @click="claim(item)"
+                  >{{ t("delivery.claim") }}</n-button
+                >
               </div>
-              <pre>{{ item.content }}</pre>
+              <n-alert v-if="claimError[item.id]" type="error">{{
+                claimError[item.id]
+              }}</n-alert>
+              <ContentView
+                v-if="claimed[item.id]"
+                :content="claimed[item.id]!"
+                :asset-base="`/orders/${orderID}/deliveries/${item.id}/assets`"
+                :token="token"
+              />
             </article>
           </div>
         </template>

@@ -77,50 +77,73 @@ test("多币种逐项配置、昵称付款与公开选择，停用后仍可查�
     await page
       .getByLabel("赞赏说明（Markdown）")
       .fill("## 感谢支持\n你的赞赏将用于项目维护。");
-    const groups = page.locator(".donation-currency-group");
-    await expect(groups).toHaveCount(1);
-    const cny = groups.nth(0);
-    await cny.locator(".donation-preset input").nth(0).fill("5");
-    await cny.getByRole("button", { name: "添加金额", exact: true }).click();
-    await cny.locator(".donation-preset input").nth(1).fill("12.34");
-    await cny.getByRole("button", { name: "添加金额", exact: true }).click();
-    await cny.locator(".donation-preset input").nth(2).fill("20");
-    await cny.getByRole("button", { name: "添加金额", exact: true }).click();
-    await cny.locator(".donation-preset input").nth(3).fill("99");
-    await cny
-      .getByRole("button", { name: "移除金额", exact: true })
-      .nth(3)
+    await page
+      .locator(".n-tabs-tab")
+      .getByText("预览", { exact: true })
       .click();
-    await page.locator("#donation-min-0").fill("1");
-    await page.locator("#donation-max-0").fill("1000");
-    for (const [index, currency, amount, min, max] of [
-      [1, "USDT", "1.234567", "0.000001", "10"],
-      [2, "JPY", "500", "100", "5000"],
+    await expect(page.getByRole("heading", { name: "感谢支持" })).toBeVisible();
+    await page
+      .locator(".n-tabs-tab")
+      .getByText("编辑", { exact: true })
+      .click();
+    await expect(page.getByLabel("赞赏说明（Markdown）")).toHaveValue(
+      "## 感谢支持\n你的赞赏将用于项目维护。",
+    );
+    const openPage = page.locator('.section-title a[href="/donate"]');
+    await expect(openPage).toHaveCount(1);
+    await expect(openPage).toHaveText("打开赞赏页");
+    await expect(openPage).toHaveAttribute("target", "_blank");
+    await expect(page.getByText("复制页面链接", { exact: true })).toHaveCount(
+      0,
+    );
+    await expect(page.locator('form a[href="/center/settings"]')).toHaveCount(
+      0,
+    );
+    const rows = page.locator(".donation-preset");
+    const amounts = page.getByRole("textbox", { name: /^预设金额 \d+$/ });
+    await expect(amounts).toHaveCount(1);
+    await amounts.nth(0).fill("5");
+    for (const [amount, currency] of [
+      ["12.34", "CNY"],
+      ["20", "CNY"],
+      ["1.234567", "USDT"],
+      ["500", "JPY"],
+      ["99", "CNY"],
     ] as const) {
-      await page.getByRole("button", { name: "添加币种", exact: true }).click();
-      const group = groups.nth(index);
-      await group.getByLabel("赞赏币种", { exact: true }).click();
+      await page.getByRole("button", { name: "添加金额", exact: true }).click();
+      await amounts.last().fill(amount);
+      await rows
+        .last()
+        .getByLabel(/^赞赏币种 \d+$/)
+        .click();
       await page
         .locator(".n-base-select-option:visible")
         .getByText(currency, { exact: true })
         .click();
-      await expect(group.getByLabel("赞赏币种", { exact: true })).toContainText(
+      await expect(rows.last().getByLabel(/^赞赏币种 \d+$/)).toContainText(
         currency,
       );
-      await expect(page.locator(".n-base-select-menu:visible")).toHaveCount(0);
-      if (!(await group.locator(".donation-preset input").count()))
-        await group
-          .getByRole("button", { name: "添加金额", exact: true })
-          .click();
-      while ((await group.locator(".donation-preset input").count()) > 1)
-        await group
-          .getByRole("button", { name: "移除金额", exact: true })
-          .last()
-          .click();
-      await group.locator(".donation-preset input").nth(0).fill(amount);
+    }
+    await page
+      .getByRole("button", { name: "移除金额", exact: true })
+      .last()
+      .click();
+    const groups = page.locator(".donation-currency-range");
+    await expect(groups).toHaveCount(3);
+    await page.locator("#donation-min-0").fill("1");
+    await page.locator("#donation-max-0").fill("1000");
+    for (const [index, min, max] of [
+      [1, "0.000001", "10"],
+      [2, "100", "5000"],
+    ] as const) {
       await page.locator(`#donation-min-${index}`).fill(min);
       await page.locator(`#donation-max-${index}`).fill(max);
     }
+    await amounts.nth(0).fill("5 CNY");
+    await page.getByRole("button", { name: "保存设置", exact: true }).click();
+    await expect(page.getByRole("alert")).toBeVisible();
+    await expect(amounts.nth(0)).toHaveValue("5 CNY");
+    await amounts.nth(0).fill("5");
     await page.getByRole("button", { name: "保存设置", exact: true }).click();
     await expect(
       page.getByText("赞赏页设置已保存", { exact: true }),
@@ -148,16 +171,18 @@ test("多币种逐项配置、昵称付款与公开选择，停用后仍可查�
       "支持 HashDrop 持续开发",
     );
     await expect(groups).toHaveCount(3);
-    for (const [index, amount] of ["5.00", "12.34", "20.00"].entries())
-      await expect(
-        cny.locator(".donation-preset input").nth(index),
-      ).toHaveValue(amount);
-    await expect(groups.nth(1).locator(".donation-preset input")).toHaveValue(
-      "1.234567",
-    );
-    await expect(groups.nth(2).locator(".donation-preset input")).toHaveValue(
-      "500",
-    );
+    for (const [index, amount, currency] of [
+      [0, "5.00", "CNY"],
+      [1, "12.34", "CNY"],
+      [2, "20.00", "CNY"],
+      [3, "1.234567", "USDT"],
+      [4, "500", "JPY"],
+    ] as const) {
+      await expect(amounts.nth(index)).toHaveValue(amount);
+      await expect(rows.nth(index).getByLabel(/^赞赏币种 \d+$/)).toContainText(
+        currency,
+      );
+    }
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole("button", { name: "打开管理菜单" }).click();
     await page

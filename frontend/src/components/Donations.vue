@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
+import { onMounted, onUnmounted, reactive, ref } from "vue";
 import {
   NAlert,
   NButton,
@@ -11,13 +11,13 @@ import {
 } from "naive-ui";
 import {
   api,
-  copyText,
   errorText,
   priceText,
   toMinor,
   type DonationSettings,
 } from "../api";
 import { t } from "../i18n";
+import MarkdownEditor from "./MarkdownEditor.vue";
 
 const message = useMessage(),
   loaded = ref(false),
@@ -28,56 +28,56 @@ const model = reactive({
   enabled: false,
   title: "",
   description: "",
+  amounts: [] as { amount: string; currency: string }[],
   currencies: [] as {
     currency: string;
-    amounts: string[];
     min: string;
     max: string;
   }[],
 });
-const currencies = [
-  "CNY",
-  "USD",
-  "EUR",
-  "GBP",
-  "HKD",
-  "JPY",
-  "USDT",
-  "USDC",
-].map((value) => ({ label: value, value }));
-const publicURL = computed(() => `${location.origin}/donate`);
+const currencies = ["CNY", "USD", "EUR", "GBP", "HKD", "JPY", "USDT", "USDC"];
+const currencyOptions = currencies.map((value) => ({ label: value, value }));
 const controller = new AbortController();
 function setModel(s: DonationSettings) {
   Object.assign(model, {
     ...s,
+    amounts: s.currencies.flatMap((group) =>
+      group.amounts.map((n) => ({
+        amount: priceText(n, group.currency),
+        currency: group.currency,
+      })),
+    ),
     currencies: s.currencies.map((group) => ({
       currency: group.currency,
-      amounts: group.amounts.map((n) => priceText(n, group.currency)),
       min: priceText(group.min_amount, group.currency),
       max: priceText(group.max_amount, group.currency),
     })),
   });
 }
-function addCurrency() {
-  const next = currencies.find(
-    (option) =>
-      !model.currencies.some((group) => group.currency === option.value),
-  );
-  if (next)
-    model.currencies.push({
-      currency: next.value,
-      amounts: ["5", "10", "20"],
-      min: "1",
-      max: "1000",
-    });
+function addAmount() {
+  model.amounts.push({
+    amount: "",
+    currency:
+      model.amounts[model.amounts.length - 1]?.currency ??
+      model.currencies[0]!.currency,
+  });
 }
-function currencyOptions(index: number) {
-  return currencies.map((option) => ({
-    ...option,
-    disabled: model.currencies.some(
-      (group, other) => other !== index && group.currency === option.value,
-    ),
-  }));
+function syncCurrencies() {
+  for (const { currency } of model.amounts) {
+    if (!model.currencies.some((group) => group.currency === currency))
+      model.currencies.push({
+        currency,
+        min: "1",
+        max: "1000",
+      });
+  }
+}
+function removeCurrency(index: number) {
+  const currency = model.currencies[index]!.currency;
+  model.amounts = model.amounts.filter(
+    (amount) => amount.currency !== currency,
+  );
+  model.currencies.splice(index, 1);
 }
 async function loadSettings() {
   loadingSettings.value = true;
@@ -101,13 +101,21 @@ async function save() {
   saving.value = true;
   error.value = "";
   try {
+    syncCurrencies();
+    // 按币种提交金额，独立保留上下限以支持仅自定义金额的币种。
+    const amounts = model.amounts.map(({ amount, currency }) => ({
+      currency,
+      value: toMinor(amount, currency),
+    }));
     const body: DonationSettings = {
       enabled: model.enabled,
       title: model.title,
       description: model.description,
       currencies: model.currencies.map((group) => ({
         currency: group.currency,
-        amounts: group.amounts.map((value) => toMinor(value, group.currency)),
+        amounts: amounts
+          .filter((amount) => amount.currency === group.currency)
+          .map((amount) => amount.value),
         min_amount: toMinor(group.min, group.currency),
         max_amount: toMinor(group.max, group.currency),
       })),
@@ -125,26 +133,15 @@ async function save() {
     saving.value = false;
   }
 }
-async function copyURL() {
-  try {
-    await copyText(publicURL.value);
-    message.success(t("common.copied"));
-  } catch {
-    message.warning(t("common.copy_manual"));
-  }
-}
 </script>
 
 <template>
   <div class="grid">
     <div class="section-title">
       <h2>{{ t("nav.donation") }}</h2>
-      <div class="row-actions">
-        <router-link to="/donate" target="_blank" class="text-link">{{
-          t("donation.open_page")
-        }}</router-link
-        ><n-button @click="copyURL">{{ t("donation.copy_page") }}</n-button>
-      </div>
+      <n-button tag="a" href="/donate" target="_blank" rel="noopener">{{
+        t("donation.open_page")
+      }}</n-button>
     </div>
     <n-alert v-if="error" type="error"
       >{{ errorText(error) }}
@@ -193,69 +190,81 @@ async function copyURL() {
         />
       </div>
       <div class="field-stack">
-        <label class="field-label" for="donation-description">{{
+        <label class="field-label" for="donation-description-input">{{
           t("donation.description")
         }}</label
-        ><n-input
-          v-model:value="model.description"
+        ><MarkdownEditor
+          id="donation-description"
+          input-id="donation-description-input"
+          v-model="model.description"
           :disabled="saving"
-          type="textarea"
           :maxlength="65536"
-          :autosize="{ minRows: 3, maxRows: 8 }"
-          :input-props="{ id: 'donation-description' }"
         />
       </div>
+      <div class="field-stack">
+        <span class="field-label">{{ t("donation.presets") }}</span>
+        <div
+          v-for="(preset, index) in model.amounts"
+          :key="index"
+          class="donation-preset"
+        >
+          <n-input
+            v-model:value="preset.amount"
+            :disabled="saving"
+            placeholder="5"
+            :input-props="{
+              inputmode: 'decimal',
+              'aria-label': `${t('donation.presets')} ${index + 1}`,
+            }"
+          >
+            <template #suffix>
+              <div class="donation-preset-currency" @mousedown.stop>
+                <n-select
+                  v-model:value="preset.currency"
+                  size="small"
+                  :bordered="false"
+                  :consistent-menu-width="false"
+                  :disabled="saving"
+                  :options="currencyOptions"
+                  :aria-label="`${t('donation.currency')} ${index + 1}`"
+                  @update:value="syncCurrencies"
+                />
+              </div>
+            </template>
+          </n-input>
+          <n-button
+            size="small"
+            quaternary
+            circle
+            :aria-label="t('donation.remove_amount')"
+            :title="t('donation.remove_amount')"
+            :disabled="saving"
+            @click="model.amounts.splice(index, 1)"
+          >
+            ×
+          </n-button>
+        </div>
+        <n-button
+          class="add-amount"
+          :disabled="saving || model.amounts.length >= currencies.length * 8"
+          @click="addAmount"
+          >{{ t("donation.add_amount") }}</n-button
+        >
+        <small class="field-help">{{ t("donation.presets_help") }}</small>
+      </div>
+      <h3 class="amount-limits-title">{{ t("donation.amount_limits") }}</h3>
       <section
         v-for="(group, index) in model.currencies"
-        :key="index"
-        class="grid donation-currency-group"
+        :key="group.currency"
+        class="grid donation-currency-range"
       >
         <div class="section-title">
-          <label class="field-label" :id="`donation-currency-label-${index}`">{{
-            t("donation.currency")
-          }}</label>
+          <span class="field-label">{{ group.currency }}</span>
           <n-button
             :disabled="saving || model.currencies.length <= 1"
-            @click="model.currencies.splice(index, 1)"
+            @click="removeCurrency(index)"
             >{{ t("donation.remove_currency") }}</n-button
           >
-        </div>
-        <n-select
-          v-model:value="group.currency"
-          :disabled="saving"
-          :options="currencyOptions(index)"
-          :aria-labelledby="`donation-currency-label-${index}`"
-        />
-        <div class="field-stack">
-          <span class="field-label"
-            >{{ t("donation.presets") }} · {{ group.currency }}</span
-          >
-          <div
-            v-for="(_, amountIndex) in group.amounts"
-            :key="amountIndex"
-            class="donation-preset"
-          >
-            <n-input
-              v-model:value="group.amounts[amountIndex]"
-              :disabled="saving"
-              :input-props="{
-                inputmode: 'decimal',
-                'aria-label': `${t('donation.presets')} ${amountIndex + 1} · ${group.currency}`,
-              }"
-            />
-            <n-button
-              :disabled="saving"
-              @click="group.amounts.splice(amountIndex, 1)"
-              >{{ t("donation.remove_amount") }}</n-button
-            >
-          </div>
-          <n-button
-            class="add-amount"
-            :disabled="saving || group.amounts.length >= 8"
-            @click="group.amounts.push('')"
-            >{{ t("donation.add_amount") }}</n-button
-          >
-          <small class="field-help">{{ t("donation.presets_help") }}</small>
         </div>
         <div class="form-grid two">
           <div class="field-stack">
@@ -284,18 +293,6 @@ async function copyURL() {
           </div>
         </div>
       </section>
-      <n-button
-        class="add-currency"
-        :disabled="saving || model.currencies.length >= currencies.length"
-        @click="addCurrency"
-        >{{ t("donation.add_currency") }}</n-button
-      >
-      <p class="helper">
-        {{ t("donation.gateway_help") }}
-        <router-link to="/center/settings" class="text-link">{{
-          t("nav.settings")
-        }}</router-link>
-      </p>
     </form>
   </div>
 </template>
@@ -304,10 +301,10 @@ async function copyURL() {
 .donation-switch {
   justify-self: start;
 }
-.helper {
+.amount-limits-title {
   margin: 0;
 }
-.donation-currency-group {
+.donation-currency-range {
   padding: 16px 0;
   border-top: 1px solid #e5e7eb;
 }
@@ -320,8 +317,10 @@ async function copyURL() {
   flex: 1;
   min-width: 0;
 }
-.add-amount,
-.add-currency {
+.donation-preset-currency {
+  width: 96px;
+}
+.add-amount {
   justify-self: start;
 }
 </style>

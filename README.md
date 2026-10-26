@@ -68,7 +68,7 @@ HashPay 已经提供了加密货币收款能力，但要真正销售数字商品
 ```yaml
 services:
   hashdrop:
-    image: ghcr.io/sunnyhmz7010/hashdrop:1.2.0
+    image: ghcr.io/sunnyhmz7010/hashdrop:2.0.0
     container_name: hashdrop
     restart: unless-stopped
     ports:
@@ -102,7 +102,7 @@ docker run -d \
   --restart unless-stopped \
   -p 8080:8080 \
   -v hashdrop_data:/data \
-  ghcr.io/sunnyhmz7010/hashdrop:1.2.0
+  ghcr.io/sunnyhmz7010/hashdrop:2.0.0
 ```
 
 ### 🛠️ 自行构建镜像
@@ -181,7 +181,7 @@ docker exec hashdrop /app/hashdrop \
 
 恢复时需要一起恢复备份中的 `hashdrop.db` 与 `assets/`，并保留配套的 `config.json`（包含加密密钥）和 HashPay 私钥文件。备份清单记录数据库与加密附件的 SHA-256；备份不导出密钥。自动备份与原数据位于同一数据卷，应另外保存至其他存储位置，并自行管理历史备份数量。
 
-数据库结构版本为 7，按全新安装维护，仅接受当前版本，不迁移旧开发数据库。验证新版时请使用新建的数据目录，并保留原有开发数据。
+v2.0.0 使用数据库结构版本 7，仅支持全新安装，不提供从 v1.x 的数据库迁移。请使用新建的数据目录，保留 v1.x 数据卷及其配套配置；已有 v1.x 实例不能直接替换为新版容器。
 
 ## 🧠 功能细节
 

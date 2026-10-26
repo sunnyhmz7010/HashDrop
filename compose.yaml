@@ -1,6 +1,6 @@
 services:
   hashdrop:
-    image: ghcr.io/sunnyhmz7010/hashdrop:1.2.0
+    image: ghcr.io/sunnyhmz7010/hashdrop:2.0.0
     container_name: hashdrop
     restart: unless-stopped
     ports:

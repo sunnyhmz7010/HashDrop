@@ -123,6 +123,7 @@ test("多币种逐项配置、昵称付款与公开选择，停用后仍可查�
       await expect(rows.last().getByLabel(/^赞赏币种 \d+$/)).toContainText(
         currency,
       );
+      await expect(page.locator(".n-base-select-option:visible")).toHaveCount(0);
     }
     await page
       .getByRole("button", { name: "移除金额", exact: true })

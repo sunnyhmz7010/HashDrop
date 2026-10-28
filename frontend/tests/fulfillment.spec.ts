@@ -11,7 +11,7 @@ import {
 import { placeTestOrder } from "./checkout";
 import type { Product } from "../src/api";
 
-test("组合交付包含卡密、图文、文件和链接，主动领取并校验附件权限", async ({
+test("组合交付包含卡密、文字和外链，移除附件入口并主动领取", async ({
   page,
   request,
 }) => {
@@ -21,7 +21,7 @@ test("组合交付包含卡密、图文、文件和链接，主动领取并校�
   await importInventory(page, pool, "COMPOSED-CODE-001\nCOMPOSED-CODE-002");
   await page.goto(`${base}/center/products`);
   await page.getByRole("button", { name: "新增商品", exact: true }).click();
-  await page.locator("#product-name input").fill("图文文件组合交付");
+  await page.locator("#product-name input").fill("文字外链组合交付");
   await page.locator("#price input").fill("12.00");
   await page.locator("#product-min-quantity").fill("2");
   await page.locator("#product-max-quantity").fill("3");
@@ -29,40 +29,13 @@ test("组合交付包含卡密、图文、文件和链接，主动领取并校�
   await page.getByRole("button", { name: "添加文字", exact: true }).click();
   await page
     .locator(".content-editor textarea")
-    .fill("## 使用指南\n\n请保管本份内容。");
-  for (const file of [
-    {
-      button: "上传图片",
-      name: "说明.png",
-      mimeType: "image/png",
-      buffer: Buffer.from(
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6M6YAAAAASUVORK5CYII=",
-        "base64",
-      ),
-    },
-    {
-      button: "上传文件",
-      name: "资料.txt",
-      mimeType: "text/plain",
-      buffer: Buffer.from("PRIVATE-FILE-CONTENT"),
-    },
-  ]) {
-    const chooser = page.waitForEvent("filechooser");
-    await page.getByRole("button", { name: file.button, exact: true }).click();
-    await (
-      await chooser
-    ).setFiles({
-      name: file.name,
-      mimeType: file.mimeType,
-      buffer: file.buffer,
-    });
-    await expect(
-      page
-        .locator(".content-editor")
-        .getByText("附件已上传，保存后加入本份内容。", { exact: true }),
-    ).toHaveCount(file.mimeType === "image/png" ? 1 : 2);
-  }
-  await page.locator('[data-content-type="file"] input').fill("资料下载");
+    .fill(
+      `## 使用指南\n\n请保管本份内容。\n\n![使用说明](${base}/__test/media/image.svg)`,
+    );
+  await expect(page.getByRole("button", { name: /^上传/ })).toHaveCount(0);
+  await expect(page.locator('.content-editor input[type="file"]')).toHaveCount(
+    0,
+  );
   await page.getByRole("button", { name: "添加链接", exact: true }).click();
   const link = page.locator('[data-content-type="link"]');
   await link.locator('input[id^="content-label-"]').fill("操作手册");
@@ -81,8 +54,6 @@ test("组合交付包含卡密、图文、文件和链接，主动领取并校�
   expect(product.delivery_plan?.blocks.map((block) => block.type)).toEqual([
     "stock",
     "text",
-    "image",
-    "file",
     "link",
   ]);
   expect(
@@ -145,24 +116,17 @@ test("组合交付包含卡密、图文、文件和链接，主动领取并校�
         ),
     )
     .toBeTruthy();
-  const download = page.waitForEvent("download");
-  await receipts
-    .first()
-    .getByRole("button", { name: "下载 · 资料下载", exact: true })
-    .click();
-  const downloaded = await download;
-  expect(downloaded.suggestedFilename()).toBe("资料.txt");
-  const stream = await downloaded.createReadStream();
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream!) chunks.push(chunk);
-  expect(Buffer.concat(chunks).toString()).toBe("PRIVATE-FILE-CONTENT");
-  const assetID = product.delivery_plan!.blocks.find(
-    (block) => block.type === "file",
-  )!.asset_id;
-  const unauthorized = await request.get(
-    `${base}/api/orders/${purchase.orderID}/deliveries/${metadata.deliveries[0].id}/assets/${assetID}`,
+  expect((await request.post(`${base}/api/admin/assets`)).status()).toBe(405);
+  expect((await request.get(`${base}/api/admin/assets/removed`)).status()).toBe(
+    404,
   );
-  expect([401, 404]).toContain(unauthorized.status());
+  expect(
+    (
+      await request.get(
+        `${base}/api/orders/${purchase.orderID}/deliveries/${metadata.deliveries[0].id}/assets/removed`,
+      )
+    ).status(),
+  ).toBe(404);
   expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain(
     "COMPOSED-CODE",
   );

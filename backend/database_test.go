@@ -38,7 +38,7 @@ INSERT INTO inventory_products(inventory_id,product_id,slot_id,created_at) VALUE
 	}
 	defer db.Close()
 	var version, foreignKeys, sessions int
-	if err = db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 7 {
+	if err = db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 8 {
 		t.Fatal("数据库初始化版本无效", err)
 	}
 	if err = db.QueryRow("PRAGMA foreign_keys").Scan(&foreignKeys); err != nil || foreignKeys != 1 {
@@ -92,7 +92,7 @@ func TestDatabaseInitializationRollsBackOnFailure(t *testing.T) {
 }
 
 func TestDatabaseRejectsOtherVersionsWithoutChangingRecords(t *testing.T) {
-	for _, version := range []int{1, 2, 3, 4, 5, 6, 8} {
+	for _, version := range []int{1, 2, 3, 4, 5, 6, 7, 9} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "unsupported.db")
 			db, err := sql.Open("sqlite", databaseURI(path))

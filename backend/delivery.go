@@ -76,7 +76,7 @@ func (a *App) readDeliveryContent(id, encrypted string) (*ContentDocument, error
 	return &doc, nil
 }
 
-// 正文与附件共用领取授权边界，身份和保护策略无需进入库存分配器。
+// 领取授权独立处理，身份和保护策略无需进入库存分配器。
 func (a *App) authorizeDeliveryAccess(r *http.Request) (Order, Delivery, error) {
 	o, err := a.authorizeOrderAccess(r)
 	if err != nil {
@@ -213,10 +213,6 @@ func (a *App) deliverItem(ctx context.Context, orderID, deliveryID string) error
 	doc, err := decodeContent(plain)
 	if err != nil || validateContent(doc, false) != nil {
 		return errDeliverySnapshot
-	}
-	// 正文与附件引用同时提交，一份结果不会只开放其中一部分。
-	if err = a.replaceAssetRefs(ctx, tx, "delivery", deliveryID, doc); err != nil {
-		return err
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT stock_id,inventory_id,consumes,status FROM delivery_allocations WHERE delivery_id=? ORDER BY ordinal`, deliveryID)
 	if err != nil {
@@ -365,9 +361,6 @@ func (a *App) fulfillDelivery(w http.ResponseWriter, r *http.Request) error {
 			return &apiError{409, "该份商品已交付，不能覆盖原内容"}
 		}
 	} else {
-		if err = a.replaceAssetRefs(r.Context(), tx, "delivery", input.DeliveryID, input.Content); err != nil {
-			return err
-		}
 		if err = releaseDeliveryAllocations(r.Context(), tx, o.ID, input.DeliveryID); err != nil {
 			return err
 		}
@@ -407,13 +400,10 @@ func (a *App) runScheduler(ctx context.Context) {
 				continue
 			}
 			backupCtx, cancel := context.WithTimeout(ctx, 30*time.Minute)
-			err := a.backupData(backupCtx, filepath.Join(a.settings().BackupDir, fmt.Sprintf("hashdrop-%d", unixNow())))
-			if err == nil {
-				err = a.cleanupAssets(backupCtx)
-			}
+			err := backupDatabase(backupCtx, a.db, filepath.Join(a.settings().BackupDir, fmt.Sprintf("hashdrop-%d.db", unixNow())))
 			cancel()
 			if err != nil {
-				slog.Error("定期备份或附件清理失败", "error_type", fmt.Sprintf("%T", err))
+				slog.Error("定期备份失败", "error_type", fmt.Sprintf("%T", err))
 			} else {
 				slog.Info("定期备份完成并通过校验")
 			}

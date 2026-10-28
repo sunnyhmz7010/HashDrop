@@ -39,7 +39,7 @@ export function hasContent(document: ContentDocument): boolean {
           (block.quantity ?? 1) >= 0 &&
           (block.quantity ?? 1) <= 100
         );
-      return !!block.asset_id;
+      return false;
     })
   );
 }

@@ -49,7 +49,6 @@ const message = useMessage(),
   detailError = ref("");
 const editingDelivery = ref(""),
   deliveryContent = ref<ContentDocument>(textContent()),
-  contentUploading = ref(false),
   activeAction = ref("");
 const statusOptions = computed(() => [
   { label: t("orders.all_statuses"), value: "" },
@@ -246,12 +245,7 @@ async function action(name: string, body: unknown = {}) {
   }
 }
 async function fulfill() {
-  if (
-    !editingDelivery.value ||
-    contentUploading.value ||
-    !hasContent(deliveryContent.value)
-  )
-    return;
+  if (!editingDelivery.value || !hasContent(deliveryContent.value)) return;
   if (
     await action("fulfill", {
       delivery_id: editingDelivery.value,
@@ -457,7 +451,7 @@ async function copy(value: string) {
   <FormDialog
     v-model:show="show"
     :title="t('orders.detail')"
-    :busy="(busy && !!selected) || contentUploading"
+    :busy="busy && !!selected"
   >
     <template #header>
       <div class="order-modal-title">
@@ -642,24 +636,18 @@ async function copy(value: string) {
             class="grid"
             @submit.prevent="fulfill"
           >
-            <ContentEditor
-              v-model="deliveryContent"
-              :disabled="busy"
-              @busy="contentUploading = $event"
-            />
+            <ContentEditor v-model="deliveryContent" :disabled="busy" />
             <small class="field-help">{{ t("delivery.immutable_help") }}</small>
             <div class="row-actions">
               <n-button
                 type="primary"
                 attr-type="submit"
                 :loading="busy"
-                :disabled="
-                  !hasContent(deliveryContent) || busy || contentUploading
-                "
+                :disabled="!hasContent(deliveryContent) || busy"
                 >{{ t("delivery.fulfill") }}</n-button
               >
               <n-button
-                :disabled="busy || contentUploading"
+                :disabled="busy"
                 @click="
                   editingDelivery = '';
                   deliveryContent = textContent();

@@ -26,8 +26,7 @@ async function request(
   } = {},
 ): Promise<Response> {
   const headers: Record<string, string> = {};
-  if (options.body !== undefined && !(options.body instanceof FormData))
-    headers["Content-Type"] = "application/json";
+  if (options.body !== undefined) headers["Content-Type"] = "application/json";
   if (options.token) {
     // Header 仅传 ASCII，避免浏览器拒绝中文或规范化密钥首尾空格。
     const bytes = new TextEncoder().encode(options.token);
@@ -43,12 +42,7 @@ async function request(
     headers,
     credentials: "same-origin",
     cache: "no-store",
-    body:
-      options.body instanceof FormData
-        ? options.body
-        : options.body === undefined
-          ? undefined
-          : JSON.stringify(options.body),
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
     signal: options.signal,
   }).catch((error: unknown) => {
     if (options.signal?.aborted) throw error;
@@ -87,63 +81,16 @@ export async function api<T>(
     throw new APIError(response.status, t("errors.response_json"));
   });
 }
-export async function assetBlob(
-  path: string,
-  token?: string,
-  signal?: AbortSignal,
-): Promise<{ blob: Blob; name: string }> {
-  const response = await request(path, { token, signal });
-  return {
-    blob: await response.blob(),
-    name: assetFilename(response.headers.get("Content-Disposition")),
-  };
-}
-function assetFilename(disposition: string | null): string {
-  const parameters = new Map<string, string>();
-  // 按完整参数读取，避免文件名内的分号被误识别为新参数。
-  for (const match of (disposition ?? "").matchAll(
-    /(?:^|;)\s*([a-z0-9_.*-]+)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^;]*))/gi,
-  )) {
-    parameters.set(
-      match[1]!.toLowerCase(),
-      match[2] !== undefined
-        ? match[2].replace(/\\(.)/g, "$1")
-        : match[3]!.trim(),
-    );
-  }
-  let name = parameters.get("filename") ?? "";
-  const extended = parameters.get("filename*")?.match(/^UTF-8'[^']*'(.*)$/i);
-  if (extended) {
-    try {
-      name = decodeURIComponent(extended[1]!);
-    } catch {
-      // 非法编码回退到普通 filename；标题不参与下载文件名。
-      name = parameters.get("filename") ?? "";
-    }
-  }
-  name = name
-    .replace(/[/\\]/g, "_")
-    .replace(/[\u0000-\u001f\u007f]/g, "")
-    .trim();
-  return name && name !== "." && name !== ".." ? name : "download";
-}
 export interface ContentBlock {
   id: string;
-  type: "text" | "image" | "file" | "link" | "stock";
+  type: "text" | "link" | "stock";
   text?: string;
   label?: string;
   url?: string;
-  asset_id?: string;
   quantity?: number;
 }
 export interface ContentDocument {
   blocks: ContentBlock[];
-}
-export interface Asset {
-  id: string;
-  name: string;
-  media_type: string;
-  size: number;
 }
 export interface InventoryBinding {
   product_id: string;

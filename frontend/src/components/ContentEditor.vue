@@ -1,20 +1,6 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref } from "vue";
-import {
-  NAlert,
-  NButton,
-  NInput,
-  NInputNumber,
-  NTabPane,
-  NTabs,
-} from "naive-ui";
-import {
-  api,
-  errorText,
-  type Asset,
-  type ContentBlock,
-  type ContentDocument,
-} from "../api";
+import { NButton, NInput, NInputNumber, NTabPane, NTabs } from "naive-ui";
+import type { ContentBlock, ContentDocument } from "../api";
 import { blockID } from "../content";
 import { t } from "../i18n";
 import MarkdownEditor from "./MarkdownEditor.vue";
@@ -25,15 +11,8 @@ const props = withDefaults(
   defineProps<{ allowStock?: boolean; disabled?: boolean }>(),
   { allowStock: false, disabled: false },
 );
-const emit = defineEmits<{ busy: [value: boolean] }>();
-const uploading = ref(false),
-  error = ref("");
-const locked = computed(() => props.disabled || uploading.value);
-const uploadType = ref<"image" | "file">("file");
-const fileInput = ref<HTMLInputElement>();
-let controller: AbortController | undefined;
 function add(type: ContentBlock["type"]) {
-  if (locked.value) return;
+  if (props.disabled) return;
   const block: ContentBlock = { id: blockID(), type };
   if (type === "text") block.text = "";
   if (type === "link") {
@@ -56,7 +35,7 @@ function update(id: string, patch: Partial<ContentBlock>) {
 function move(index: number, offset: number) {
   const blocks = [...content.value.blocks];
   const next = index + offset;
-  if (locked.value || next < 0 || next >= blocks.length) return;
+  if (props.disabled || next < 0 || next >= blocks.length) return;
   [blocks[index], blocks[next]] = [blocks[next]!, blocks[index]!];
   content.value = { blocks };
 }
@@ -65,66 +44,6 @@ function remove(id: string) {
     blocks: content.value.blocks.filter((block) => block.id !== id),
   };
 }
-function choose(type: "image" | "file") {
-  uploadType.value = type;
-  if (fileInput.value) {
-    fileInput.value.accept =
-      type === "image" ? "image/png,image/jpeg,image/gif,image/webp" : "";
-    fileInput.value.click();
-  }
-}
-async function upload(event: Event) {
-  const input = event.target as HTMLInputElement;
-  const file = input.files?.[0];
-  input.value = "";
-  if (!file || locked.value) return;
-  error.value = "";
-  if (file.size > 100 * 1024 * 1024) {
-    error.value = t("content.file_limit");
-    return;
-  }
-  if (
-    uploadType.value === "image" &&
-    !["image/png", "image/jpeg", "image/gif", "image/webp"].includes(file.type)
-  ) {
-    error.value = t("content.image_invalid");
-    return;
-  }
-  const type = uploadType.value;
-  uploading.value = true;
-  emit("busy", true);
-  controller = new AbortController();
-  try {
-    const form = new FormData();
-    form.append("file", file);
-    const asset = await api<Asset>("/admin/assets", {
-      method: "POST",
-      body: form,
-      signal: controller.signal,
-    });
-    if (controller.signal.aborted) return;
-    content.value = {
-      blocks: [
-        ...content.value.blocks,
-        {
-          id: blockID(),
-          type,
-          label: Array.from(asset.name).slice(0, 240).join(""),
-          asset_id: asset.id,
-        },
-      ],
-    };
-  } catch (cause) {
-    if (!controller.signal.aborted) error.value = errorText(cause);
-  } finally {
-    uploading.value = false;
-    emit("busy", false);
-  }
-}
-onUnmounted(() => {
-  controller?.abort();
-  emit("busy", false);
-});
 </script>
 
 <template>
@@ -143,21 +62,21 @@ onUnmounted(() => {
               <div class="row-actions">
                 <n-button
                   size="tiny"
-                  :disabled="locked || index === 0"
+                  :disabled="disabled || index === 0"
                   :aria-label="t('content.move_up')"
                   @click="move(index, -1)"
                   >↑</n-button
                 >
                 <n-button
                   size="tiny"
-                  :disabled="locked || index === content.blocks.length - 1"
+                  :disabled="disabled || index === content.blocks.length - 1"
                   :aria-label="t('content.move_down')"
                   @click="move(index, 1)"
                   >↓</n-button
                 >
                 <n-button
                   size="tiny"
-                  :disabled="locked"
+                  :disabled="disabled"
                   @click="remove(block.id)"
                   >{{ t("common.remove") }}</n-button
                 >
@@ -169,7 +88,7 @@ onUnmounted(() => {
               :input-id="`content-text-${block.id}`"
               :model-value="block.text ?? ''"
               :maxlength="65536"
-              :disabled="locked"
+              :disabled="disabled"
               @update:model-value="update(block.id, { text: $event })"
             />
             <template v-else-if="block.type === 'stock'">
@@ -178,7 +97,7 @@ onUnmounted(() => {
               }}</label>
               <n-input
                 :value="block.label"
-                :disabled="locked"
+                :disabled="disabled"
                 :maxlength="120"
                 :input-props="{ id: `stock-label-${block.id}` }"
                 @update:value="update(block.id, { label: $event })"
@@ -188,7 +107,7 @@ onUnmounted(() => {
               }}</label>
               <n-input-number
                 :value="block.quantity ?? 1"
-                :disabled="locked"
+                :disabled="disabled"
                 :min="1"
                 :max="100"
                 :precision="0"
@@ -202,7 +121,7 @@ onUnmounted(() => {
               }}</label>
               <n-input
                 :value="block.label ?? ''"
-                :disabled="locked"
+                :disabled="disabled"
                 :maxlength="240"
                 :input-props="{ id: `content-label-${block.id}` }"
                 @update:value="update(block.id, { label: $event })"
@@ -213,14 +132,13 @@ onUnmounted(() => {
                 }}</label>
                 <n-input
                   :value="block.url ?? ''"
-                  :disabled="locked"
+                  :disabled="disabled"
                   :maxlength="4096"
                   placeholder="https://"
                   :input-props="{ id: `content-url-${block.id}`, type: 'url' }"
                   @update:value="update(block.id, { url: $event })"
                 />
               </template>
-              <small v-else class="muted">{{ t("content.uploaded") }}</small>
             </template>
           </section>
           <p v-if="!content.blocks.length" class="muted">
@@ -228,37 +146,19 @@ onUnmounted(() => {
           </p>
         </div>
         <div class="row-actions content-add-actions">
-          <n-button :disabled="locked" @click="add('text')">{{
+          <n-button :disabled="disabled" @click="add('text')">{{
             t("content.add_text")
           }}</n-button>
-          <n-button :disabled="locked" @click="choose('image')">{{
-            t("content.add_image")
-          }}</n-button>
-          <n-button :disabled="locked" @click="choose('file')">{{
-            t("content.add_file")
-          }}</n-button>
-          <n-button :disabled="locked" @click="add('link')">{{
+          <n-button :disabled="disabled" @click="add('link')">{{
             t("content.add_link")
           }}</n-button>
           <n-button
             v-if="allowStock"
-            :disabled="locked"
+            :disabled="disabled"
             @click="add('stock')"
             >{{ t("content.add_stock") }}</n-button
           >
         </div>
-        <input
-          ref="fileInput"
-          type="file"
-          class="content-file-input"
-          :disabled="locked"
-          :aria-label="t('content.upload')"
-          @change="upload"
-        />
-        <p v-if="uploading" role="status">{{ t("content.uploading") }}</p>
-        <n-alert v-if="error" type="error" class="space-top">{{
-          error
-        }}</n-alert>
       </n-tab-pane>
       <n-tab-pane
         name="preview"
@@ -298,8 +198,5 @@ onUnmounted(() => {
 .content-add-actions {
   margin-top: 12px;
   flex-wrap: wrap;
-}
-.content-file-input {
-  display: none;
 }
 </style>

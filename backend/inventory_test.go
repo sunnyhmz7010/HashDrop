@@ -469,8 +469,7 @@ func TestReusableInventoryCyclesAndPreservesReservationSnapshots(t *testing.T) {
 func TestMixedDocumentKeepsFixedContentIndependentFromStock(t *testing.T) {
 	a, gateway := newTestApp(t)
 	product := insertProduct(t, a, "card", 2)
-	file := uploadTestAsset(t, a, "教程.pdf", []byte("%PDF-1.7\ntraining-document"))
-	plan := ContentDocument{Blocks: []ContentBlock{{ID: "intro", Type: "text", Text: "安装教程"}, {ID: "download", Type: "file", AssetID: file.ID, Label: "软件下载"}, {ID: "url", Type: "link", URL: "https://example.com/help", Label: "在线帮助"}, {ID: "stock", Type: "stock", Quantity: 1}}}
+	plan := ContentDocument{Blocks: []ContentBlock{{ID: "intro", Type: "text", Text: "安装教程"}, {ID: "url", Type: "link", URL: "https://example.com/help", Label: "在线帮助"}, {ID: "stock", Type: "stock", Quantity: 1}}}
 	saveDeliveryPlan(t, a, product, plan)
 	order, _ := reserve(t, a, product, 2)
 	saveDeliveryPlan(t, a, product, testDocument("后续更改内容"))
@@ -480,20 +479,17 @@ func TestMixedDocumentKeepsFixedContentIndependentFromStock(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, result := range results {
-		if result.Content == nil || len(result.Content.Blocks) != 4 {
+		if result.Content == nil || len(result.Content.Blocks) != 3 {
 			t.Fatal("混合内容不完整")
 		}
 		blocks := result.Content.Blocks
-		if blocks[0].Text != "安装教程" || blocks[1].AssetID != file.ID || blocks[2].URL != "https://example.com/help" || !strings.HasPrefix(blocks[3].Text, "卡密-") {
+		if blocks[0].Text != "安装教程" || blocks[1].URL != "https://example.com/help" || !strings.HasPrefix(blocks[2].Text, "卡密-") {
 			t.Fatal("固定内容或原始快照变化", blocks)
 		}
 	}
-	var consumed, refs int
+	var consumed int
 	if err = a.db.QueryRow("SELECT COUNT(*) FROM delivery_allocations WHERE status='consumed'").Scan(&consumed); err != nil || consumed != 2 {
 		t.Fatal("整个内容包被当作消耗单位", consumed, err)
-	}
-	if err = a.db.QueryRow("SELECT COUNT(*) FROM asset_refs WHERE owner_type='delivery' AND asset_id=?", file.ID).Scan(&refs); err != nil || refs != 2 {
-		t.Fatal("附件未被订单快照保留", refs, err)
 	}
 }
 
@@ -529,8 +525,9 @@ func TestContentValidationRejectsUnsafeOrAmbiguousBlocks(t *testing.T) {
 		"脚本链接":   {Blocks: []ContentBlock{{ID: "x", Type: "link", URL: "javascript:alert(1)"}}},
 		"无主机链接":  {Blocks: []ContentBlock{{ID: "x", Type: "link", URL: "https:"}}},
 		"嵌套库存":   {Blocks: []ContentBlock{{ID: "x", Type: "stock"}}},
-		"缺附件":    {Blocks: []ContentBlock{{ID: "x", Type: "file"}}},
-		"隐藏额外字段": {Blocks: []ContentBlock{{ID: "x", Type: "text", Text: "a", AssetID: "hidden"}}},
+		"文件块":    {Blocks: []ContentBlock{{ID: "x", Type: "file"}}},
+		"图片块":    {Blocks: []ContentBlock{{ID: "x", Type: "image"}}},
+		"隐藏额外字段": {Blocks: []ContentBlock{{ID: "x", Type: "text", Text: "a", URL: "https://example.com/hidden"}}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := validateContent(doc, false); err == nil {

@@ -212,9 +212,6 @@ func (a *App) reservePricedOrder(ctx context.Context, input orderInput) (Order, 
 		if _, err = tx.ExecContext(ctx, "INSERT INTO deliveries(id,order_id,ordinal,content,updated_at) VALUES(?,?,?,?,?)", deliveryID, id, ordinal+1, content, unixNow()); err != nil {
 			return Order{}, "", err
 		}
-		if err = a.replaceAssetRefs(ctx, tx, "delivery", deliveryID, item.content); err != nil {
-			return Order{}, "", err
-		}
 		for index, resource := range item.resources {
 			if _, err = tx.ExecContext(ctx, `INSERT INTO delivery_allocations(id,delivery_id,stock_id,inventory_id,slot_id,ordinal,consumes,status) VALUES(?,?,?,?,?,?,?,'reserved')`, newID(), deliveryID, resource.stock, resource.inventory, resource.slot, index+1, resource.consumes); err != nil {
 				return Order{}, "", err

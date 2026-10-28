@@ -45,7 +45,7 @@ func main() {
 	site := flag.String("site-url", "https://shop.example.com", "初始化站点地址")
 	dev := flag.Bool("dev", false, "初始化回环开发环境")
 	dataDir := flag.String("data-dir", "data", "初始化数据库和备份目录")
-	backup := flag.String("backup", "", "将数据库和附件备份到指定的新目录并退出")
+	backup := flag.String("backup", "", "将数据库备份到指定的新文件并退出")
 	listen := flag.String("listen", "", "覆盖监听地址；默认 127.0.0.1:8080")
 	flag.Parse()
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
@@ -94,8 +94,7 @@ func main() {
 		defer db.Close()
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		defer cancel()
-		backupApp := &App{db: db, vault: v, config: c}
-		if err = backupApp.backupData(ctx, *backup); err != nil {
+		if err = backupDatabase(ctx, db, *backup); err != nil {
 			slog.Error("备份失败", "error", err)
 			os.Exit(1)
 		}

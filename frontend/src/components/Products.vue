@@ -36,7 +36,6 @@ const message = useMessage(),
   saving = ref(false),
   deleting = ref(""),
   formError = ref("");
-const contentUploading = ref(false);
 const model = reactive({
   id: "",
   name: "",
@@ -136,12 +135,7 @@ function edit(product?: Product) {
   editor.value = true;
 }
 async function save() {
-  if (
-    saving.value ||
-    contentUploading.value ||
-    !hasContent(model.delivery_plan)
-  )
-    return;
+  if (saving.value || !hasContent(model.delivery_plan)) return;
   saving.value = true;
   formError.value = "";
   try {
@@ -319,7 +313,7 @@ function removeProduct(product: Product) {
   <FormDialog
     v-model:show="editor"
     :title="model.id ? t('product.edit') : t('product.add')"
-    :busy="saving || contentUploading"
+    :busy="saving"
     ><form id="product-form" @submit.prevent="save">
       <div class="form-grid two">
         <div class="wide">
@@ -339,7 +333,6 @@ function removeProduct(product: Product) {
             v-model="model.delivery_plan"
             allow-stock
             :disabled="saving"
-            @busy="contentUploading = $event"
           />
         </div>
         <div>
@@ -464,16 +457,15 @@ function removeProduct(product: Product) {
       }}</n-alert>
     </form>
     <template #footer>
-      <n-button
-        :disabled="saving || contentUploading"
-        @click="editor = false"
-        >{{ t("common.cancel") }}</n-button
+      <n-button :disabled="saving" @click="editor = false">{{
+        t("common.cancel")
+      }}</n-button
       ><n-button
         attr-type="submit"
         form="product-form"
         type="primary"
         :loading="saving"
-        :disabled="contentUploading || !hasContent(model.delivery_plan)"
+        :disabled="!hasContent(model.delivery_plan)"
         >{{ t("product.save") }}</n-button
       >
     </template>

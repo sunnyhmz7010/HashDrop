@@ -216,7 +216,7 @@ func (a *App) deleteInventory(w http.ResponseWriter, r *http.Request) error {
 	if reserved > 0 {
 		return &apiError{409, "库存池仍有订单预留，暂不能删除"}
 	}
-	// 逻辑删除保留历史分配外键；不会改变已售出结果或历史附件引用。
+	// 逻辑删除保留历史分配外键；不会改变已售出结果。
 	if _, err = tx.ExecContext(r.Context(), "UPDATE inventories SET deleted_at=COALESCE(deleted_at,?),updated_at=? WHERE id=?", unixNow(), unixNow(), id); err != nil {
 		return err
 	}
@@ -282,9 +282,6 @@ func (a *App) importStock(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		if count == 1 {
-			if err = a.replaceAssetRefs(r.Context(), tx, "stock", stockID, doc); err != nil {
-				return err
-			}
 			added++
 		} else {
 			duplicates++
@@ -352,9 +349,6 @@ func (a *App) deleteStock(w http.ResponseWriter, r *http.Request) error {
 	}
 	if count != 1 {
 		return bad("只能删除尚未预留或消耗的库存")
-	}
-	if err = a.replaceAssetRefs(r.Context(), tx, "stock", r.PathValue("stock"), ContentDocument{}); err != nil {
-		return err
 	}
 	if err = tx.Commit(); err != nil {
 		return err

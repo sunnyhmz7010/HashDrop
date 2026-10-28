@@ -67,17 +67,6 @@ CREATE TABLE delivery_allocations (
 );
 CREATE UNIQUE INDEX allocated_stock ON delivery_allocations(stock_id) WHERE consumes=1 AND status IN ('reserved','consumed');
 CREATE INDEX allocations_delivery ON delivery_allocations(delivery_id,status);
-CREATE TABLE assets (
- id TEXT PRIMARY KEY, name TEXT NOT NULL, media_type TEXT NOT NULL,
- size INTEGER NOT NULL CHECK(size > 0 AND size <= 104857600),
- created_at INTEGER NOT NULL, unreferenced_at INTEGER
-);
-CREATE TABLE asset_refs (
- owner_type TEXT NOT NULL CHECK(owner_type IN ('product','stock','delivery')),
- owner_id TEXT NOT NULL, asset_id TEXT NOT NULL REFERENCES assets(id),
- PRIMARY KEY(owner_type,owner_id,asset_id)
-);
-CREATE INDEX asset_refs_asset ON asset_refs(asset_id);
 CREATE TABLE admin_sessions (
  token_hash TEXT PRIMARY KEY, expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL
 );
@@ -131,4 +120,4 @@ CREATE INDEX donations_created ON donations(created_at DESC,id DESC);
 CREATE INDEX donations_nickname ON donations(nickname,created_at DESC,id DESC);
 CREATE UNIQUE INDEX donations_request ON donations(request_id) WHERE request_id <> '';
 CREATE INDEX donations_public ON donations(payment_status,show_public,paid_at DESC,id DESC);
-PRAGMA user_version = 7;
+PRAGMA user_version = 8;

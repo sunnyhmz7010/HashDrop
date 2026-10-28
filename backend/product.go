@@ -285,9 +285,6 @@ func (a *App) saveProduct(w http.ResponseWriter, r *http.Request) error {
  ON CONFLICT(id) DO UPDATE SET name=excluded.name,description=excluded.description,details=excluded.details,price=excluded.price,currency=excluded.currency,inventory_strategy=excluded.inventory_strategy,active=excluded.active,hidden=excluded.hidden,updated_at=excluded.updated_at,delivery_plan=excluded.delivery_plan,delivery_note=excluded.delivery_note,min_quantity=excluded.min_quantity,max_quantity=excluded.max_quantity`, id, input.Name, input.Description, p.Details, input.Price, input.Currency, p.InventoryStrategy, input.Active, p.Hidden, now, now, cipher, p.DeliveryNote, p.MinQuantity, p.MaxQuantity); err != nil {
 		return err
 	}
-	if err = a.replaceAssetRefs(r.Context(), tx, "product", id, *p.DeliveryPlan); err != nil {
-		return err
-	}
 	// 移除已删除取货项的绑定；历史订单仍使用原分配与快照。
 	query, args := "DELETE FROM inventory_products WHERE product_id=?", []any{id}
 	slots := []string{}
@@ -319,7 +316,6 @@ func (a *App) saveProduct(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (a *App) deleteProduct(w http.ResponseWriter, r *http.Request) error {
-	// 订单快照保留自己的附件引用；删除商品只移除商品当前计划的引用。
 	tx, err := a.db.BeginTx(r.Context(), nil)
 	if err != nil {
 		return err
@@ -335,9 +331,6 @@ func (a *App) deleteProduct(w http.ResponseWriter, r *http.Request) error {
 	}
 	if count == 0 {
 		return &apiError{404, "商品不存在"}
-	}
-	if err = a.replaceAssetRefs(r.Context(), tx, "product", r.PathValue("id"), ContentDocument{}); err != nil {
-		return err
 	}
 	if err = tx.Commit(); err != nil {
 		return err

@@ -430,8 +430,6 @@ const statusType = computed(() => {
               <ContentView
                 v-if="claimed[item.id]"
                 :content="claimed[item.id]!"
-                :asset-base="`/orders/${orderID}/deliveries/${item.id}/assets`"
-                :token="token"
               />
             </article>
           </div>

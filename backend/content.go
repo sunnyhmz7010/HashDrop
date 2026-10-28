@@ -18,7 +18,6 @@ type ContentBlock struct {
 	Text     string `json:"text,omitempty"`
 	Label    string `json:"label,omitempty"`
 	URL      string `json:"url,omitempty"`
-	AssetID  string `json:"asset_id,omitempty"`
 	Quantity int    `json:"quantity,omitempty"`
 }
 
@@ -42,20 +41,16 @@ func validateContent(doc ContentDocument, allowStock bool) error {
 		}
 		switch b.Type {
 		case "text":
-			if strings.TrimSpace(b.Text) == "" || !utf8.ValidString(b.Text) || utf8.RuneCountInString(b.Text) > 65536 || b.URL != "" || b.AssetID != "" || b.Quantity != 0 {
+			if strings.TrimSpace(b.Text) == "" || !utf8.ValidString(b.Text) || utf8.RuneCountInString(b.Text) > 65536 || b.URL != "" || b.Quantity != 0 {
 				return bad("文字内容须为 1–65536 字符，且不能包含其他类型字段")
-			}
-		case "image", "file":
-			if strings.TrimSpace(b.AssetID) == "" || len(b.AssetID) > 128 || b.Text != "" || b.URL != "" || b.Quantity != 0 {
-				return bad("图片或文件须关联已上传的附件")
 			}
 		case "link":
 			u, err := url.Parse(b.URL)
-			if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil || len(b.URL) > 4096 || b.Text != "" || b.AssetID != "" || b.Quantity != 0 {
+			if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil || len(b.URL) > 4096 || b.Text != "" || b.Quantity != 0 {
 				return bad("链接须为完整的 HTTP 或 HTTPS 地址")
 			}
 		case "stock":
-			if !allowStock || b.Quantity < 0 || b.Quantity > 100 || b.Text != "" || b.URL != "" || b.AssetID != "" {
+			if !allowStock || b.Quantity < 0 || b.Quantity > 100 || b.Text != "" || b.URL != "" {
 				return bad("取货项仅用于商品计划，每份取货数量须为 1–100")
 			}
 			minimumBlocks += stockQuantity(b) - 1
@@ -87,18 +82,6 @@ func decodeContent(raw string) (ContentDocument, error) {
 		return doc, err
 	}
 	return doc, validateContent(doc, true)
-}
-
-func contentAssetIDs(doc ContentDocument) []string {
-	ids := []string{}
-	seen := map[string]bool{}
-	for _, b := range doc.Blocks {
-		if (b.Type == "image" || b.Type == "file") && !seen[b.AssetID] {
-			seen[b.AssetID] = true
-			ids = append(ids, b.AssetID)
-		}
-	}
-	return ids
 }
 
 func stockQuantity(block ContentBlock) int {

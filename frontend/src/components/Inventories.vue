@@ -186,7 +186,6 @@ const stockText = ref(""),
   importError = ref("");
 const importMode = ref<"batch" | "document">("batch");
 const stockDocument = ref<ContentDocument>(textContent());
-const contentUploading = ref(false);
 function importFor(pool: Inventory, mode: "batch" | "document" = "batch") {
   importMode.value = mode;
   stockDocument.value = textContent();
@@ -196,7 +195,7 @@ function importFor(pool: Inventory, mode: "batch" | "document" = "batch") {
   importing.value = true;
 }
 async function importItems() {
-  if (importBusy.value || contentUploading.value || !stockPool.value) return;
+  if (importBusy.value || !stockPool.value) return;
   const id = stockPool.value.id;
   importBusy.value = true;
   importError.value = "";
@@ -501,7 +500,7 @@ function removeStock(id: string) {
   <FormDialog
     v-model:show="importing"
     :title="t('stock.import_title', { name: stockPool?.name ?? '' })"
-    :busy="importBusy || contentUploading"
+    :busy="importBusy"
   >
     <p v-if="importMode === 'batch'" class="muted">
       {{ t("stock.import_help") }}
@@ -510,7 +509,6 @@ function removeStock(id: string) {
       v-if="importMode === 'document'"
       v-model="stockDocument"
       :disabled="importBusy"
-      @busy="contentUploading = $event"
     />
     <n-input
       v-else
@@ -524,18 +522,13 @@ function removeStock(id: string) {
       errorText(importError)
     }}</n-alert>
     <template #footer>
-      <n-button
-        :disabled="importBusy || contentUploading"
-        @click="importing = false"
-        >{{ t("common.cancel") }}</n-button
-      >
+      <n-button :disabled="importBusy" @click="importing = false">{{
+        t("common.cancel")
+      }}</n-button>
       <n-button
         type="primary"
         :loading="importBusy"
-        :disabled="
-          contentUploading ||
-          (importMode === 'document' && !hasContent(stockDocument))
-        "
+        :disabled="importMode === 'document' && !hasContent(stockDocument)"
         @click="importItems"
         >{{ t("stock.import") }}</n-button
       >

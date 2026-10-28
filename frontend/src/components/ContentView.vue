@@ -4,16 +4,8 @@ import { copyText, type ContentDocument } from "../api";
 import { safeContentLink } from "../content";
 import { t } from "../i18n";
 import MarkdownContent from "./MarkdownContent.vue";
-import ContentAsset from "./ContentAsset.vue";
 
-withDefaults(
-  defineProps<{
-    content: ContentDocument;
-    assetBase?: string;
-    token?: string;
-  }>(),
-  { assetBase: "/admin/assets" },
-);
+defineProps<{ content: ContentDocument }>();
 const message = useMessage();
 async function copy(text: string) {
   try {
@@ -41,12 +33,6 @@ async function copy(text: string) {
         </div>
         <MarkdownContent :content="block.text ?? ''" />
       </template>
-      <ContentAsset
-        v-else-if="block.type === 'image' || block.type === 'file'"
-        :block="block"
-        :asset-base="assetBase"
-        :token="token"
-      />
       <a
         v-else-if="block.type === 'link' && safeContentLink(block.url)"
         :href="safeContentLink(block.url)"

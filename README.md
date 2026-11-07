@@ -5,7 +5,13 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/sunnyhmz7010/HashDrop/releases"><img src="https://img.shields.io/github/v/release/sunnyhmz7010/HashDrop?label=Release&color=3b82f6" alt="Release" /></a>
+  <img src="https://img.shields.io/badge/Go-1.27-00ADD8?style=flat-square&amp;logo=go&amp;logoColor=white" alt="Go 1.27" />
+  <img src="https://img.shields.io/badge/Vue-3-4FC08D?style=flat-square&amp;logo=vuedotjs&amp;logoColor=white" alt="Vue 3" />
+  <img src="https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&amp;logo=typescript&amp;logoColor=white" alt="TypeScript 5.9" />
+</p>
+
+<p align="center">
+  <a href="https://github.com/sunnyhmz7010/HashDrop/releases"><img src="https://img.shields.io/github/v/release/sunnyhmz7010/HashDrop?label=Release&amp;color=3b82f6" alt="Release" /></a>
   <a href="https://github.com/sunnyhmz7010/HashDrop/blob/main/LICENSE"><img src="https://img.shields.io/github/license/sunnyhmz7010/HashDrop?color=10b981" alt="License" /></a>
 </p>
 
@@ -29,14 +35,14 @@ HashPay 已经提供了加密货币收款能力，但要真正销售数字商品
 
 ## 🚀 核心能力
 
-### 🛍️ 匿名商城
+**🛍️ 匿名商城**
 
 - 无需注册或登录，选择商品即可下单
 - 对接 HashPay 收款，支付核验后自动交付
 - 凭领取密钥查询订单、继续支付和领取商品
 - 支持商品详情、隐藏商品链接、中英文界面和移动端访问
 
-### 📦 商品与库存
+**📦 商品与库存**
 
 - 商品交付可自由组合文字、链接与库存取货项，无需选择商品类型
 - 卡密可按行批量导入，库存条目也可保存配对信息或组合内容
@@ -47,7 +53,7 @@ HashPay 已经提供了加密货币收款能力，但要真正销售数字商品
 - 支持自动优惠活动、优惠码和多种优惠规则
 - 支持库存管理、订单查询和交付异常重试
 
-### 🛠️ 站点管理
+**🛠️ 站点管理**
 
 - 通过网页完成首次初始化，单管理员后台管理
 - 管理商品、库存、订单、优惠及站点和支付配置
@@ -61,7 +67,11 @@ HashPay 已经提供了加密货币收款能力，但要真正销售数字商品
 - 一台安装了 Docker Engine 的 Linux VPS（使用 Compose 部署时，还需 Docker Compose V2）
 - 支付网关：[HashPay](https://github.com/tgdash/HashPay)（可在初始化后配置，正式收款前需要接入）
 
-### 📦 Docker Compose（推荐）
+### 📦 安装与运行
+
+预构建镜像对应 [v2.0.0](https://github.com/sunnyhmz7010/HashDrop/releases/tag/v2.0.0)，自行构建使用当前源码；两者数据库结构不同，不能共用数据目录。
+
+#### 📦 Docker Compose（推荐）
 
 新建 `compose.yaml`，写入以下内容：
 
@@ -94,7 +104,7 @@ docker compose logs -f
 
 > 上面的 `8080:8080` 会将宿主机端口对外监听。生产环境建议先配置 HTTPS 反向代理，并将端口映射改为 `127.0.0.1:8080:8080`，避免直接向公网暴露管理与初始化页面。
 
-### 🖥️ 命令行方式
+#### 🖥️ 命令行方式
 
 ```bash
 docker run -d \
@@ -105,7 +115,7 @@ docker run -d \
   ghcr.io/sunnyhmz7010/hashdrop:2.0.0
 ```
 
-### 🛠️ 自行构建镜像
+#### 🛠️ 自行构建镜像
 
 如果你想自己构建而不是使用预构建镜像：
 
@@ -123,6 +133,8 @@ docker run -d \
 
 如果使用 Docker Compose，把 `compose.yaml` 里的 `image: ghcr.io/...` 换成 `build: .`，然后执行：`docker compose up -d --build`。
 
+## 📖 使用说明
+
 ### 🔧 首次初始化
 
 1. 服务启动后，访问商城的 `/setup` 页面。在服务器本机可打开 `http://localhost:8080/setup`；远程生产环境请先配置 HTTPS 域名，例如 `https://shop.example.com/setup`。
@@ -131,8 +143,6 @@ docker run -d \
 4. 初始化完成后会自动登录并进入 `/center`，创建库存池、上架商品，即可开始使用。若当前访问地址与配置的站点地址不同，则自动前往配置站点的登录页。
 
 使用 HTTPS 站点时，后台会显示 HashPay 回调地址 `https://你的商城域名/api/webhooks/hashpay`；HTTP 站点仅通过签名查询补查付款，不接受支付回调。**不要通过公网明文 HTTP 提交管理员密码或商户私钥。**
-
-## 📖 使用说明
 
 ### 👤 买家购买与领取
 
@@ -222,9 +232,10 @@ docker exec hashdrop /app/hashdrop \
 
 ## 🧱 技术栈
 
-- 后端：Go、SQLite
-- 前端：Vue 3、TypeScript
-- 部署：Docker Compose，亦可使用 systemd 部署
+- Go、SQLite（modernc.org/sqlite）：后端服务与数据持久化
+- Vue 3、TypeScript、Naive UI：商城及管理界面
+- Vite：前端开发与构建
+- Docker、Docker Compose：容器构建与部署
 
 ## 🗂️ 项目结构
 
@@ -252,21 +263,19 @@ HashDrop/
 
 ### 🧰 环境
 
+- 开发平台：Linux、macOS 或 Windows
 - Go 1.27+
 - Node.js 24+
 
 ### ⚙️ 命令
 
 ```sh
-go test ./...
-go vet ./...
 npm ci --prefix frontend
-npm --prefix frontend run check
 npm --prefix frontend run build
-cd frontend
-npx playwright install chromium
-npm run test:e2e
+go run ./backend -listen 127.0.0.1:8080
 ```
+
+启动后访问 `http://127.0.0.1:8080/setup` 完成初始化。
 
 ## 🔐 安全报告
 

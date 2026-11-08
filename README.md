@@ -70,10 +70,6 @@ docker run -d \
 docker compose up -d
 ```
 
-使用 Compose 前，请先下载或克隆本仓库，并进入包含 `compose.yaml` 的根目录。
-
-预构建镜像对应 [v2.0.0](https://github.com/sunnyhmz7010/HashDrop/releases/tag/v2.0.0)。下文功能与开发说明以当前源码为准，当前源码与该镜像的数据库结构不兼容，不能共用数据目录。
-
 ## 📖 使用说明
 
 ### 🔧 首次初始化

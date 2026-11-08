@@ -61,7 +61,7 @@ docker run -d \
   --restart unless-stopped \
   -p 8080:8080 \
   -v hashdrop_data:/data \
-  ghcr.io/sunnyhmz7010/hashdrop:2.0.0
+  ghcr.io/sunnyhmz7010/hashdrop:latest
 ```
 
 也可以使用 Docker Compose：根目录已提供 `compose.yaml`，执行以下命令即可启动：
